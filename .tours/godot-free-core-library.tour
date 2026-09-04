@@ -1,0 +1,46 @@
+{
+  "title": "Carving out a Godot-free Core library",
+  "description": "Splits the map editing logic out of the Godot project into a plain .NET class library, so it can be unit-tested without the Godot engine and stays reusable if the front end ever changes.",
+  "steps": [
+    {
+      "description": "### What this tour covers\n\nEarlier architecture decision: box Godot to rendering/UI only, so the map logic ported from Ultimate Doom Builder stays maximally reusable and testable. This is the first concrete slice of that — a `DoomArchitect.Core` class library holding the map data model (`Vertex`/`Linedef`/`Sidedef`/`Sector`), plus an `xUnit` test project that proves out the dirty-tracking design from an earlier discussion, all without ever starting the Godot engine."
+    },
+    {
+      "file": "src/DoomArchitect.Core/DoomArchitect.Core.csproj",
+      "line": 1,
+      "description": "### The boundary is structural, not a convention\n\n`Sdk=\"Microsoft.NET.Sdk\"` — a plain class library, not `Godot.NET.Sdk`, and no `GodotSharp` package reference anywhere in this project. That means `using Godot;` simply fails to compile here. The \"keep Godot boxed out of core logic\" rule isn't something to remember in code review, it's enforced by the build."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Map/Sector.cs",
+      "selection": { "start": { "line": 18, "character": 1 }, "end": { "line": 23, "character": 6 } },
+      "description": "### A dirty flag, not a live rebuild\n\n`NeedsRebuild` mirrors the `UpdateNeeded`/`triangulationneeded` pattern found in Ultimate Doom Builder's own `Source/Core/Map/Sector.cs` — a sector marks itself stale instead of eagerly rebuilding anything. Core never clears this flag itself; that's the App/rendering layer's job once it's actually rebuilt the mesh. Documented as an XML doc comment rather than a plain `//` comment, so it shows up as a hover tooltip wherever `NeedsRebuild` is used."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Map/Linedef.cs",
+      "selection": { "start": { "line": 20, "character": 1 }, "end": { "line": 28, "character": 6 } },
+      "description": "### The entire blast radius of a moved vertex\n\n`MarkAdjacentSectorsDirty()` only touches this linedef's own front/back sectors — at most two. This is the mechanism behind the earlier performance discussion: dragging a vertex should only re-triangulate the handful of sectors actually touching it, never the whole map."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Map/MapData.cs",
+      "selection": { "start": { "line": 48, "character": 1 }, "end": { "line": 60, "character": 6 } },
+      "description": "### Why MapData owns everything\n\n`MapData` is the only way to create or move a vertex — `Vertex.Position`'s setter is `internal`, so nothing outside `Core` can mutate it directly and skip the dirty-propagation. `MoveVertex` updates the position, then walks every linedef touching that vertex and dirties its sectors. This one method is what the whole \"cheap live edits\" architecture bet rides on."
+    },
+    {
+      "file": "src/DoomArchitect.Core.Tests/Map/MapDataTests.cs",
+      "selection": { "start": { "line": 18, "character": 1 }, "end": { "line": 34, "character": 6 } },
+      "description": "### Proving the guarantee, not just the happy path\n\n`MovingVertex_DirtiesOnlySectorsTouchingIt` builds a small square sector plus a second, unrelated sector via the `CreateClosedSector` test helper (see `MapDataTestExtensions.cs`), moves one vertex, and asserts the untouched sector's flag never flips. This is the actual architectural promise made in an earlier discussion, written as an executable spec. All 5 tests here run via plain `dotnet test` in ~15ms — no Godot engine, no editor startup, since `Core.Tests` references only `Core`."
+    },
+    {
+      "file": "src/DoomArchitect.Core.Tests/Map/MapDataTestExtensions.cs",
+      "description": "### Sectors have no coordinates - on purpose\n\n`CreateSector(floorHeight, ceilingHeight)` takes no position, which looks wrong at first glance. It isn't: checking Ultimate Doom Builder's real `Sector.cs` confirms a sector only ever holds a list of `Sidedef`s, never a vertex list - its shape is a derived fact, traced from the loop(s) of linedefs whose sidedef points at it (UDB has a whole `SectorBuilder.cs` dedicated to that trace). `CreateClosedSector` here is a test-only shortcut that builds the vertices/linedefs for a closed loop in one call, so tests read as \"a box sector at these points\" without either misrepresenting the real domain model in `MapData` or hand-wiring four vertices and four linedefs every time."
+    },
+    {
+      "file": "DoomArchitect.csproj",
+      "selection": { "start": { "line": 6, "character": 1 }, "end": { "line": 13, "character": 6 } },
+      "description": "### The gotcha: Godot's SDK globs your whole tree\n\n`Godot.NET.Sdk` compiles every `.cs` file under the project folder by default — since `src/DoomArchitect.Core` lives *inside* this project's own directory, it was being compiled directly into the Godot assembly a second time, on top of the proper `ProjectReference` below, causing duplicate-type build errors. `<Compile Remove=\"src\\**\\*.cs\" />` excludes it, so `src/` is reached only through the reference, the way it's supposed to be. Worth remembering for any future sibling library added under this project's directory."
+    },
+    {
+      "description": "### What's next\n\nCore currently only knows about individual vertices/linedefs/sectors — it doesn't yet derive a sector's actual boundary polygon from its linedefs, which is what `Core.Geometry`'s triangulation step will need. That's ported from UDB's `Source/Core/Map/SectorBuilder.cs` and is the next chunk of Core logic, followed by the Godot-side `SectorMeshBuilder` that turns those triangles into real `ArrayMesh` geometry."
+    }
+  ]
+}

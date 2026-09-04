@@ -3,4 +3,15 @@
     <TargetFramework>net10.0</TargetFramework>
     <EnableDynamicLoading>true</EnableDynamicLoading>
   </PropertyGroup>
+  <ItemGroup>
+    <!-- src/ holds sibling class-library projects (Core, Core.Tests) that
+         are pulled in via ProjectReference below - without this exclude,
+         Godot.NET.Sdk's default glob also compiles their .cs files
+         directly into this assembly, since they're nested under this
+         project's directory. -->
+    <Compile Remove="src\**\*.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="src\DoomArchitect.Core\DoomArchitect.Core.csproj" />
+  </ItemGroup>
 </Project>
