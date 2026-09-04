@@ -30,11 +30,23 @@ file just tracks what's built and what's next.
       into their outer loop via a rightward ray cast), `EarClipper.Clip`
       (the actual triangulation). Full pipeline: `SectorTracer.Trace` ->
       `PolygonNesting.BuildTree` -> `PolygonCutter.Cut` -> `EarClipper.Clip`
-- [ ] `App`: `System.Numerics.Vector2/3` <-> `Godot.Vector2/3` conversion
-      helpers (no built-in bridge between them, confirmed via reflection)
-- [ ] `App.Rendering`: `SectorMeshBuilder` - Core triangles -> Godot
-      `ArrayMesh`, one `MeshInstance3D` per sector (not one merged map
-      mesh - that's what keeps a single vertex edit cheap)
+- [x] `App`: `System.Numerics.Vector2/3` <-> `Godot.Vector2/3` conversion
+      helpers (no built-in bridge between them, confirmed via reflection) -
+      `Scripts/Interop/VectorConversions.cs`
+- [x] `App.Rendering`: `SectorMeshBuilder` - Core triangles -> Godot
+      `ArrayMesh`. Floor and ceiling each get two real triangles per
+      polygon triangle (one wound each way) rather than a single
+      double-sided-material triangle - a single triangle's normal only
+      shades correctly from the side it's meant to face, so viewed from
+      the wrong side it renders black regardless of culling. Doom
+      X/Y -> Godot X/Z, height -> Godot Y; confirmed not mirrored against
+      an actual rendered top-down view. Still one mesh per sector call,
+      not yet one `MeshInstance3D` per sector wired into a live scene -
+      that's the next item
+- [x] Free-fly camera for the 3D view (`Scripts/View/FreeFlyCamera.cs`) -
+      WASD + mouse look + Space/Shift for up/down, only active while its
+      camera is Current. Wasn't originally scoped, but needed for actually
+      checking rendering work visually instead of guessing camera angles
 - [ ] Wire the rebuild loop: App polls `MapData.GetDirtySectors()` and
       rebuilds only those meshes, clearing the flag after
 - [ ] Camera render layers: hide ceiling meshes from the top-down ortho
