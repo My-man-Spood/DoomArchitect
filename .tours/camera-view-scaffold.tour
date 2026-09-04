@@ -1,0 +1,42 @@
+{
+  "title": "DoomArchitect: one scene, two cameras",
+  "description": "The first working slice of DoomArchitect — proves the core architectural bet before any real map data exists: 2D and 3D views aren't two separate renderers, they're one always-live 3D scene viewed by two different cameras.",
+  "steps": [
+    {
+      "description": "### What this tour covers\n\nUltimate Doom Builder (and most map editors) keep a 2D top-down view and a 3D visual-mode view as separate rendering paths, loaded/rebuilt independently. DoomArchitect's plan is different: build the map as real 3D geometry *always*, and make \"2D view\" just an orthographic camera looking straight down at it. Switching to 3D is then a zero-cost camera swap, not a mode change.\n\nThis scaffold has no real map data yet — it's a minimal scene that proves the camera-swap mechanic works, so the rest of the project (map data model, mesh generation) can be built on top of it with confidence."
+    },
+    {
+      "file": "project.godot",
+      "line": 11,
+      "description": "### C# enabled\n\n`config/features` includes `\"C#\"`, which is what makes this a Mono/.NET-flavored Godot project instead of a GDScript one — required since the plan is to reuse logic ported from Ultimate Doom Builder's C# codebase."
+    },
+    {
+      "file": "DoomArchitect.csproj",
+      "line": 3,
+      "description": "### Target framework: net10.0\n\nGodot 4.7's Mono build typically pairs with net8.0, but this machine only has the .NET 10 SDK/runtime installed (via mise), so the project targets `net10.0` instead. Worth revisiting if an older TFM is ever needed for a specific NuGet package."
+    },
+    {
+      "file": "Scenes/Main.tscn",
+      "selection": { "start": { "line": 14, "character": 1 }, "end": { "line": 19, "character": 1 } },
+      "description": "### The \"2D\" camera is just an orthographic camera\n\n`TopDownCamera` is a regular `Camera3D` — `projection = 1` (orthogonal) and rotated -90° on X so it looks straight down. `size = 20` controls the ortho zoom. There's no separate 2D renderer here; this camera looks at the exact same `Node3D` scene as everything else."
+    },
+    {
+      "file": "Scenes/Main.tscn",
+      "selection": { "start": { "line": 21, "character": 1 }, "end": { "line": 23, "character": 1 } },
+      "description": "### The \"3D\" camera is the same scene, different eyes\n\n`PerspectiveCamera` sits in the same scene tree, just with default perspective projection and no rotation. Nothing about the map geometry changes between the two cameras — only the code decides which one is `current`."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 12, "character": 1 }, "end": { "line": 16, "character": 3 } },
+      "description": "### Wiring up both cameras\n\n`MapView` is attached to the scene root and grabs both cameras by name in `_Ready()`. It's the only script in the project so far — everything else here is scene/config."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 18, "character": 1 }, "end": { "line": 26, "character": 3 } },
+      "description": "### The actual proof of concept\n\nPressing Tab flips `_in3D` and toggles `Current` on the two cameras — that's the entire view switch. No scene reload, no geometry rebuild, no loading screen. Try it: open the scene in the editor, run it, and hit Tab — the debug cube and ground plane stay exactly where they are while the camera swaps between looking straight down and looking across the scene.\n\nOnce real sector meshes replace `DebugGround`/`DebugCube`, this same mechanism is what makes jumping into 3D visual mode instant."
+    },
+    {
+      "description": "### What's deliberately not here yet\n\nNo map data model (`Vertex`/`Linedef`/`Sidedef`/`Sector`), no UDMF parser, no mesh generation — those are the next real chunk of work, referencing Ultimate Doom Builder's source (cloned to `~/Projects/ultimate-doom-builder-source`) for the map format and the dirty-tracking logic that keeps edits fast (`Linedef.UpdateCache()` → `Sector.UpdateNeeded` in UDB's `Source/Core/Map`). This scaffold only had to prove the camera trick before that logic gets built on top of it."
+    }
+  ]
+}
