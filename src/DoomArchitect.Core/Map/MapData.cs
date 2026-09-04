@@ -35,8 +35,17 @@ public sealed class MapData
     {
         var linedef = new Linedef(start, end);
 
-        if (front != null) linedef.Front = new Sidedef(front);
-        if (back != null) linedef.Back = new Sidedef(back);
+        if (front != null)
+        {
+            linedef.Front = new Sidedef(front, linedef);
+            front.AddSidedef(linedef.Front);
+        }
+
+        if (back != null)
+        {
+            linedef.Back = new Sidedef(back, linedef);
+            back.AddSidedef(linedef.Back);
+        }
 
         start.AddLinedef(linedef);
         end.AddLinedef(linedef);

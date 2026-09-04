@@ -21,9 +21,9 @@ public class MapDataTests
         var map = new MapData();
 
         var (touchedSector, touchedVertices) = map.CreateClosedSector(0, 128,
-            new Vector2(0, 0), new Vector2(64, 0), new Vector2(64, 64), new Vector2(0, 64));
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
         var (untouchedSector, _) = map.CreateClosedSector(0, 128,
-            new Vector2(200, 200), new Vector2(264, 200), new Vector2(264, 264), new Vector2(200, 264));
+            new Vector2(200, 200), new Vector2(200, 264), new Vector2(264, 264), new Vector2(264, 200));
 
         foreach (var sector in map.Sectors) map.ClearDirty(sector);
 

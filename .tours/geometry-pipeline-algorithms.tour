@@ -1,0 +1,45 @@
+{
+  "title": "The sector geometry pipeline",
+  "description": "Walks through all four algorithms that turn a sector's sidedefs into GPU-renderable triangles: tracing, nesting, cutting, and ear-clipping - the last of which gets a from-scratch explanation since it's a genuinely new concept.",
+  "steps": [
+    {
+      "description": "### The problem, end to end\n\nA `Sector` has no shape of its own - it's just floor/ceiling heights and textures, referenced indirectly by `Sidedef`s. Turning that into a mesh Godot can draw takes four separate steps, each in its own file:\n\n1. **`SectorTracer`** - walk the sector's sidedefs and reconstruct its boundary loop(s) as ordered vertex lists.\n2. **`PolygonNesting`** - figure out which loops are holes nested inside which outer loops.\n3. **`PolygonCutter`** - bridge each hole into its outer loop, producing a flat, hole-free polygon.\n4. **`EarClipper`** - break that polygon into actual triangles.\n\nEach one was ported from a distinct piece of Ultimate Doom Builder's own geometry code, and each has its own genuinely tricky part."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/SectorTracer.cs",
+      "selection": { "start": { "line": 15 }, "end": { "line": 41 } },
+      "description": "### Step 1: Trace\n\n`Trace` repeatedly finds an unused sidedef's right-most vertex (guaranteed to be on an outer boundary, never inside a hole), then walks connected sidedefs - front ones Start-to-End, back ones End-to-Start - until it loops back to where it started. Each closed walk becomes one `Loop`. A sector can produce several: one outer boundary, plus one loop per hole or disconnected island."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/Loop.cs",
+      "selection": { "start": { "line": 19 }, "end": { "line": 31 } },
+      "description": "### Winding direction is the outer/hole signal\n\n`IsClockwise` comes from the shoelace formula - a byproduct of the same rule that makes tracing work (\"the sector is always on the walker's right\"). An outer boundary traces clockwise; a hole traces counter-clockwise, because keeping the interior on your right means circling a hole in the opposite rotational sense from circling the outside of a shape. This one bit is all the next step needs to tell them apart."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/PolygonNesting.cs",
+      "selection": { "start": { "line": 38 }, "end": { "line": 55 } },
+      "description": "### Step 2: Nest\n\nFor each loop, `TryInsertChild` checks whether it sits inside an existing loop (`Contains`, a standard point-in-polygon test) - and tries any existing *children* first, so a loop always ends up nested under its innermost enclosing loop, not just the first one that happens to contain it. This is what lets nesting go arbitrarily deep: an island can sit inside a hole, which sits inside an outer boundary."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/PolygonCutter.cs",
+      "selection": { "start": { "line": 88 }, "end": { "line": 109 } },
+      "description": "### Step 3: Cut\n\nEar-clipping (next) can't handle holes directly, so each hole gets bridged into its outer loop first: find the hole's right-most vertex, cast a ray to the right, find where it hits the outer boundary, and splice the entire hole's vertex loop in at that point - visiting the hole's start vertex, then the cut point, twice each. The result reads as one single, hole-free polygon with a thin \"slit\" where the hole used to be, even though it still represents the same shape with a hole in it."
+    },
+    {
+      "description": "### Step 4: Ear-clipping, from scratch\n\nThis is the actual triangulation, and it's a different kind of algorithm from the first three - a general technique for cutting *any* simple polygon into triangles, not something specific to Doom maps.\n\nThe idea: look at any three *consecutive* corners of the polygon. If the small triangle they form contains no other part of the polygon, you can cut that triangle off entirely - like tearing a triangular corner off a piece of paper. What's left is the same polygon with one fewer corner. Repeat: each tear produces one triangle and shrinks the polygon by one vertex, until only a triangle remains. Each clippable corner is called an **ear**, and the whole algorithm is just \"keep clipping ears until none are left.\""
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/EarClipper.cs",
+      "selection": { "start": { "line": 115 }, "end": { "line": 128 } },
+      "description": "### Convex vs. reflex: which corners can ever be ears\n\n`GetTriangle` grabs a vertex and its two immediate neighbors. `IsReflex` classifies the middle one: at a **convex** corner (like a normal box corner) the polygon bulges outward; at a **reflex** corner (the inward corner of a notch, like the L-shape from the tests) it caves in. A reflex corner's own little triangle would sweep back over material that isn't part of the polygon, so a reflex vertex can *never* be a valid ear - only convex corners are even candidates."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Geometry/EarClipper.cs",
+      "selection": { "start": { "line": 28 }, "end": { "line": 61 } },
+      "description": "### The clipping loop\n\nBeing convex isn't quite enough - some *other* reflex vertex elsewhere in the polygon might still poke into this candidate triangle (that's what `IsValidEar`, next door, checks). Once a vertex clears both tests it goes on the `eartips` list; the loop just keeps popping one off, recording its triangle, and removing it.\n\nThe one thing this port does that a first-pass ear-clipper usually wouldn't: after removing a vertex, only its two former neighbors (`prev`/`next`) get re-checked (`Restatus`) - not the whole remaining polygon. Ported this way on purpose after being reminded that a huge, highly-detailed community WAD (MyHouse.wad territory) could plausibly have an individual sector complex enough for that difference to actually matter, rather than assuming Doom sectors are always small."
+    },
+    {
+      "description": "### Putting it together\n\n`SectorTracer.Trace(sector)` → `PolygonNesting.BuildTree(loops)` → `PolygonCutter.Cut(tree)` → `EarClipper.Clip(polygon)` → triangles. Every step in this chain is a faithful port of the equivalent piece in Ultimate Doom Builder's own `Triangulation`/`EarClipPolygon`/`EarClipVertex` code - including the rarer edge cases (self-referencing sectors, tracer backtracking, the cutter's horizontal-ray tie-breaks) rather than simplified-away versions of them.\n\nNext up: the Godot side. `SectorMeshBuilder` takes these triangles and turns them into an actual `ArrayMesh`, which is the point this stops being abstract and starts showing up on screen."
+    }
+  ]
+}

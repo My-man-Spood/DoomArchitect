@@ -4,6 +4,11 @@
 export.cfg
 export_presets.cfg
 
+# Godot's editor scans src/ too (even though those .cs files are excluded
+# from compilation) and generates stray .uid sidecars for them - src/ isn't
+# Godot scripts, so these aren't meaningful.
+src/**/*.cs.uid
+
 # .NET
 bin/
 obj/
