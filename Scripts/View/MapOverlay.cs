@@ -17,8 +17,10 @@ using MapVector2 = System.Numerics.Vector2;
 /// </summary>
 public partial class MapOverlay : Control
 {
-	private const float GridSpacing = 64f;
-	private const float GridMargin = GridSpacing * 2f;
+	public const float DefaultGridSize = 32f;
+	public const float MinGridSize = 1f;
+	public const float MaxGridSize = 1024f;
+
 	private const float VertexSize = 6f;
 	private const float LinedefWidth = 2f;
 	private const float FrontIndicatorLength = 4f;
@@ -27,7 +29,17 @@ public partial class MapOverlay : Control
 	private const float LinedefPickRadius = 6f;
 	private const float InactiveModeAlpha = 0.35f;
 
-	private static readonly Color GridColor = new(0.3f, 0.3f, 0.3f);
+	/// <summary>UDB's own threshold in <c>Renderer2D.RenderGrid</c> for when a grid tier is too dense to read.</summary>
+	private const float MinGridCellPixels = 6f;
+	private const int MaxGridDoublings = 20;
+	private const float Grid64Size = 64f;
+
+	private const float ZoomFactor = 0.9f;
+	private const float MinCameraSize = 20f;
+	private const float MaxCameraSize = 2000f;
+
+	private static readonly Color GridColor = new(0.5f, 0.5f, 0.55f, 0.22f);
+	private static readonly Color Grid64Color = new(0.65f, 0.65f, 0.85f, 0.32f);
 	private static readonly Color OneSidedColor = new(0.9f, 0.9f, 0.9f);
 	private static readonly Color TwoSidedColor = new(0.55f, 0.55f, 0.6f);
 	private static readonly Color UnselectedVertexColor = new(0.35f, 0.65f, 1f);
@@ -37,6 +49,23 @@ public partial class MapOverlay : Control
 	public MapData Map { get; set; }
 	public Camera3D Camera { get; set; }
 	public EditMode Mode { get; set; } = EditMode.Vertices;
+	public float GridSize { get; set; } = DefaultGridSize;
+
+	/// <summary>
+	/// The persistent on/off state (matches UDB's toolbar checkbox, which
+	/// this app has no equivalent of yet - see <see cref="EffectiveSnap"/>
+	/// for the momentary Shift-key override UDB also applies on top).
+	/// </summary>
+	public bool SnapEnabled { get; set; } = true;
+
+	/// <summary>
+	/// Mirrors UDB's own "DynamicGridSize" setting (default on there too):
+	/// while enabled, zooming recomputes <see cref="GridSize"/> via
+	/// <see cref="Core.Geometry.DynamicGridSize"/> instead of leaving it
+	/// fixed. Manually changing grid size (<c>[</c>/<c>]</c>) turns this
+	/// off, matching UDB's <c>DisableDynamicGridResize</c>.
+	/// </summary>
+	public bool DynamicGridSizeEnabled { get; set; } = true;
 
 	private Vertex _draggedVertex;
 	private Vertex _hoveredVertex;
@@ -52,6 +81,16 @@ public partial class MapOverlay : Control
 	private MapVector2 _dragStartLineEnd;
 	private Dictionary<Vertex, MapVector2> _dragStartSectorVertices;
 
+	/// <summary>
+	/// Ported from UDB's own <c>ShiftState ^ SnapToGrid</c> pattern (used
+	/// identically across every one of its classic edit modes): holding
+	/// Shift inverts whatever the persistent toggle is currently set to.
+	/// </summary>
+	private bool EffectiveSnap => SnapEnabled ^ Input.IsKeyPressed(Key.Shift);
+
+	private MapVector2 SnapIfEnabled(MapVector2 position) =>
+		EffectiveSnap ? GridSnapper.Snap(position, GridSize) : position;
+
 	public override void _Process(double delta)
 	{
 		if (Visible) QueueRedraw();
@@ -60,6 +99,12 @@ public partial class MapOverlay : Control
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (!Visible || Map == null || Camera == null) return;
+
+		if (@event is InputEventMouseButton { Pressed: true } wheel)
+		{
+			if (wheel.ButtonIndex == MouseButton.WheelUp) ZoomAt(wheel.Position, ZoomFactor);
+			else if (wheel.ButtonIndex == MouseButton.WheelDown) ZoomAt(wheel.Position, 1f / ZoomFactor);
+		}
 
 		switch (Mode)
 		{
@@ -87,7 +132,7 @@ public partial class MapOverlay : Control
 				_draggedVertex = null;
 				break;
 			case InputEventMouseMotion motion when _draggedVertex != null:
-				Map.MoveVertex(_draggedVertex, Unproject(motion.Position));
+				Map.MoveVertex(_draggedVertex, SnapIfEnabled(Unproject(motion.Position)));
 				break;
 			case InputEventMouseMotion motion:
 				_hoveredVertex = FindVertexNear(motion.Position);
@@ -104,7 +149,7 @@ public partial class MapOverlay : Control
 				_hoveredLinedef = _draggedLinedef;
 				if (_draggedLinedef != null)
 				{
-					_dragOrigin = Unproject(press.Position);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
 					_dragStartLineStart = _draggedLinedef.Start.Position;
 					_dragStartLineEnd = _draggedLinedef.End.Position;
 				}
@@ -113,7 +158,7 @@ public partial class MapOverlay : Control
 				_draggedLinedef = null;
 				break;
 			case InputEventMouseMotion motion when _draggedLinedef != null:
-				var lineDelta = Unproject(motion.Position) - _dragOrigin;
+				var lineDelta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
 				Map.MoveVertex(_draggedLinedef.Start, _dragStartLineStart + lineDelta);
 				Map.MoveVertex(_draggedLinedef.End, _dragStartLineEnd + lineDelta);
 				break;
@@ -132,7 +177,7 @@ public partial class MapOverlay : Control
 				_hoveredSector = _draggedSector;
 				if (_draggedSector != null)
 				{
-					_dragOrigin = Unproject(press.Position);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
 					_dragStartSectorVertices = SectorVertices(_draggedSector).ToDictionary(v => v, v => v.Position);
 				}
 				break;
@@ -141,7 +186,7 @@ public partial class MapOverlay : Control
 				_dragStartSectorVertices = null;
 				break;
 			case InputEventMouseMotion motion when _draggedSector != null:
-				var sectorDelta = Unproject(motion.Position) - _dragOrigin;
+				var sectorDelta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
 				foreach (var (vertex, startPosition) in _dragStartSectorVertices)
 				{
 					Map.MoveVertex(vertex, startPosition + sectorDelta);
@@ -213,6 +258,31 @@ public partial class MapOverlay : Control
 		return (origin + direction * distanceToPlane).ToDoom();
 	}
 
+	/// <summary>
+	/// Changes the ortho camera's <see cref="Camera3D.Size"/> (smaller =
+	/// zoomed in) while keeping the map-space point under the cursor fixed
+	/// on screen, the way UDB's own scroll-to-zoom does - otherwise
+	/// zooming would recenter on the map origin instead of the cursor.
+	/// </summary>
+	private void ZoomAt(Vector2 screenPosition, float factor)
+	{
+		var before = Unproject(screenPosition);
+		Camera.Size = Mathf.Clamp(Camera.Size * factor, MinCameraSize, MaxCameraSize);
+		var after = Unproject(screenPosition);
+		Camera.Position += (before - after).ToWorld(0f);
+
+		if (DynamicGridSizeEnabled) ApplyDynamicGridSize();
+	}
+
+	/// <summary>Ported from UDB's <c>ClassicMode.MatchGridSizeToDisplayScale</c>, called on every zoom change.</summary>
+	private void ApplyDynamicGridSize()
+	{
+		var (min, max) = ViewportBounds();
+		var minVisibleExtent = Mathf.Min(max.X - min.X, max.Y - min.Y);
+		var target = DynamicGridSize.ForVisibleExtent(minVisibleExtent);
+		GridSize = Mathf.Clamp(target, MinGridSize, MaxGridSize);
+	}
+
 	public override void _Draw()
 	{
 		if (Map == null || Camera == null) return;
@@ -224,24 +294,56 @@ public partial class MapOverlay : Control
 		DrawModeLabel();
 	}
 
+	/// <summary>
+	/// Ported from UDB's <c>RenderBackgroundGrid</c>/<c>RenderGrid</c>:
+	/// the configured grid draws in the normal color, plus - whenever
+	/// that configured size is 64 or finer - a second tier always fixed
+	/// at exactly 64 units (Doom's standard alignment unit) in a distinct
+	/// color, so that reference stays visible however fine you've zoomed
+	/// the working grid. Not ported: UDB's separate "DynamicGridSize"
+	/// setting that auto-adjusts the persisted grid size itself as you
+	/// zoom - this only adapts what's drawn, never the configured/snap size.
+	/// </summary>
 	private void DrawGrid()
 	{
-		var (min, max) = ComputeBounds();
-		var startX = SnapDown(min.X, GridSpacing);
-		var endX = SnapUp(max.X, GridSpacing);
-		var startY = SnapDown(min.Y, GridSpacing);
-		var endY = SnapUp(max.Y, GridSpacing);
+		DrawGridTier(GridSize, GridColor);
+		if (GridSize <= Grid64Size) DrawGridTier(Grid64Size, Grid64Color);
+	}
 
-		for (var x = startX; x <= endX; x += GridSpacing)
+	/// <summary>
+	/// Doubles <paramref name="baseSize"/> until each cell is at least
+	/// <see cref="MinGridCellPixels"/> wide on screen, exactly like UDB's
+	/// own "increase rendered grid size if needed" fallback in
+	/// <c>RenderGrid</c> - otherwise a fine grid zoomed far out renders as
+	/// a dense, illegible mesh of lines.
+	/// </summary>
+	private void DrawGridTier(float baseSize, Color color)
+	{
+		var size = baseSize;
+		for (var i = 0; i < MaxGridDoublings && CellPixelSize(size) <= MinGridCellPixels; i++)
 		{
-			DrawWorldLine(new MapVector2(x, startY), new MapVector2(x, endY), GridColor);
+			size *= 2f;
 		}
 
-		for (var y = startY; y <= endY; y += GridSpacing)
+		var (min, max) = ViewportBounds();
+		var startX = SnapDown(min.X, size);
+		var endX = SnapUp(max.X, size);
+		var startY = SnapDown(min.Y, size);
+		var endY = SnapUp(max.Y, size);
+
+		for (var x = startX; x <= endX; x += size)
 		{
-			DrawWorldLine(new MapVector2(startX, y), new MapVector2(endX, y), GridColor);
+			DrawWorldLine(new MapVector2(x, startY), new MapVector2(x, endY), color);
+		}
+
+		for (var y = startY; y <= endY; y += size)
+		{
+			DrawWorldLine(new MapVector2(startX, y), new MapVector2(endX, y), color);
 		}
 	}
+
+	private float CellPixelSize(float size) =>
+		Project(new MapVector2(size, 0)).DistanceTo(Project(MapVector2.Zero));
 
 	/// <summary>
 	/// Fills the hovered/dragged sector's actual floor area (holes
@@ -312,24 +414,42 @@ public partial class MapOverlay : Control
 	{
 		var font = GetThemeDefaultFont();
 		var fontSize = GetThemeDefaultFontSize();
-		DrawString(font, new Vector2(12, 12 + fontSize), $"Mode: {Mode}  (1 Vertices · 2 Linedefs · 3 Sectors)",
+		var snapState = EffectiveSnap ? "on" : "off";
+		var dynamicState = DynamicGridSizeEnabled ? "on" : "off";
+		DrawString(font, new Vector2(12, 12 + fontSize),
+			$"Mode: {Mode}  (1 Vertices · 2 Linedefs · 3 Sectors)  Grid: {GridSize} ([ larger, ] smaller)  " +
+			$"Snap: {snapState} (G to toggle, hold Shift to invert)  Dynamic: {dynamicState} (D to toggle)",
 			HorizontalAlignment.Left, -1, fontSize, Colors.White);
 	}
 
-	private (MapVector2 Min, MapVector2 Max) ComputeBounds()
+	/// <summary>
+	/// The map-space rectangle the camera currently sees, found by
+	/// unprojecting the viewport's own corners rather than reasoning about
+	/// Godot's orthographic-projection math directly - works the same
+	/// regardless of projection type or aspect ratio, and reuses the exact
+	/// same ray/plane intersection every other pick in this file already
+	/// goes through.
+	/// </summary>
+	private (MapVector2 Min, MapVector2 Max) ViewportBounds()
 	{
-		if (Map.Vertices.Count == 0) return (MapVector2.Zero, MapVector2.Zero);
-
-		var min = Map.Vertices[0].Position;
-		var max = min;
-		foreach (var vertex in Map.Vertices)
+		var size = GetViewportRect().Size;
+		var corners = new[]
 		{
-			min = MapVector2.Min(min, vertex.Position);
-			max = MapVector2.Max(max, vertex.Position);
+			Unproject(Vector2.Zero),
+			Unproject(new Vector2(size.X, 0)),
+			Unproject(new Vector2(0, size.Y)),
+			Unproject(size),
+		};
+
+		var min = corners[0];
+		var max = corners[0];
+		foreach (var corner in corners)
+		{
+			min = MapVector2.Min(min, corner);
+			max = MapVector2.Max(max, corner);
 		}
 
-		var margin = new MapVector2(GridMargin, GridMargin);
-		return (min - margin, max + margin);
+		return (min, max);
 	}
 
 	private void DrawWorldLine(MapVector2 from, MapVector2 to, Color color, float width = 1f) =>

@@ -59,6 +59,15 @@ public partial class MapView : Node3D
 		_sectorMeshes[sector] = (floor, ceiling);
 	}
 
+	/// <summary>
+	/// 1/2/3 switch edit mode; the rest are grid/snap controls on
+	/// <see cref="_overlay"/>. <c>[</c>/<c>]</c> (double/halve, 1..1024)
+	/// and <c>G</c> (snap toggle) match UDB's own keys and bounds, except
+	/// <c>G</c> and <c>D</c> themselves - UDB binds neither by default,
+	/// since both are toolbar checkboxes there. Manually resizing the
+	/// grid disables dynamic sizing, matching UDB's own
+	/// <c>DisableDynamicGridResize</c>.
+	/// </summary>
 	public override void _UnhandledInput(InputEvent @event)
 	{
 		if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
@@ -80,6 +89,20 @@ public partial class MapView : Node3D
 				break;
 			case Key.Key3:
 				_overlay.Mode = EditMode.Sectors;
+				break;
+			case Key.G:
+				_overlay.SnapEnabled = !_overlay.SnapEnabled;
+				break;
+			case Key.D:
+				_overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled;
+				break;
+			case Key.Bracketleft:
+				_overlay.DynamicGridSizeEnabled = false;
+				if (_overlay.GridSize <= MapOverlay.MaxGridSize / 2) _overlay.GridSize *= 2f;
+				break;
+			case Key.Bracketright:
+				_overlay.DynamicGridSizeEnabled = false;
+				if (_overlay.GridSize >= MapOverlay.MinGridSize * 2) _overlay.GridSize /= 2f;
 				break;
 		}
 	}

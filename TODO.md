@@ -105,6 +105,74 @@ file just tracks what's built and what's next.
         underlying data model: a vertex is one shared point, moving it
         moves it for everyone referencing it) - splitting a shared edge
         apart is real future work, not something to fake now
+- [x] Grid snapping, ported from UDB's `GridSetup`/its classic-mode drag
+      code:
+      - `Core.Geometry.GridSnapper.Snap(position, gridSize)` ports
+        `GridSetup.SnappedToGrid` exactly - round each axis independently
+        to the nearest multiple, using the runtime's default (round-half-
+        to-even) rounding, same as UDB's unqualified `Math.Round` call.
+        Left out on purpose: UDB's grid rotation/origin transform and its
+        clamp to the map format's configured boundaries - neither exists
+        elsewhere in this codebase yet, so faking them would just be dead
+        code
+      - `MapOverlay.EffectiveSnap` ports the exact `ShiftState ^
+        SnapToGrid` pattern used identically across every one of UDB's
+        classic edit modes: a persistent `SnapEnabled` toggle (default
+        on, bound to `G` - UDB itself binds no key here since it's a
+        toolbar checkbox we don't have) that holding Shift momentarily
+        inverts. Applied in all three drag paths - for the multi-vertex
+        linedef/sector drags, only the mouse anchor point is snapped each
+        frame (not each vertex independently), so the delta stays exact
+        and dragged shapes don't distort
+      - Grid size (`MapOverlay.GridSize`, default 32 matching UDB's own
+        default) changes via `[`/`]`, matching UDB's own keys and their
+        double/halve-with-bounds (1..1024) behavior
+      - The grid itself now fills the whole viewport - `ViewportBounds()`
+        unprojects the four viewport corners instead of bounding by the
+        map's vertex extent, so it stays full-screen at any pan/zoom
+        (once those exist) the way UDB's does, rather than stopping at
+        the edge of whatever geometry happens to exist
+      - Added a black `WorldEnvironment` background so the grid (drawn
+        translucent, on top of everything) reads clearly against empty
+        space and more subtly over the lit floor mesh
+- [x] Scroll-wheel zoom for the top-down camera (`MapOverlay.ZoomAt`):
+      changes `Camera3D.Size` (smaller = zoomed in), then shifts the
+      camera position by the map-space delta at the cursor before/after
+      so the point under the cursor stays fixed on screen (matching
+      UDB's own scroll-to-zoom feel) instead of always zooming toward
+      the map origin. Clamped to a 20..2000 `Size` range
+- [x] Adaptive multi-tier grid, ported from UDB's `RenderBackgroundGrid`/
+      `RenderGrid`:
+      - A second grid tier, always fixed at exactly 64 units (Doom's
+        alignment unit) in a distinct color, draws whenever the
+        configured grid is 64 or finer - so that reference stays visible
+        no matter how fine you've zoomed the working grid
+      - Each tier independently doubles its own drawn spacing (not the
+        configured/snap size) until a cell is at least 6 screen pixels -
+        UDB's exact "increase rendered grid size if needed" threshold -
+        so a fine grid zoomed far out never renders as illegible mush
+      - Cell size in screen pixels is measured by projecting a
+        `size`-unit segment through the camera rather than reasoning
+        about `Camera3D.Size`/aspect-mode math directly - same trick
+        `ViewportBounds` already uses, works the same for any projection
+- [x] Dynamic grid size, ported from UDB's own
+      `ClassicMode.MatchGridSizeToDisplayScale` (the mechanism the
+      previous entry's "not ported" note was about):
+      - `Core.Geometry.DynamicGridSize.ForVisibleExtent(minVisibleMapUnits)`
+        is a bit-for-bit port of UDB's integer round-up-to-power-of-two
+        trick (kept as the exact same bit-twiddling rather than
+        reimplemented via a logarithm, so it lands on identical sizes at
+        identical zoom levels) - always returns a power of two, including
+        fractional ones (0.5, 0.125), targeting roughly a fixed cell
+        count across the smaller visible screen dimension
+      - `MapOverlay.DynamicGridSizeEnabled` (default on, matching UDB's
+        own default) recomputes `GridSize` via that helper on every zoom
+        (`ZoomAt`), using the same viewport-corner-unprojection
+        `ViewportBounds()` already provides for the visible extent
+      - Toggled with `D` (like snap's `G`, UDB binds no key here either -
+        both are toolbar checkboxes there); manually resizing with
+        `[`/`]` turns it off, matching UDB's own `DisableDynamicGridResize`
+        (you don't want automatic and manual sizing fighting each other)
 - [ ] `Core.Undo`: command-based undo/redo stack (pure Core, no Godot)
 
 ## Map I/O
