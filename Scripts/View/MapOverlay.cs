@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Undo;
 using DoomArchitect.Interop;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
@@ -48,6 +49,7 @@ public partial class MapOverlay : Control
 
 	public MapData Map { get; set; }
 	public Camera3D Camera { get; set; }
+	public UndoStack UndoStack { get; set; }
 	public EditMode Mode { get; set; } = EditMode.Vertices;
 	public float GridSize { get; set; } = DefaultGridSize;
 
@@ -69,6 +71,7 @@ public partial class MapOverlay : Control
 
 	private Vertex _draggedVertex;
 	private Vertex _hoveredVertex;
+	private MapVector2 _dragStartVertexPosition;
 
 	private Linedef _draggedLinedef;
 	private Linedef _hoveredLinedef;
@@ -98,7 +101,7 @@ public partial class MapOverlay : Control
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (!Visible || Map == null || Camera == null) return;
+		if (!Visible || Map == null || Camera == null || UndoStack == null) return;
 
 		if (@event is InputEventMouseButton { Pressed: true } wheel)
 		{
@@ -127,8 +130,15 @@ public partial class MapOverlay : Control
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				_draggedVertex = FindVertexNear(press.Position);
 				_hoveredVertex = _draggedVertex;
+				if (_draggedVertex != null) _dragStartVertexPosition = _draggedVertex.Position;
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+				if (_draggedVertex != null && _draggedVertex.Position != _dragStartVertexPosition)
+				{
+					UndoStack.Record(new MoveVertexCommand(
+						Map, _draggedVertex, _dragStartVertexPosition, _draggedVertex.Position));
+				}
+
 				_draggedVertex = null;
 				break;
 			case InputEventMouseMotion motion when _draggedVertex != null:
@@ -155,6 +165,19 @@ public partial class MapOverlay : Control
 				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+				if (_draggedLinedef != null &&
+					(_draggedLinedef.Start.Position != _dragStartLineStart ||
+					 _draggedLinedef.End.Position != _dragStartLineEnd))
+				{
+					UndoStack.Record(new CommandGroup(new ICommand[]
+					{
+						new MoveVertexCommand(
+							Map, _draggedLinedef.Start, _dragStartLineStart, _draggedLinedef.Start.Position),
+						new MoveVertexCommand(
+							Map, _draggedLinedef.End, _dragStartLineEnd, _draggedLinedef.End.Position),
+					}));
+				}
+
 				_draggedLinedef = null;
 				break;
 			case InputEventMouseMotion motion when _draggedLinedef != null:
@@ -182,6 +205,15 @@ public partial class MapOverlay : Control
 				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+				if (_draggedSector != null &&
+					_dragStartSectorVertices.Any(kvp => kvp.Key.Position != kvp.Value))
+				{
+					var commands = _dragStartSectorVertices
+						.Select(kvp => (ICommand)new MoveVertexCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
+						.ToList();
+					UndoStack.Record(new CommandGroup(commands));
+				}
+
 				_draggedSector = null;
 				_dragStartSectorVertices = null;
 				break;

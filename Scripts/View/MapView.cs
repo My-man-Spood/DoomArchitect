@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Undo;
 using DoomArchitect.Rendering;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
@@ -21,6 +22,7 @@ public partial class MapView : Node3D
 	private Camera3D _perspectiveCamera;
 	private MapOverlay _overlay;
 	private MapData _map;
+	private readonly UndoStack _undoStack = new();
 	private bool _in3D;
 
 	public override void _Ready()
@@ -35,6 +37,7 @@ public partial class MapView : Node3D
 
 		_overlay.Map = _map;
 		_overlay.Camera = _topDownCamera;
+		_overlay.UndoStack = _undoStack;
 	}
 
 	public override void _Process(double delta)
@@ -60,7 +63,9 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// 1/2/3 switch edit mode; the rest are grid/snap controls on
+	/// Ctrl+Z/Ctrl+Y match UDB's own default undo/redo keys exactly
+	/// (verified against its default keybind config, not guessed). 1/2/3
+	/// switch edit mode; the rest are grid/snap controls on
 	/// <see cref="_overlay"/>. <c>[</c>/<c>]</c> (double/halve, 1..1024)
 	/// and <c>G</c> (snap toggle) match UDB's own keys and bounds, except
 	/// <c>G</c> and <c>D</c> themselves - UDB binds neither by default,
@@ -74,6 +79,12 @@ public partial class MapView : Node3D
 
 		switch (key.Keycode)
 		{
+			case Key.Z when key.CtrlPressed:
+				_undoStack.Undo();
+				break;
+			case Key.Y when key.CtrlPressed:
+				_undoStack.Redo();
+				break;
 			case Key.Tab:
 				_in3D = !_in3D;
 				_topDownCamera.Current = !_in3D;
