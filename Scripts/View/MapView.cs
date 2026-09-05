@@ -11,13 +11,15 @@ using MapVector2 = System.Numerics.Vector2;
 // exact same scene, so switching views is just a camera swap.
 public partial class MapView : Node3D
 {
-	// Godot render layers are 1-indexed bit positions; the ceiling mesh
-	// lives on layer 2 so the top-down camera's cull mask can exclude it
+	// Godot render layers are 1-indexed bit positions; ceilings and walls
+	// live on layer 2 so the top-down camera's cull mask can exclude them
+	// (2D view shows the floor plan, not a jumble of wall/ceiling shading)
 	// while the perspective camera (default cull mask, all layers) still
-	// sees it.
-	private const uint CeilingRenderLayer = 2;
+	// sees everything.
+	private const uint ThreeDOnlyRenderLayer = 2;
 
 	private readonly Dictionary<Sector, (MeshInstance3D Floor, MeshInstance3D Ceiling)> _sectorMeshes = new();
+	private readonly Dictionary<Linedef, MeshInstance3D> _wallMeshes = new();
 
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
@@ -45,6 +47,10 @@ public partial class MapView : Node3D
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
 		CreateSectorMeshInstances(sector);
+		foreach (var linedef in _map.Linedefs)
+		{
+			CreateWallMeshInstance(linedef);
+		}
 
 		_overlay.Map = _map;
 		_overlay.Camera = _topDownCamera;
@@ -59,6 +65,18 @@ public partial class MapView : Node3D
 			var instances = _sectorMeshes[sector];
 			instances.Floor.Mesh = mesh.Floor;
 			instances.Ceiling.Mesh = mesh.Ceiling;
+
+			// A wall's shape can depend on both of a linedef's sectors (a
+			// two-sided step), so any linedef touching this sector needs
+			// rebuilding too - including ones whose *other* side is what
+			// changed, since this sector is dirty either way. Touching a
+			// linedef shared by two dirty sectors in the same frame just
+			// rebuilds it twice with an identical result - harmless.
+			foreach (var sidedef in sector.Sidedefs)
+			{
+				RebuildWallMesh(sidedef.Linedef);
+			}
+
 			_map.ClearDirty(sector);
 		}
 	}
@@ -81,10 +99,22 @@ public partial class MapView : Node3D
 
 		_sectorMeshes.Clear();
 
+		foreach (var wall in _wallMeshes.Values)
+		{
+			wall.QueueFree();
+		}
+
+		_wallMeshes.Clear();
+
 		_map = newMap;
 		foreach (var sector in newMap.Sectors)
 		{
 			CreateSectorMeshInstances(sector);
+		}
+
+		foreach (var linedef in newMap.Linedefs)
+		{
+			CreateWallMeshInstance(linedef);
 		}
 
 		_undoStack = new UndoStack();
@@ -120,11 +150,20 @@ public partial class MapView : Node3D
 	{
 		var mesh = SectorMeshBuilder.Build(sector);
 		var floor = new MeshInstance3D { Mesh = mesh.Floor };
-		var ceiling = new MeshInstance3D { Mesh = mesh.Ceiling, Layers = CeilingRenderLayer };
+		var ceiling = new MeshInstance3D { Mesh = mesh.Ceiling, Layers = ThreeDOnlyRenderLayer };
 		AddChild(floor);
 		AddChild(ceiling);
 		_sectorMeshes[sector] = (floor, ceiling);
 	}
+
+	private void CreateWallMeshInstance(Linedef linedef)
+	{
+		var instance = new MeshInstance3D { Mesh = WallMeshBuilder.Build(linedef), Layers = ThreeDOnlyRenderLayer };
+		AddChild(instance);
+		_wallMeshes[linedef] = instance;
+	}
+
+	private void RebuildWallMesh(Linedef linedef) => _wallMeshes[linedef].Mesh = WallMeshBuilder.Build(linedef);
 
 	/// <summary>
 	/// Ctrl+Z/Ctrl+Y match UDB's own default undo/redo keys exactly

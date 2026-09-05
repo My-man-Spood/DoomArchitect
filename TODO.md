@@ -366,7 +366,35 @@ file just tracks what's built and what's next.
 
 - [ ] Texture pipeline: Doom picture format decode (`Core`) -> `Godot
       ImageTexture` (`App`)
-- [ ] Sidedef upper/middle/lower wall mesh generation
+- [x] Sidedef upper/middle/lower wall mesh generation
+      (`Core.Geometry.LinedefWallBuilder` + `Rendering.WallMeshBuilder`) -
+      a close port of UDB's own visual-mode wall builders
+      (`BaseVisualSector`/`VisualUpper`/`VisualLower`/`VisualMiddleSingle`,
+      verified against the actual source): a one-sided linedef spans its
+      sector's full floor-to-ceiling height; a two-sided linedef gets an
+      upper wall on whichever side's ceiling is higher (none if equal)
+      and a lower wall on whichever side's floor is lower (none if
+      equal), each clamped against the classic vanilla "closed sector"
+      trick (floor above ceiling) the same defensive way UDB's own code
+      does. Confirmed from the actual source that a missing texture
+      (`"-"`) never gates whether a wall's *shape* gets built - only
+      which material/placeholder is applied at render time - so these
+      build purely off height gaps, texture-field-independent. Reuses
+      the exact same trace -> mesh pipeline philosophy as
+      `SectorMeshBuilder`; a new shared `DoubleSidedMesh` helper was
+      pulled out of `SectorMeshBuilder` so both builders emit the same
+      two-triangles-per-face double-sided pattern instead of duplicating
+      it. Walls (like ceilings) live on the same "hidden from the 2D
+      top-down view" render layer. Wired into `MapView`'s live rebuild
+      loop: a linedef's wall mesh rebuilds whenever either of its
+      sectors goes dirty (harmless if that happens on both sides in the
+      same frame - rebuilds twice with an identical result).
+      **Deliberately not covered**: a two-sided linedef's *masked*
+      middle texture (fences/bars/windows) - confirmed from UDB's actual
+      code that its default (non-repeating) vertical placement genuinely
+      depends on the real texture's pixel height, which we don't have
+      until the texture pipeline exists. Tracked as its own follow-up
+      right below, not silently dropped
 - [ ] Things (map objects) - data model + billboard sprite rendering
 - [ ] Game configuration system (linedef actions, thing types, sector
       specials) - data + parsing, ported from UDB's game configs

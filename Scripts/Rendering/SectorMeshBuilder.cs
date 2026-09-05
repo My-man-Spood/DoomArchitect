@@ -18,13 +18,8 @@ public readonly record struct SectorMesh(ArrayMesh Floor, ArrayMesh Ceiling);
 /// <summary>
 /// Turns a sector's triangulated shape (Core.Geometry - all pure math, no
 /// Godot involved) into actual Godot meshes: a floor at FloorHeight and a
-/// ceiling at CeilingHeight, each genuinely double-sided - two real
-/// triangles per face, one wound each way, rather than one triangle plus
-/// a double-sided material. A single triangle's normal only shades
-/// correctly from the side it's meant to face; viewed from the other side
-/// under normal lighting it renders essentially black regardless of
-/// culling, so two real triangles (each with its own correct normal) is
-/// simpler than getting a renderer's backface-lighting behavior right.
+/// ceiling at CeilingHeight, each genuinely double-sided via
+/// <see cref="DoubleSidedMesh"/>.
 /// </summary>
 public static class SectorMeshBuilder
 {
@@ -62,17 +57,7 @@ public static class SectorMeshBuilder
     {
         foreach (var (a, b, c) in triangles)
         {
-            var worldA = a.ToWorld(height);
-            var worldB = b.ToWorld(height);
-            var worldC = c.ToWorld(height);
-
-            surfaceTool.AddVertex(worldA);
-            surfaceTool.AddVertex(worldB);
-            surfaceTool.AddVertex(worldC);
-
-            surfaceTool.AddVertex(worldA);
-            surfaceTool.AddVertex(worldC);
-            surfaceTool.AddVertex(worldB);
+            DoubleSidedMesh.AddTriangle(surfaceTool, a.ToWorld(height), b.ToWorld(height), c.ToWorld(height));
         }
     }
 }
