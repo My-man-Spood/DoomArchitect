@@ -21,6 +21,9 @@ public partial class MapView : Node3D
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
 	private MapOverlay _overlay;
+	private ModeToolbar _modeToolbar;
+	private GridToolbar _gridToolbar;
+	private StatusBar _statusBar;
 	private MapData _map;
 	private readonly UndoStack _undoStack = new();
 	private bool _in3D;
@@ -30,6 +33,12 @@ public partial class MapView : Node3D
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
 		_perspectiveCamera = GetNode<Camera3D>("PerspectiveCamera");
 		_overlay = GetNode<MapOverlay>("Overlay/MapOverlay");
+		_modeToolbar = GetNode<ModeToolbar>("UI/MarginContainer/TopToolbar");
+		_modeToolbar.Overlay = _overlay;
+		_gridToolbar = GetNode<GridToolbar>("UI/MarginContainer/TopToolbar/GridToolbar");
+		_gridToolbar.Overlay = _overlay;
+		_statusBar = GetNode<StatusBar>("UI/StatusBar");
+		_statusBar.Overlay = _overlay;
 
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
@@ -90,6 +99,8 @@ public partial class MapView : Node3D
 				_topDownCamera.Current = !_in3D;
 				_perspectiveCamera.Current = _in3D;
 				_overlay.Visible = !_in3D;
+				_modeToolbar.Visible = !_in3D;
+				_statusBar.Visible = !_in3D;
 				Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
 				break;
 			case Key.Key1:
@@ -108,12 +119,10 @@ public partial class MapView : Node3D
 				_overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled;
 				break;
 			case Key.Bracketleft:
-				_overlay.DynamicGridSizeEnabled = false;
-				if (_overlay.GridSize <= MapOverlay.MaxGridSize / 2) _overlay.GridSize *= 2f;
+				_overlay.IncreaseGridSize();
 				break;
 			case Key.Bracketright:
-				_overlay.DynamicGridSizeEnabled = false;
-				if (_overlay.GridSize >= MapOverlay.MinGridSize * 2) _overlay.GridSize /= 2f;
+				_overlay.DecreaseGridSize();
 				break;
 		}
 	}

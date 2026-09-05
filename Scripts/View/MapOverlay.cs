@@ -69,6 +69,25 @@ public partial class MapOverlay : Control
 	/// </summary>
 	public bool DynamicGridSizeEnabled { get; set; } = true;
 
+	/// <summary>
+	/// Matches UDB's own <c>[</c>/<c>]</c> grid-size keys: doubles within
+	/// the 1..1024 bound, and turns off <see cref="DynamicGridSizeEnabled"/>
+	/// first, matching UDB's <c>DisableDynamicGridResize</c> - manual and
+	/// automatic sizing shouldn't fight each other. Shared by the keybind
+	/// and the grid toolbar's +/- buttons so both go through one policy.
+	/// </summary>
+	public void IncreaseGridSize()
+	{
+		DynamicGridSizeEnabled = false;
+		if (GridSize <= MaxGridSize / 2) GridSize *= 2f;
+	}
+
+	public void DecreaseGridSize()
+	{
+		DynamicGridSizeEnabled = false;
+		if (GridSize >= MinGridSize * 2) GridSize /= 2f;
+	}
+
 	private Vertex _draggedVertex;
 	private Vertex _hoveredVertex;
 	private MapVector2 _dragStartVertexPosition;
@@ -89,7 +108,7 @@ public partial class MapOverlay : Control
 	/// identically across every one of its classic edit modes): holding
 	/// Shift inverts whatever the persistent toggle is currently set to.
 	/// </summary>
-	private bool EffectiveSnap => SnapEnabled ^ Input.IsKeyPressed(Key.Shift);
+	public bool EffectiveSnap => SnapEnabled ^ Input.IsKeyPressed(Key.Shift);
 
 	private MapVector2 SnapIfEnabled(MapVector2 position) =>
 		EffectiveSnap ? GridSnapper.Snap(position, GridSize) : position;
@@ -323,7 +342,6 @@ public partial class MapOverlay : Control
 		DrawSectorHighlight();
 		DrawLinedefs();
 		DrawVertices();
-		DrawModeLabel();
 	}
 
 	/// <summary>
@@ -440,18 +458,6 @@ public partial class MapOverlay : Control
 			var baseColor = vertex == _hoveredVertex ? HoverColor : UnselectedVertexColor;
 			DrawRect(new Rect2(center - half, new Vector2(VertexSize, VertexSize)), new Color(baseColor, alpha));
 		}
-	}
-
-	private void DrawModeLabel()
-	{
-		var font = GetThemeDefaultFont();
-		var fontSize = GetThemeDefaultFontSize();
-		var snapState = EffectiveSnap ? "on" : "off";
-		var dynamicState = DynamicGridSizeEnabled ? "on" : "off";
-		DrawString(font, new Vector2(12, 12 + fontSize),
-			$"Mode: {Mode}  (1 Vertices · 2 Linedefs · 3 Sectors)  Grid: {GridSize} ([ larger, ] smaller)  " +
-			$"Snap: {snapState} (G to toggle, hold Shift to invert)  Dynamic: {dynamicState} (D to toggle)",
-			HorizontalAlignment.Left, -1, fontSize, Colors.White);
 	}
 
 	/// <summary>

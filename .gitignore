@@ -3,6 +3,7 @@
 *.translation
 export.cfg
 export_presets.cfg
+Build/
 
 # Godot's editor scans src/ too (even though those .cs files are excluded
 # from compilation) and generates stray .uid sidecars for them - src/ isn't

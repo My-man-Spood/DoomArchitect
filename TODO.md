@@ -173,6 +173,33 @@ file just tracks what's built and what's next.
         both are toolbar checkboxes there); manually resizing with
         `[`/`]` turns it off, matching UDB's own `DisableDynamicGridResize`
         (you don't want automatic and manual sizing fighting each other)
+- [x] Toolbar UI (`Scripts/View/ModeToolbar.cs`, `GridToolbar.cs`,
+      `StatusBar.cs`, `Assets/Icons/*.svg` - hand-drawn, not reused from
+      UDB, to sidestep the GPL-asset question entirely). Lives entirely
+      on its own `UI` CanvasLayer (`layer = 10`, drawn on top) rather
+      than nested inside `MapOverlay` - general UI shouldn't be a child
+      of the map-editing surface it controls, so `MapView` toggles each
+      piece's `Visible` explicitly alongside the overlay's instead of it
+      being inherited for free:
+      - `ModeToolbar`: three icon `Button`s in a `ButtonGroup` radio set.
+        Clicking one sets `MapOverlay.Mode` exactly like the 1/2/3 keys
+        do; `_Process` syncs button pressed-state from `Mode` every frame
+        via `SetPressedNoSignal` (avoiding a feedback loop) so a keybind
+        press updates the buttons too, not just the reverse
+      - `GridToolbar`: a grid-icon toggle button mirroring `G`/`SnapEnabled`
+        the same way, a `+`/`-` button pair calling new
+        `MapOverlay.IncreaseGridSize()`/`DecreaseGridSize()` methods (the
+        `[`/`]` double/halve-with-bounds logic, pulled out of `MapView`'s
+        keybind handler so the keybind and the buttons share one policy
+        instead of two copies of it), and a live grid-size label that
+        reads `GridSize` every frame - reflects dynamic-grid-size changes
+        from zooming, not just manual resizing
+      - `StatusBar`: the mode/grid/snap status text, moved out of
+        `MapOverlay._Draw()`'s `DrawString` call into a real bottom-of-
+        screen `Label` for the same UI/editing-surface separation reason
+        (`MapOverlay.EffectiveSnap` had to become `public` for it to read)
+      - Every button has `tooltip_text` (a stock `Control` property -
+        Godot shows it on hover automatically, no script needed)
 - [x] `Core.Undo`: command-based undo/redo stack (pure Core, no Godot).
       Deliberately NOT a port of UDB's actual `UndoManager` - that's a
       1400-line byte-level binary diff/snapshot system tightly coupled to
