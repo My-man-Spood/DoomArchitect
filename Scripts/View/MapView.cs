@@ -25,7 +25,7 @@ public partial class MapView : Node3D
 	private GridToolbar _gridToolbar;
 	private StatusBar _statusBar;
 	private MapData _map;
-	private readonly UndoStack _undoStack = new();
+	private UndoStack _undoStack = new();
 	private bool _in3D;
 
 	public override void _Ready()
@@ -39,6 +39,7 @@ public partial class MapView : Node3D
 		_gridToolbar.Overlay = _overlay;
 		_statusBar = GetNode<StatusBar>("UI/StatusBar");
 		_statusBar.Overlay = _overlay;
+		GetNode<OpenMapMenu>("UI/MarginContainer/TopToolbar/OpenMapGroup").MapLoaded += LoadMap;
 
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
@@ -59,6 +60,56 @@ public partial class MapView : Node3D
 			instances.Ceiling.Mesh = mesh.Ceiling;
 			_map.ClearDirty(sector);
 		}
+	}
+
+	/// <summary>
+	/// Swaps in a freshly loaded map: tears down every existing sector's
+	/// meshes and rebuilds from scratch, resets undo history (the old
+	/// stack's commands still close over the discarded MapData, so they'd
+	/// be pointless - see TODO.md), and refits the top-down camera since a
+	/// real loaded map is very unlikely to sit in the same 256x256 area
+	/// the sample room did.
+	/// </summary>
+	private void LoadMap(MapData newMap)
+	{
+		foreach (var (floor, ceiling) in _sectorMeshes.Values)
+		{
+			floor.QueueFree();
+			ceiling.QueueFree();
+		}
+
+		_sectorMeshes.Clear();
+
+		_map = newMap;
+		foreach (var sector in newMap.Sectors)
+		{
+			CreateSectorMeshInstances(sector);
+		}
+
+		_undoStack = new UndoStack();
+		_overlay.Map = _map;
+		_overlay.UndoStack = _undoStack;
+
+		FitTopDownCameraToMap(newMap);
+	}
+
+	private void FitTopDownCameraToMap(MapData map)
+	{
+		if (map.Vertices.Count == 0) return;
+
+		var min = map.Vertices[0].Position;
+		var max = min;
+		foreach (var vertex in map.Vertices)
+		{
+			min = MapVector2.Min(min, vertex.Position);
+			max = MapVector2.Max(max, vertex.Position);
+		}
+
+		var center = (min + max) / 2f;
+		var size = Mathf.Max(max.X - min.X, max.Y - min.Y) * 1.2f;
+
+		_topDownCamera.Position = new Vector3(center.X, _topDownCamera.Position.Y, center.Y);
+		_topDownCamera.Size = Mathf.Max(size, 64f);
 	}
 
 	private void CreateSectorMeshInstances(Sector sector)

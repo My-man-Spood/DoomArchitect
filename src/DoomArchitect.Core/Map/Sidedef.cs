@@ -2,6 +2,8 @@ namespace DoomArchitect.Core.Map;
 
 public sealed class Sidedef
 {
+    private readonly Dictionary<string, object> _customFields = new();
+
     internal Sidedef(Sector sector, Linedef linedef)
     {
         Sector = sector;
@@ -13,6 +15,18 @@ public sealed class Sidedef
     public string UpperTexture { get; set; } = "-";
     public string MiddleTexture { get; set; } = "-";
     public string LowerTexture { get; set; } = "-";
+    public int OffsetX { get; set; }
+    public int OffsetY { get; set; }
 
     public bool IsFront => Linedef.Front == this;
+
+    /// <summary>
+    /// UDMF fields recognized by the format but not modeled as a typed
+    /// property here (e.g. flags) - preserved so a load-then-save
+    /// round-trip doesn't lose them, even though nothing can interpret or
+    /// edit them yet.
+    /// </summary>
+    public IReadOnlyDictionary<string, object> CustomFields => _customFields;
+
+    internal void SetCustomField(string key, object value) => _customFields[key] = value;
 }

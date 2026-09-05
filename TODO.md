@@ -223,11 +223,77 @@ file just tracks what's built and what's next.
 
 ## Map I/O
 
-- [ ] `Core.IO`: UDMF text format parser/serializer
-- [ ] `Core.IO`: WAD reader (map lumps at minimum; texture/resource lumps
-      later)
-- [ ] Load a real map file end to end: WAD/UDMF -> `MapData` -> rendered
-      in both views
+- [x] `Core.IO`: UDMF text format parser/serializer - a close port of
+      UDB's own `UniversalParser`/`UniversalStreamReader`/
+      `UniversalStreamWriter` (~2200 lines read across two research
+      passes into the actual source, not just its behavior guessed at),
+      since a from-scratch reimplementation risked missing real
+      edge-case behavior UDB already gets right:
+      - `UdmfTreeParser`: the tokenizer, same grammar/number-classification
+        (hex, the exact non-general "contains '.' or 'e-'" float
+        heuristic, int-escalating-to-long) /string-escape/keyword rules
+        as UDB's `InputStructure`, reorganized into named methods around
+        a small cursor instead of one ~500-line switch loop. One
+        deliberate fix (discussed with the user): UDB's own `\DDD` string
+        escape has a real bug (only advances 1 of 3 digits, so the
+        trailing 2 leak into the string) - fixed here rather than
+        reproduced, since nothing depends on the bug
+      - `UdmfReader`/`UdmfWriter`: exact field defaults (sector
+        `lightlevel` = 160 not 255, linedef `sidefront`/`sideback` = -1
+        sentinel, etc.), exact "log a warning and drop" recovery for
+        malformed references (dangling vertex, zero-length linedef,
+        out-of-range sidedef index, sidedef-with-invalid-sector) rather
+        than aborting the whole load, and UDB's own asymmetric
+        field-omission rules on write (sector always writes its five
+        core fields even at defaults; sidedef omits offsets-when-zero
+        and textures-when-"-"; linedef always writes sidefront/sideback,
+        `-1` when absent)
+      - Went further than pure UDMF-format porting: `Vertex`/`Sector`/
+        `Linedef`/`Sidedef` each gained a `CustomFields` bag (boxed
+        `object`, no dependency from `Core.Map` back onto `Core.IO`)
+        holding any UDMF field recognized by the format but not yet a
+        typed property here (linedef `special`/`arg0..arg4`, sector
+        `id`/slopes, sidedef flags, vertex `zceiling`/`zfloor`, and any
+        genuinely arbitrary third-party field). Combined with whole-block
+        preservation for block types we don't recognize at all (`thing`
+        included), a load-then-save round-trip loses almost nothing, even
+        though most of it isn't editable yet
+      - 96 Core tests total (51 new for this pass) covering the
+        tokenizer, the reader's defaults/drop-rules/custom-field capture,
+        the writer's formatting/omission rules, and full round-trips
+- [x] `Core.IO`: WAD reader (`WadFile`) - the classic container format
+      (12-byte header + flat lump directory, a map's lumps identified
+      purely by position relative to its marker lump, e.g. `MAP01`), plus
+      `MapFileLoader.LoadUdmfMap(wadPath, mapName)` wiring it straight
+      into the UDMF reader. **UDMF-format maps only for now** - deliberately
+      scoped down from "any WAD" after discussing size with the user.
+      `WadFile.ReadMapTextMap` throws a clear `NotSupportedException`
+      (not a confusing parse failure) when a map's marker isn't
+      immediately followed by `TEXTMAP`, i.e. when it's a classic
+      binary-format map
+- [ ] **Classic binary-format map reader** (`THINGS`/`LINEDEFS`/
+      `SIDEDEFS`/`VERTEXES`/`SECTORS` as fixed-size binary records, no
+      relation to the UDMF work) - explicitly tracked, not "someday":
+      needed to ever load the original id Software WADs (DOOM.WAD,
+      DOOM2.WAD, etc.), which all predate UDMF and don't have a TEXTMAP
+      lump at all. Deferred only because of size, not because it's
+      optional
+- [x] Load a real map file end to end: WAD -> UDMF text -> `MapData`,
+      proven by `MapFileLoaderTests` (a real temp `.wad` file written to
+      disk, loaded back through `MapFileLoader`, asserted against)
+- [x] "Open Map..." UI (`Scripts/View/OpenMapMenu.cs`): a button opening
+      a `FileDialog` filtered to `*.wad`, loading the first UDMF map it
+      finds (`WadFile.FindUdmfMapNames()` - a map marker immediately
+      followed by `TEXTMAP`) and reporting the result via a `MapLoaded`
+      event, kept deliberately unaware of `MapView` (same UI/editing-
+      surface separation as the rest of the toolbar). `MapView.LoadMap`
+      tears down and rebuilds every sector mesh for the new map, resets
+      undo history (the old stack's commands close over the discarded
+      `MapData`), and refits the top-down camera to the loaded map's
+      actual bounds - the sample room's 256x256 camera framing can't be
+      assumed for a real map. A failed load (bad file, or a classic
+      binary-format map) shows an `AcceptDialog` with the error rather
+      than failing silently or console-only
 
 ## Later / someday
 
