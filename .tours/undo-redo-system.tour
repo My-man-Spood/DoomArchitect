@@ -1,0 +1,46 @@
+{
+  "title": "Command-based undo/redo (Core.Undo)",
+  "description": "How Core.Undo works and why it's a plain command-pattern stack rather than a port of UDB's actual UndoManager, plus how MapOverlay turns a whole drag gesture into a single undo step.",
+  "steps": [
+    {
+      "description": "### Why this isn't a UDB port\n\nUDB's own `UndoManager` is ~1400 lines: a byte-level binary diff/snapshot system tied to its specific `MapElement` serialization format, a background thread that compresses old snapshots, and WinForms-era plugin/ticket plumbing for grouping. None of that carries a correctness risk the way the map-format algorithms (sector tracing, ear-clipping) do - a command stack and a binary-diff stack produce identical user-facing undo/redo. So `Core.Undo` is a plain two-stack command-pattern design instead, sized for this codebase's much smaller data model.\n\nWhat *did* carry over, because it's genuinely the same problem regardless of mechanism:\n- UDB's exact Ctrl+Z / Ctrl+Y keys (checked against its default keybind config)\n- Its 2000-entry history cap\n- Its grouping behavior - one undo step per user gesture, not one per intermediate write\n\nThis tour walks through the Core pieces, then how a vertex/sector drag in the 2D view turns into exactly one undo step."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Undo/ICommand.cs",
+      "description": "### The interface\n\nEverything in this system is an `ICommand`: something with a `Do()` and an `Undo()`. No base class, no map-specific plumbing - just two methods."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Undo/MoveVertexCommand.cs",
+      "description": "### A concrete command\n\n`MoveVertexCommand` is the only command in the app so far, since `MapData.MoveVertex` is the only mutation Core currently exposes. It just remembers the vertex's position `from` and `to`; `Do()`/`Undo()` replay `MapData.MoveVertex` in either direction. Any future Core mutation (adding a linedef, changing a sector's height, ...) gets its own tiny command exactly like this one."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Undo/UndoStack.cs",
+      "selection": { "start": { "line": 21, "character": 1 }, "end": { "line": 59, "character": 1 } },
+      "description": "### Execute vs. Record\n\n`Execute` is the normal path: run the command now, then push it. `Record` is the one deliberate departure from that - it adds an *already-performed* command to the history without re-running it. That's what makes gesture-level grouping possible (next steps): a drag applies its moves live, frame by frame, for immediate visual feedback, and only gets bundled into one undoable command retroactively once the mouse is released.\n\n`Undo`/`Redo` are a plain two-stack swap - pop from one, run the opposite operation, push onto the other."
+    },
+    {
+      "file": "src/DoomArchitect.Core/Undo/CommandGroup.cs",
+      "description": "### Grouping\n\nA `CommandGroup` is itself an `ICommand` holding several others - `Do()` runs them in order, `Undo()` runs them in **reverse**. Order matters here in principle (a later command could depend on an earlier one having already run), even though today's only use - moving several vertices by the same delta - doesn't actually depend on order. This is how one sector drag, which might call `MapData.MoveVertex` on a dozen vertices, still becomes a single Ctrl+Z."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 19, "character": 1 }, "end": { "line": 41, "character": 1 } },
+      "description": "### One UndoStack, shared\n\n`MapView` owns the single `UndoStack` for the whole map and hands it to `MapOverlay` alongside `Map` and `Camera` - the overlay is where drag gestures happen, so that's where commands get recorded, but the stack itself (and the keybindings for it) belong to the thing that owns the map's lifetime."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 65, "character": 1 }, "end": { "line": 87, "character": 1 } },
+      "description": "### Ctrl+Z / Ctrl+Y\n\nChecked against UDB's actual default keybind config rather than assumed - it turns out to be the same combination virtually every editor uses, but worth verifying rather than guessing given the whole point of this pass was fidelity to UDB's specifics."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 130, "character": 1 }, "end": { "line": 150, "character": 1 } },
+      "description": "### The simple case: one vertex\n\nOn press, the vertex's starting position is snapshotted (`_dragStartVertexPosition`). While the mouse moves, `Map.MoveVertex` is still called every frame for live feedback - same as before undo existed. Only on release does a `MoveVertexCommand` get built from start -> final position and handed to `UndoStack.Record` - and only if the position actually changed, so a click that never dragged anywhere doesn't waste an undo step."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 198, "character": 1 }, "end": { "line": 219, "character": 1 } },
+      "description": "### The grouped case: a whole sector\n\nSame shape, but for every vertex the dragged sector's traced loops touch (`_dragStartSectorVertices`, captured on press). On release, one `MoveVertexCommand` gets built per vertex from its own start position to its current position, and all of them are wrapped in a single `CommandGroup` before going to `UndoStack.Record` - so dragging a whole room is one Ctrl+Z, not one per vertex it happened to be made of. `HandleLinedefInput` (not shown here) does the same thing for exactly two vertices."
+    }
+  ]
+}

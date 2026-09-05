@@ -217,6 +217,21 @@ file just tracks what's built and what's next.
       anything that leans on Godot's own renderer being live in the 2D
       view too
 
+## Known concerns
+
+- [ ] `Scripts/View/MapOverlay.cs` is ~500 lines and growing, mixing four
+      distinct concerns: drawing (grid/vertices/linedefs/sector fill),
+      per-mode input/drag handling, camera projection math (`Unproject`/
+      `Project`/`ViewportBounds`/zoom), and grid math. Not a problem yet,
+      but flagged as a god-object-in-the-making - noted 2026-09-04 rather
+      than fixed, since the user doesn't mind it yet. Natural split when
+      it's addressed: separate classes composed by `MapOverlay` along
+      those seams (e.g. a per-mode input handler set, a camera-math
+      helper), not partial classes - partials hide the size without
+      actually decoupling responsibilities. Revisit once Things/property-
+      editing UI adds another mode's worth of code, or sooner if it
+      starts being painful to navigate
+
 ## Process
 
 - [ ] CI (GitHub Actions): run `dotnet test` on `Core.Tests` on every
