@@ -1,5 +1,3 @@
-using System.Numerics;
-
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
@@ -45,40 +43,12 @@ public static class PolygonNesting
             if (TryInsertChild(child, candidate)) return true;
         }
 
-        if (Contains(node.Loop, candidate.Loop.Vertices[0].Position))
+        if (node.Loop.Contains(candidate.Loop.Vertices[0].Position))
         {
             node.Children.Add(candidate);
             return true;
         }
 
         return false;
-    }
-
-    // Even-odd rule, ray cast to the right from the point.
-    private static bool Contains(Loop loop, Vector2 point)
-    {
-        var vertices = loop.Vertices;
-        var inside = false;
-        var j = vertices.Count - 1;
-
-        for (var i = 0; i < vertices.Count; i++)
-        {
-            var vi = vertices[i].Position;
-            var vj = vertices[j].Position;
-
-            if (vi.Y != vj.Y
-                && point.Y > MathF.Min(vi.Y, vj.Y)
-                && point.Y <= MathF.Max(vi.Y, vj.Y)
-                && (point.X < MathF.Min(vi.X, vj.X)
-                    || (point.X <= MathF.Max(vi.X, vj.X)
-                        && (vi.X == vj.X || point.X <= (point.Y - vi.Y) * (vj.X - vi.X) / (vj.Y - vi.Y) + vi.X))))
-            {
-                inside = !inside;
-            }
-
-            j = i;
-        }
-
-        return inside;
     }
 }

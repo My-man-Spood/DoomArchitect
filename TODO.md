@@ -77,8 +77,34 @@ file just tracks what's built and what's next.
       camera-ray/ground-plane (Y=0) intersection and calls
       `MapData.MoveVertex`. Selection (as opposed to just drag-grab) isn't
       built yet - no persistent "this vertex is selected" state
-- [ ] Basic edit modes (Vertices / Linedefs / Sectors), matching UDB's
-      mode split
+- [x] Basic edit modes (`EditMode`: Vertices / Linedefs / Sectors),
+      matching UDB's own numeric-key mode split (1/2/3). `MapOverlay.Mode`
+      is the single source of truth: the gizmo type matching the active
+      mode draws at full opacity, the others dim to 35%, and an on-screen
+      label (drawn straight into the overlay via `DrawString`, no extra
+      scene node) shows the current mode
+- [x] Per-mode hover + drag interactions, each gated to its own mode via
+      `MapOverlay`'s `HandleVertexInput`/`HandleLinedefInput`/
+      `HandleSectorInput`:
+      - Linedefs: hovering near a segment (point-to-segment screen-space
+        distance) highlights it orange; dragging translates both its
+        vertices together by the mouse's delta (relative drag, not
+        snap-to-mouse - grabbing partway along a line shouldn't teleport
+        it)
+      - Sectors: added `Core.Geometry.SectorHitTest.Contains(sector, point)`
+        - hole-aware point-in-sector test done by summing even-odd
+        containment across every one of `SectorTracer.Trace`'s loops,
+        no bridging/tree needed (refactored the existing ray-cast out of
+        `PolygonNesting` into `Loop.Contains` so both share it). Hovering
+        a sector fills its actual floor area (holes excluded) using the
+        same trace -> nest -> cut -> ear-clip pipeline `SectorMeshBuilder`
+        already uses for the 3D mesh; dragging translates every vertex
+        the sector's loops touch by the mouse's delta - including
+        vertices shared with a neighboring sector, which will distort
+        that neighbor too. That's not handled specially (matches UDB's
+        underlying data model: a vertex is one shared point, moving it
+        moves it for everyone referencing it) - splitting a shared edge
+        apart is real future work, not something to fake now
 - [ ] `Core.Undo`: command-based undo/redo stack (pure Core, no Godot)
 
 ## Map I/O

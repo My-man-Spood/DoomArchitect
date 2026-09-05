@@ -61,13 +61,26 @@ public partial class MapView : Node3D
 
 	public override void _UnhandledInput(InputEvent @event)
 	{
-		if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.Tab })
+		if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
+
+		switch (key.Keycode)
 		{
-			_in3D = !_in3D;
-			_topDownCamera.Current = !_in3D;
-			_perspectiveCamera.Current = _in3D;
-			_overlay.Visible = !_in3D;
-			Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+			case Key.Tab:
+				_in3D = !_in3D;
+				_topDownCamera.Current = !_in3D;
+				_perspectiveCamera.Current = _in3D;
+				_overlay.Visible = !_in3D;
+				Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+				break;
+			case Key.Key1:
+				_overlay.Mode = EditMode.Vertices;
+				break;
+			case Key.Key2:
+				_overlay.Mode = EditMode.Linedefs;
+				break;
+			case Key.Key3:
+				_overlay.Mode = EditMode.Sectors;
+				break;
 		}
 	}
 
