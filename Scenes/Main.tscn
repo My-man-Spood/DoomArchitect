@@ -1,7 +1,8 @@
-[gd_scene load_steps=3 format=3 uid="uid://c8yqxkqfxwqjr"]
+[gd_scene load_steps=4 format=3 uid="uid://c8yqxkqfxwqjr"]
 
 [ext_resource type="Script" path="res://Scripts/View/MapView.cs" id="1"]
 [ext_resource type="Script" path="res://Scripts/View/FreeFlyCamera.cs" id="2"]
+[ext_resource type="Script" path="res://Scripts/View/MapOverlay.cs" id="3"]
 
 [node name="Main" type="Node3D"]
 script = ExtResource("1")
@@ -12,6 +13,7 @@ rotation_degrees = Vector3(-90, 0, 0)
 current = true
 projection = 1
 size = 280
+cull_mask = 1
 
 [node name="PerspectiveCamera" type="Camera3D" parent="."]
 script = ExtResource("2")
@@ -22,3 +24,14 @@ current = false
 [node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
 position = Vector3(128, 300, 128)
 rotation_degrees = Vector3(-60, -30, 0)
+
+[node name="Overlay" type="CanvasLayer" parent="."]
+
+[node name="MapOverlay" type="Control" parent="Overlay"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("3")

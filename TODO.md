@@ -47,18 +47,36 @@ file just tracks what's built and what's next.
       WASD + mouse look + Space/Shift for up/down, only active while its
       camera is Current. Wasn't originally scoped, but needed for actually
       checking rendering work visually instead of guessing camera angles
-- [ ] Wire the rebuild loop: App polls `MapData.GetDirtySectors()` and
-      rebuilds only those meshes, clearing the flag after
-- [ ] Camera render layers: hide ceiling meshes from the top-down ortho
-      camera (`cull_mask`) so "2D view" shows floors, not ceilings
+- [x] Wire the rebuild loop: `MapView` now keeps a `Sector -> (floor
+      MeshInstance3D, ceiling MeshInstance3D)` map and, every `_Process`,
+      rebuilds and reassigns `.Mesh` for anything `MapData.GetDirtySectors()`
+      returns, then clears the flag - unblocked now that vertex dragging
+      actually dirties sectors
+- [x] Camera render layers: `SectorMeshBuilder.Build` now returns floor
+      and ceiling as two separate meshes (`SectorMesh` record) instead of
+      one, since render layers are per-`MeshInstance3D`. Ceiling goes on
+      layer 2; `TopDownCamera.cull_mask = 1` excludes it, so "2D view"
+      shows floors only, while the perspective camera (default cull mask)
+      still sees both
 
 ## Next up (editing basics)
 
-- [ ] Screen-space overlay layer for 2D-view gizmos (grid, vertex knobs,
-      linedef color-coding) via `Camera3D.unproject_position()`, kept
-      separate from the 3D mesh so it stays crisp at any zoom
-- [ ] Click/drag to select and move vertices in the 2D view, calling
-      `MapData.MoveVertex`
+- [x] Screen-space overlay layer for 2D-view gizmos (`Scripts/View/MapOverlay.cs`,
+      a `Control` on its own `CanvasLayer`): grid snapped to a 64-unit
+      spacing derived from the map's vertex bounds, vertex knobs, and
+      linedefs color-coded one-sided (white) vs two-sided (gray). Redrawn
+      every frame via `Camera3D.UnprojectPosition()` rather than baked
+      into world-space geometry, so it stays crisp at any zoom; toggled
+      alongside the camera swap so it only shows in the 2D view. Pulled
+      the Doom-X/Y -> Godot-X/Z mapping out of `SectorMeshBuilder` into a
+      shared `VectorConversions.ToWorld` since both it and the overlay
+      need the exact same mapping
+- [x] Click/drag to move vertices in the 2D view (`MapOverlay`):
+      `_UnhandledInput` picks the nearest vertex within a screen-space
+      radius on left-click, then on drag unprojects the mouse via a
+      camera-ray/ground-plane (Y=0) intersection and calls
+      `MapData.MoveVertex`. Selection (as opposed to just drag-grab) isn't
+      built yet - no persistent "this vertex is selected" state
 - [ ] Basic edit modes (Vertices / Linedefs / Sectors), matching UDB's
       mode split
 - [ ] `Core.Undo`: command-based undo/redo stack (pure Core, no Godot)

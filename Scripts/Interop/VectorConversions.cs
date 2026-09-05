@@ -20,4 +20,17 @@ public static class VectorConversions
     public static Godot.Vector3 ToGodot(this System.Numerics.Vector3 v) => new(v.X, v.Y, v.Z);
 
     public static System.Numerics.Vector3 ToNumerics(this Godot.Vector3 v) => new(v.X, v.Y, v.Z);
+
+    /// <summary>
+    /// Doom's map-plane X/Y become Godot's ground-plane X/Z, height becomes
+    /// Godot's Y (up) - the one coordinate mapping used everywhere Core
+    /// geometry turns into a Godot-space position, so every consumer
+    /// (mesh building, overlay gizmos, ...) agrees on it.
+    /// </summary>
+    public static Godot.Vector3 ToWorld(this System.Numerics.Vector2 doomPosition, float height) =>
+        new(doomPosition.X, height, doomPosition.Y);
+
+    /// <summary>Inverse of <see cref="ToWorld"/> - drops the height component.</summary>
+    public static System.Numerics.Vector2 ToDoom(this Godot.Vector3 worldPosition) =>
+        new(worldPosition.X, worldPosition.Z);
 }

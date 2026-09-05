@@ -1,0 +1,54 @@
+{
+  "title": "Render layers + 2D-view gizmo overlay",
+  "description": "Two small features built back to back: splitting a sector's mesh into a separately-layered floor/ceiling so the top-down camera can exclude ceilings, and a screen-space gizmo overlay (grid, vertices, front-side indicators) for the 2D view.",
+  "steps": [
+    {
+      "description": "### What this tour covers\n\nTwo things landed together:\n\n1. **Camera render layers** - the top-down \"2D view\" was showing ceiling meshes along with floors. Fixed by splitting each sector's mesh into a separate floor mesh and ceiling mesh, so the ceiling can live on its own Godot render layer and be excluded from the top-down camera's `cull_mask`.\n2. **2D-view gizmo overlay** - a screen-space `Control` that draws the grid, vertex knobs, and linedefs (color-coded one-sided/two-sided, with a tiny tick pointing at each linedef's front side) on top of the 3D scene, redrawn every frame via `Camera3D.UnprojectPosition()`.\n\nBoth are App-layer (Godot) concerns only - none of this touches `DoomArchitect.Core`."
+    },
+    {
+      "file": "Scripts/Rendering/SectorMeshBuilder.cs",
+      "line": 16,
+      "description": "### Floor and ceiling become two meshes, not one\n\n`SectorMeshBuilder.Build` used to bake floor and ceiling into a single `ArrayMesh`. Render layers are set per-`MeshInstance3D`, not per-surface, so that no longer works once the ceiling needs to be on its own layer - hence `SectorMesh`, a tiny record holding both meshes separately. `Build` (below, line 31) triangulates the polygon once and calls a shared `BuildFace` helper twice, at `FloorHeight` and `CeilingHeight`."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 11, "character": 1 }, "end": { "line": 32, "character": 1 } },
+      "description": "### Ceiling goes on layer 2\n\nGodot render layers are 1-indexed bit positions. The floor mesh instance keeps the default layer (1); the ceiling instance is explicitly put on layer 2 via `Layers = CeilingRenderLayer`. That's the whole App-side half of the trick - the other half is which cameras look at which layers, next."
+    },
+    {
+      "file": "Scenes/Main.tscn",
+      "line": 16,
+      "description": "### The top-down camera excludes layer 2\n\n`TopDownCamera.cull_mask = 1` means this camera only renders layer 1 (the floor). `PerspectiveCamera` isn't given a `cull_mask` at all, so it keeps Godot's default (all layers) and still sees both floor and ceiling in the free-fly 3D view. No scripting needed on the camera side - it's purely a scene property."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 6, "character": 1 }, "end": { "line": 28, "character": 1 } },
+      "description": "### A separate screen-space layer, not baked geometry\n\n`MapOverlay` is a plain `Control`, not a 3D node - it draws gizmos directly in screen space so they stay pixel-crisp regardless of camera zoom, instead of being 3D lines that would get thinner/thicker (and z-fight with the floor) as the view changes. It only needs a `MapData` reference and the camera to project through; `_Process` just requests a redraw every frame while visible (cheap at this scale, and future-proofs against the top-down camera eventually panning/zooming)."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 44, "character": 1 }, "end": { "line": 61, "character": 1 } },
+      "description": "### The grid is derived, not hardcoded\n\nRather than drawing a grid over some fixed guessed area, `ComputeBounds` (further down, line 103) walks every vertex in the map to get a bounding box, padded by a couple grid cells. `DrawGrid` snaps that box outward to the nearest 64-unit grid line (Doom's standard grid size) and draws verticals/horizontals across it - so it scales to whatever map is actually loaded instead of only working for this one sample room."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 63, "character": 1 }, "end": { "line": 75, "character": 1 } },
+      "description": "### Linedef color-coding\n\nA linedef with no `Back` sidedef is one-sided (drawn white/light); one with both `Front` and `Back` is two-sided (drawn a duller gray). This is the same `Front`/`Back` nullability already used by `SectorTracer` and `Linedef.MarkAdjacentSectorsDirty` - the overlay isn't introducing new map-data concepts, just visualizing the existing ones."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 77, "character": 1 }, "end": { "line": 91, "character": 1 } },
+      "description": "### The front-side tick\n\nUDB's map format (and this port's `SectorTracer`) relies on the rule \"a linedef's front sidedef's sector is on the right, walking Start -> End.\" This tiny tick makes that rule visible: `rightNormal = (direction.Y, -direction.X)` is the direction vector rotated -90 degrees, which - given this codebase's Y-up, `GeometryMath.SideOfLine` convention - points at the *right* side of Start->End, i.e. the front side. It's drawn short (4 units) and at 70% alpha so it reads as a subtle indicator rather than competing visually with the linedef itself."
+    },
+    {
+      "file": "Scripts/View/MapOverlay.cs",
+      "selection": { "start": { "line": 93, "character": 1 }, "end": { "line": 101, "character": 1 } },
+      "description": "### Vertices: light-blue squares, not circles\n\nSimple by design - a small filled `Rect2` centered on the projected vertex position, in a light blue named `UnselectedVertexColor` rather than just `VertexColor`. The name is deliberate: vertex selection doesn't exist yet, but a `SelectedVertexColor` counterpart slots in naturally once click-to-select is built (the very next TODO item)."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 22, "character": 1 }, "end": { "line": 48, "character": 1 } },
+      "description": "### Wiring: one overlay, toggled with the camera\n\n`MapView` fetches the overlay via `GetNode<MapOverlay>(\"Overlay/MapOverlay\")` (a `CanvasLayer` + `Control` pair added to `Main.tscn`), hands it the same `MapData` and top-down `Camera3D` it already has, and flips `_overlay.Visible` in lockstep with the existing Tab-to-toggle 2D/3D logic - so gizmos only ever show up in the 2D view, never bleeding into the free-fly 3D view."
+    }
+  ]
+}

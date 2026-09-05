@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Rendering;
 using Godot;
@@ -8,18 +9,54 @@ using MapVector2 = System.Numerics.Vector2;
 // exact same scene, so switching views is just a camera swap.
 public partial class MapView : Node3D
 {
+	// Godot render layers are 1-indexed bit positions; the ceiling mesh
+	// lives on layer 2 so the top-down camera's cull mask can exclude it
+	// while the perspective camera (default cull mask, all layers) still
+	// sees it.
+	private const uint CeilingRenderLayer = 2;
+
+	private readonly Dictionary<Sector, (MeshInstance3D Floor, MeshInstance3D Ceiling)> _sectorMeshes = new();
+
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
+	private MapOverlay _overlay;
+	private MapData _map;
 	private bool _in3D;
 
 	public override void _Ready()
 	{
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
 		_perspectiveCamera = GetNode<Camera3D>("PerspectiveCamera");
+		_overlay = GetNode<MapOverlay>("Overlay/MapOverlay");
 
-		var map = new MapData();
-		var sector = BuildSampleSector(map);
-		AddChild(new MeshInstance3D { Mesh = SectorMeshBuilder.Build(sector) });
+		_map = new MapData();
+		var sector = BuildSampleSector(_map);
+		CreateSectorMeshInstances(sector);
+
+		_overlay.Map = _map;
+		_overlay.Camera = _topDownCamera;
+	}
+
+	public override void _Process(double delta)
+	{
+		foreach (var sector in _map.GetDirtySectors())
+		{
+			var mesh = SectorMeshBuilder.Build(sector);
+			var instances = _sectorMeshes[sector];
+			instances.Floor.Mesh = mesh.Floor;
+			instances.Ceiling.Mesh = mesh.Ceiling;
+			_map.ClearDirty(sector);
+		}
+	}
+
+	private void CreateSectorMeshInstances(Sector sector)
+	{
+		var mesh = SectorMeshBuilder.Build(sector);
+		var floor = new MeshInstance3D { Mesh = mesh.Floor };
+		var ceiling = new MeshInstance3D { Mesh = mesh.Ceiling, Layers = CeilingRenderLayer };
+		AddChild(floor);
+		AddChild(ceiling);
+		_sectorMeshes[sector] = (floor, ceiling);
 	}
 
 	public override void _UnhandledInput(InputEvent @event)
@@ -29,6 +66,7 @@ public partial class MapView : Node3D
 			_in3D = !_in3D;
 			_topDownCamera.Current = !_in3D;
 			_perspectiveCamera.Current = _in3D;
+			_overlay.Visible = !_in3D;
 			Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
 		}
 	}

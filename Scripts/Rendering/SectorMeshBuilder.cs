@@ -8,8 +8,16 @@ using MapVector2 = System.Numerics.Vector2;
 namespace DoomArchitect.Rendering;
 
 /// <summary>
+/// A sector's floor and ceiling as two separate meshes rather than one -
+/// each needs its own <see cref="Godot.MeshInstance3D"/> so it can carry
+/// its own render layer (the top-down camera excludes the ceiling layer
+/// so "2D view" shows floors, not ceilings).
+/// </summary>
+public readonly record struct SectorMesh(ArrayMesh Floor, ArrayMesh Ceiling);
+
+/// <summary>
 /// Turns a sector's triangulated shape (Core.Geometry - all pure math, no
-/// Godot involved) into an actual Godot mesh: a floor at FloorHeight and a
+/// Godot involved) into actual Godot meshes: a floor at FloorHeight and a
 /// ceiling at CeilingHeight, each genuinely double-sided - two real
 /// triangles per face, one wound each way, rather than one triangle plus
 /// a double-sided material. A single triangle's normal only shades
@@ -20,18 +28,29 @@ namespace DoomArchitect.Rendering;
 /// </summary>
 public static class SectorMeshBuilder
 {
-    public static ArrayMesh Build(Sector sector)
+    public static SectorMesh Build(Sector sector)
     {
         var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(sector)));
+        var triangleLists = new List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>>();
+        foreach (var polygon in polygons)
+        {
+            triangleLists.Add(EarClipper.Clip(polygon));
+        }
 
+        var floor = BuildFace(triangleLists, (float)sector.FloorHeight);
+        var ceiling = BuildFace(triangleLists, (float)sector.CeilingHeight);
+        return new SectorMesh(floor, ceiling);
+    }
+
+    private static ArrayMesh BuildFace(
+        List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>> triangleLists, float height)
+    {
         var surfaceTool = new SurfaceTool();
         surfaceTool.Begin(Mesh.PrimitiveType.Triangles);
 
-        foreach (var polygon in polygons)
+        foreach (var triangles in triangleLists)
         {
-            var triangles = EarClipper.Clip(polygon);
-            AddDoubleSidedFace(surfaceTool, triangles, (float)sector.FloorHeight);
-            AddDoubleSidedFace(surfaceTool, triangles, (float)sector.CeilingHeight);
+            AddDoubleSidedFace(surfaceTool, triangles, height);
         }
 
         surfaceTool.GenerateNormals();
@@ -43,9 +62,9 @@ public static class SectorMeshBuilder
     {
         foreach (var (a, b, c) in triangles)
         {
-            var worldA = ToWorld(a, height);
-            var worldB = ToWorld(b, height);
-            var worldC = ToWorld(c, height);
+            var worldA = a.ToWorld(height);
+            var worldB = b.ToWorld(height);
+            var worldC = c.ToWorld(height);
 
             surfaceTool.AddVertex(worldA);
             surfaceTool.AddVertex(worldB);
@@ -56,12 +75,4 @@ public static class SectorMeshBuilder
             surfaceTool.AddVertex(worldB);
         }
     }
-
-    /// <summary>
-    /// First-pass mapping: Doom's map-plane X/Y become Godot's ground-plane
-    /// X/Z, height becomes Godot's Y (up). Confirmed correct (not mirrored)
-    /// against an actual rendered top-down view.
-    /// </summary>
-    private static Godot.Vector3 ToWorld(MapVector2 position, float height) =>
-        new(position.X, height, position.Y);
 }
