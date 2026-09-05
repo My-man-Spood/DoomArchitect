@@ -38,4 +38,40 @@ public class MapFileLoaderTests
             File.Delete(path);
         }
     }
+
+    [Fact]
+    public void LoadClassicMap_RealFileOnDisk_ProducesTheExpectedMap()
+    {
+        var vertexes = BinaryMapTestBuilder.Concat(
+            BinaryMapTestBuilder.Vertex(0, 0), BinaryMapTestBuilder.Vertex(64, 0));
+        var sectors = BinaryMapTestBuilder.Sector(0, 128, "FLOOR0_1", "CEIL1_1", 200);
+        var sidedefs = BinaryMapTestBuilder.Sidedef(0, 0, "-", "-", "STARTAN2", 0);
+        var linedefs = BinaryMapTestBuilder.Linedef(0, 1, 0, 0, 0, 0, ushort.MaxValue);
+
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("THINGS", Array.Empty<byte>()),
+            ("LINEDEFS", linedefs),
+            ("SIDEDEFS", sidedefs),
+            ("VERTEXES", vertexes),
+            ("SECTORS", sectors));
+
+        var path = Path.Combine(Path.GetTempPath(), $"doomarchitect-test-{Guid.NewGuid():N}.wad");
+        try
+        {
+            File.WriteAllBytes(path, bytes);
+
+            var (map, _) = MapFileLoader.LoadClassicMap(path, "MAP01");
+
+            Assert.Equal(2, map.Vertices.Count);
+            var linedef = Assert.Single(map.Linedefs);
+            Assert.NotNull(linedef.Front);
+            Assert.Equal("STARTAN2", linedef.Front!.MiddleTexture);
+            Assert.Same(map.Sectors[0], linedef.Front.Sector);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

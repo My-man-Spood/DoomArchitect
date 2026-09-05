@@ -1,0 +1,54 @@
+{
+  "title": "Loading and parsing maps (WAD -> UDMF -> MapData)",
+  "description": "The full pipeline behind the \"Open Map...\" button: reading a WAD's binary lump directory, extracting a map's UDMF text, tokenizing it, and building a live MapData from it - ending with the App swapping it in and refitting the camera.",
+  "steps": [
+    {
+      "description": "### The pipeline, end to end\n\nClicking \"Open Map...\" walks through four layers, each with a single job:\n\n1. **`OpenMapMenu`** (App) - the file browser and error UI.\n2. **`WadFile`** (Core.IO) - reads the binary WAD container, finds a map's UDMF text.\n3. **`UdmfTreeParser`** (Core.IO) - tokenizes that text into a generic tree.\n4. **`UdmfReader`** (Core.IO) - walks the tree and builds an actual `MapData`.\n\nThen **`MapView.LoadMap`** (App) swaps the result into the live scene.\n\nAll of Core.IO is a close port of Ultimate Doom Builder's own\n`UniversalParser`/`UniversalStreamReader`/`UniversalStreamWriter` - two\nresearch passes into the real ~2200-line source (not just guessing at\nits behavior) turned up enough non-obvious edge cases (asymmetric\nfield-omission on write, a very specific float-detection heuristic,\nsilent drop-and-warn recovery for malformed references) that porting\nthe actual logic beat reimplementing it from scratch. This tour covers\nthe read/load half; there's a separate `Core.IO.UdmfWriter` for saving\nnot covered here."
+    },
+    {
+      "file": "Scripts/View/OpenMapMenu.cs",
+      "selection": { "start": { "line": 22, "character": 1 }, "end": { "line": 51, "character": 1 } },
+      "description": "### Entry point: pick a file, hand back a MapData\n\n`OpenMapMenu` knows nothing about `MapView` - it just opens a\n`FileDialog` filtered to `*.wad`, and on selection tries to load it,\nfiring `MapLoaded` with the resulting `MapData` on success. Only the\nfirst UDMF map found is loaded (`mapNames[0]`) - a real WAD can contain\nmany maps, but there's no map-picker UI yet, so this is a deliberate\nfirst-pass scope cut. Any failure (bad file, unsupported format) shows\nan `AcceptDialog` via `ShowError` rather than failing silently."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/WadFile.cs",
+      "selection": { "start": { "line": 41, "character": 1 }, "end": { "line": 72, "character": 1 } },
+      "description": "### Reading the WAD container\n\nA WAD file is a 12-byte header (`IWAD`/`PWAD` + lump count + directory\noffset) followed by a flat directory of `(position, size, 8-char name)`\nentries - each just a pointer at some raw bytes elsewhere in the file.\nThat's the entire format; there's no nesting, no compression, no\ngrouping. `BinaryReader` reads little-endian by default on every\nplatform, so no manual byte-swapping is needed."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/WadFile.cs",
+      "selection": { "start": { "line": 111, "character": 1 }, "end": { "line": 133, "character": 1 } },
+      "description": "### Finding a map's UDMF text\n\nHere's the part that's easy to miss without knowing the format: a\nmap's lumps aren't grouped by any field in the file - they're\nidentified purely by **position**, relative to a marker lump named\nafter the map (e.g. `MAP01`). Per the UDMF spec, if a map is in UDMF\nformat, the very next lump after its marker must be `TEXTMAP`. If it\nisn't - i.e. this is a classic binary-format map, like every original\nid Software WAD - this throws a clear `NotSupportedException` instead\nof a confusing parse failure, so `OpenMapMenu`'s error dialog can show\nsomething the user can actually act on."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/UdmfTreeParser.cs",
+      "selection": { "start": { "line": 1, "character": 1 }, "end": { "line": 33, "character": 1 } },
+      "description": "### Tokenizing: text to a generic tree\n\n`UdmfTreeParser` turns raw UDMF text into a `UdmfBlock` tree - nested\n`name { ... }` blocks holding `key = value;` assignments, with no\nknowledge yet of what a \"vertex\" or \"sector\" even means. It's a close\nport of UDB's own `UniversalParser.InputStructure`: same key charset,\nsame comment handling (`//` and `/* */`), same string-escape rules.\nOne deliberate fix from UDB's actual behavior: its own `\\DDD` string\nescape has a real bug (advances 1 character instead of 3, so two\ndigits leak into the string as literal text) - fixed here since\nnothing depends on the bug, and it was cheap to just not reproduce it."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/UdmfTreeParser.cs",
+      "selection": { "start": { "line": 133, "character": 1 }, "end": { "line": 163, "character": 1 } },
+      "description": "### A genuine \"you'd guess wrong\" detail\n\nHow does the tokenizer decide a bare number is an int vs. a double?\nNot general scientific-notation detection, which is what anyone\nreimplementing this from scratch would probably reach for. UDB's real\nrule: hex (`0x` prefix) is always an int; anything containing a\nliteral `.` or the *substring* `e-` is a double; everything else is an\nint. That means `1E-06` parses as a double, but `1E+06` and bare\n`1E06` do **not** - they fall through to the int branch and fail. This\nis exactly the kind of edge case a from-scratch reimplementation would\nsilently get \"more correct\" than UDB, and therefore incompatible with\nreal UDMF files and tools built against UDB's actual behavior."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/UdmfReader.cs",
+      "selection": { "start": { "line": 6, "character": 1 }, "end": { "line": 38, "character": 1 } },
+      "description": "### Building a MapData from the tree\n\n`UdmfReader.Read` walks the generic tree in a fixed order - vertices,\nthen sectors, then linedefs - matching UDB's own\n`UniversalStreamReader.Read`. Sidedefs have no separate pass at all:\nthey're resolved lazily, from inside `ReadLinedefs`, by indexing\ndirectly into the raw parsed `sidedef` blocks - a sidedef nothing\nreferences is simply never turned into an object. Anything left over\nthat isn't one of the five known block names (`thing` included) is\ncollected into `UnknownBlocks` for later round-tripping, unread."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/UdmfReader.cs",
+      "selection": { "start": { "line": 91, "character": 1 }, "end": { "line": 154, "character": 1 } },
+      "description": "### Malformed data doesn't abort the whole load\n\nA linedef referencing a vertex index that doesn't exist, or one that's\nzero-length (both endpoints resolve to the same point), gets dropped\nwith a warning - the rest of the map still loads. Same for a\n`sidefront`/`sideback` index that's out of range, or a sidedef whose\nown `sector` reference is invalid: only that one side becomes absent,\nthe linedef itself survives. This mirrors UDB's own\n\"log and drop\" recovery rather than the more obvious choice (throw and\nabort) - exactly the kind of file a hand-edited or third-party-tool-\nproduced UDMF map is likely to have somewhere in it."
+    },
+    {
+      "file": "src/DoomArchitect.Core/IO/UdmfReader.cs",
+      "selection": { "start": { "line": 156, "character": 1 }, "end": { "line": 173, "character": 1 } },
+      "description": "### Preserving what we don't model yet\n\nAfter the fields we actually have typed properties for, every\n*remaining* field on a block becomes a `CustomFields` entry on that\nelement (`Vertex`/`Sector`/`Linedef`/`Sidedef` each carry one - a plain\n`Dictionary<string, object>`, not a Core.IO type, so `Core.Map` gains\nno dependency back onto `Core.IO`). This is how a linedef's `special`/\n`arg0..arg4`, or a sector's slope fields, survive a load-then-save\nround-trip even though nothing can interpret or edit them yet - they\njust weren't worth building a whole schema-flexible field system for\nas a side effect of UDMF support."
+    },
+    {
+      "file": "Scripts/View/MapView.cs",
+      "selection": { "start": { "line": 65, "character": 1 }, "end": { "line": 113, "character": 1 } },
+      "description": "### Swapping the loaded map into the live scene\n\n`LoadMap` is what `OpenMapMenu.MapLoaded` is wired to. It tears down\nevery existing sector's floor/ceiling `MeshInstance3D`s, rebuilds one\nper sector in the new map, and resets the undo stack outright - the\nold stack's commands close over the now-discarded `MapData`, so\nkeeping them around would just be a trap. `FitTopDownCameraToMap`\nrecenters and resizes the orthographic camera to the new map's actual\nvertex bounds, since a real map is very unlikely to sit anywhere near\nthe sample room's original 256x256 framing."
+    }
+  ]
+}

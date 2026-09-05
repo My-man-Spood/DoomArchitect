@@ -102,6 +102,28 @@ public sealed class WadFile
     }
 
     /// <summary>
+    /// Names of every map marker lump immediately followed by
+    /// <c>THINGS</c>, in file order - a classic binary-format map marker
+    /// always starts with that lump. Doesn't distinguish Doom-format from
+    /// Hexen/ZDoom-format (both start the same way) - that's
+    /// <see cref="ClassicMapReader.Read"/>'s job, since telling them apart
+    /// means actually scanning the lump group for <c>BEHAVIOR</c>.
+    /// </summary>
+    public IReadOnlyList<string> FindClassicMapNames()
+    {
+        var names = new List<string>();
+        for (var i = 0; i < Lumps.Count - 1; i++)
+        {
+            if (Lumps[i + 1].Name.Equals("THINGS", StringComparison.OrdinalIgnoreCase))
+            {
+                names.Add(Lumps[i].Name);
+            }
+        }
+
+        return names;
+    }
+
+    /// <summary>
     /// The UDMF <c>TEXTMAP</c> lump for the named map, decoded as ASCII
     /// text - per the UDMF spec, this must be the very first lump after
     /// the map marker. Throws if the map exists but isn't in UDMF format;

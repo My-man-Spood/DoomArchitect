@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Undo;
+using DoomArchitect.Interop;
 using DoomArchitect.Rendering;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
@@ -108,7 +109,10 @@ public partial class MapView : Node3D
 		var center = (min + max) / 2f;
 		var size = Mathf.Max(max.X - min.X, max.Y - min.Y) * 1.2f;
 
-		_topDownCamera.Position = new Vector3(center.X, _topDownCamera.Position.Y, center.Y);
+		// Goes through ToWorld rather than constructing the position by
+		// hand, so this can't independently drift from the shared Doom ->
+		// Godot mapping the way it once did (see ToWorld's own remarks).
+		_topDownCamera.Position = center.ToWorld(_topDownCamera.Position.Y);
 		_topDownCamera.Size = Mathf.Max(size, 64f);
 	}
 

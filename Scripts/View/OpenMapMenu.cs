@@ -5,9 +5,11 @@ using DoomArchitect.Core.Map;
 using Godot;
 
 /// <summary>
-/// A button that opens a file browser filtered to .wad files, loads the
-/// first UDMF-format map it finds inside, and reports the result via
-/// <see cref="MapLoaded"/> - deliberately unaware of <c>MapView</c> so
+/// A button that opens a file browser filtered to .wad files and loads
+/// the first map it finds inside - trying UDMF first, falling back to
+/// the classic binary format (so both modern-editor maps and the
+/// original id Software WADs work), and reporting the result via
+/// <see cref="MapLoaded"/>. Deliberately unaware of <c>MapView</c> so
 /// this stays a plain "pick a file, hand back a MapData" widget, matching
 /// the rest of this project's separation between the map-editing surface
 /// and general UI.
@@ -34,15 +36,24 @@ public partial class OpenMapMenu : PanelContainer
 		try
 		{
 			var wad = WadFile.Read(path);
-			var mapNames = wad.FindUdmfMapNames();
-			if (mapNames.Count == 0)
+
+			var udmfMapNames = wad.FindUdmfMapNames();
+			if (udmfMapNames.Count > 0)
 			{
-				ShowError($"No UDMF maps found in '{Path.GetFileName(path)}'.\n\nClassic binary-format maps (like the original id Software WADs) aren't supported yet.");
+				var document = UdmfReader.Read(wad.ReadMapTextMap(udmfMapNames[0]));
+				MapLoaded?.Invoke(document.Map);
 				return;
 			}
 
-			var document = UdmfReader.Read(wad.ReadMapTextMap(mapNames[0]));
-			MapLoaded?.Invoke(document.Map);
+			var classicMapNames = wad.FindClassicMapNames();
+			if (classicMapNames.Count > 0)
+			{
+				var (map, _) = ClassicMapReader.Read(wad, classicMapNames[0]);
+				MapLoaded?.Invoke(map);
+				return;
+			}
+
+			ShowError($"No supported maps found in '{Path.GetFileName(path)}'.");
 		}
 		catch (Exception ex)
 		{

@@ -39,8 +39,11 @@ file just tracks what's built and what's next.
       double-sided-material triangle - a single triangle's normal only
       shades correctly from the side it's meant to face, so viewed from
       the wrong side it renders black regardless of culling. Doom
-      X/Y -> Godot X/Z, height -> Godot Y; confirmed not mirrored against
-      an actual rendered top-down view. Still one mesh per sector call,
+      X/Y -> Godot X/-Z, height -> Godot Y. (Originally shipped without
+      the Y negation, "confirmed not mirrored" against the sample room -
+      wrong; that room is fully symmetric and can't reveal a mirror by
+      inspection. Actually fixed once a recognizable real map exposed it -
+      see the Map I/O section.) Still one mesh per sector call,
       not yet one `MeshInstance3D` per sector wired into a live scene -
       that's the next item
 - [x] Free-fly camera for the 3D view (`Scripts/View/FreeFlyCamera.cs`) -
@@ -271,13 +274,54 @@ file just tracks what's built and what's next.
       (not a confusing parse failure) when a map's marker isn't
       immediately followed by `TEXTMAP`, i.e. when it's a classic
       binary-format map
-- [ ] **Classic binary-format map reader** (`THINGS`/`LINEDEFS`/
-      `SIDEDEFS`/`VERTEXES`/`SECTORS` as fixed-size binary records, no
-      relation to the UDMF work) - explicitly tracked, not "someday":
-      needed to ever load the original id Software WADs (DOOM.WAD,
-      DOOM2.WAD, etc.), which all predate UDMF and don't have a TEXTMAP
-      lump at all. Deferred only because of size, not because it's
-      optional
+- [x] **Classic binary-format map reader** (`ClassicMapReader`) - fixed-size
+      binary records (`VERTEXES`=4, `SECTORS`=26, `SIDEDEFS`=30,
+      `LINEDEFS`=14 bytes/record), a close port of UDB's own
+      `DoomMapSetIO`. Verified against the actual UDB source rather than
+      general Doom-format community knowledge, which caught a real
+      gotcha: sidedef texture fields are ordered
+      upper-then-**lower**-then-**middle**, not the commonly-assumed
+      upper-then-middle-then-lower (covered by a dedicated test). Same
+      "warn and drop" recovery as the UDMF reader (dangling vertex
+      refs, zero-length linedefs, out-of-range sidedef/sector refs), and
+      the same `CustomFields` bucket for what isn't a typed property
+      (linedef flags/special/tag, sector special/tag) - `THINGS` is
+      skipped entirely, since there's no Things model and, unlike UDMF,
+      no writer for this format to round-trip through anyway.
+      Hexen/ZDoom-format maps are rejected with a clear
+      `NotSupportedException` (that format has entirely different record
+      layouts, not ported) - detected the same way UDB itself
+      distinguishes formats: a `BEHAVIOR` lump alongside the map, not by
+      guessing from record sizes (confirmed UDB does NOT sniff
+      Doom-vs-Hexen from `LINEDEFS` byte width - that would have been a
+      reasonable-sounding but wrong assumption to make without checking).
+      `WadFile.FindClassicMapNames()` + `MapFileLoader.LoadClassicMap`
+      mirror their UDMF counterparts; `OpenMapMenu` now tries UDMF first,
+      then falls back to classic format - opening an original id
+      Software WAD works end to end
+- [x] **Fixed a real north-south mirroring bug**, found by loading
+      DOOM2 MAP01 (a map the user knows well enough to immediately spot
+      it) - every map rendered flipped top-to-bottom relative to its
+      actual layout. Root cause: `VectorConversions.ToWorld` mapped Doom
+      Y directly onto Godot Z with no negation, but the top-down
+      camera's -90-degree X rotation makes screen-up correspond to world
+      -Z - so increasing Doom Y (north, "up" on every real Doom
+      automap) moved toward the *bottom* of the screen instead. No
+      camera rotation/roll can fix this: a pure rotation always
+      preserves handedness, so it can only choose which world axis
+      lands on screen-up, never flip one axis independently - the fix
+      had to go in the shared coordinate mapping itself (`ToWorld`/
+      `ToDoom` now negate Y/Z), which then correctly fixes the 2D view,
+      the 3D view, and vertex-drag hit-testing all at once since
+      everything already funneled through that one conversion point.
+      Also fixed one place (`MapView.FitTopDownCameraToMap`) that had
+      quietly bypassed `ToWorld` and hardcoded the old un-negated
+      relationship by hand - now goes through the shared helper so it
+      can't independently drift again. This had been latent since the
+      very first rendering work; the sample room used to "confirm" the
+      mapping back then is a square with a centered square hole,
+      symmetric under a north-south flip, so it could never have
+      revealed this
 - [x] Load a real map file end to end: WAD -> UDMF text -> `MapData`,
       proven by `MapFileLoaderTests` (a real temp `.wad` file written to
       disk, loaded back through `MapFileLoader`, asserted against)
@@ -294,6 +338,29 @@ file just tracks what's built and what's next.
       assumed for a real map. A failed load (bad file, or a classic
       binary-format map) shows an `AcceptDialog` with the error rather
       than failing silently or console-only
+
+## Architecture notes
+
+- **One parser per format, not a shared "universal" one.** UDB's own
+  `UniversalParser` is a genuinely reusable curly-brace/assignment text
+  tokenizer, used for UDMF *and* UDB's own game-config files and other
+  internal formats - "universal" in a real sense. `Core.IO.UdmfTreeParser`
+  is structurally similar under the hood (it doesn't know what a
+  "vertex" or "sector" is either, just blocks and assignments), but it's
+  deliberately scoped and named as UDMF-only rather than exposed as a
+  shared engine other readers could plug into.
+  Why: the next format on the roadmap - the classic binary Doom map
+  format (`THINGS`/`LINEDEFS`/`SIDEDEFS`/etc.) - is fixed-size binary
+  records, not text at all, so it wouldn't share a single line with
+  `UdmfTreeParser` regardless of how generic that was made. With only
+  one real consumer of a curly-brace text grammar today, pulling out a
+  shared "universal" parser now would be an abstraction built for a
+  future format that doesn't exist yet, and might not even look like
+  UDMF's grammar if it did. If a second genuinely curly-brace-shaped
+  text format shows up later (e.g. a game-config file, matching one of
+  UDB's own other uses of `UniversalParser`), that's the point to
+  reconsider factoring `UdmfTreeParser`'s already-generic tokenizer out
+  into something shared - not before
 
 ## Later / someday
 
