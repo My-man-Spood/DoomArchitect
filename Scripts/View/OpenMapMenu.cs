@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Textures;
 using Godot;
 
 /// <summary>
@@ -9,14 +10,16 @@ using Godot;
 /// the first map it finds inside - trying UDMF first, falling back to
 /// the classic binary format (so both modern-editor maps and the
 /// original id Software WADs work), and reporting the result via
-/// <see cref="MapLoaded"/>. Deliberately unaware of <c>MapView</c> so
+/// <see cref="MapLoaded"/>, alongside a <see cref="TextureSet"/> resolved
+/// from that same WAD (textures are scoped to a single WAD for now - see
+/// the texture pipeline plan). Deliberately unaware of <c>MapView</c> so
 /// this stays a plain "pick a file, hand back a MapData" widget, matching
 /// the rest of this project's separation between the map-editing surface
 /// and general UI.
 /// </summary>
 public partial class OpenMapMenu : PanelContainer
 {
-	public event Action<MapData> MapLoaded;
+	public event Action<MapData, TextureSet> MapLoaded;
 
 	private FileDialog _fileDialog;
 	private AcceptDialog _errorDialog;
@@ -41,7 +44,7 @@ public partial class OpenMapMenu : PanelContainer
 			if (udmfMapNames.Count > 0)
 			{
 				var document = UdmfReader.Read(wad.ReadMapTextMap(udmfMapNames[0]));
-				MapLoaded?.Invoke(document.Map);
+				MapLoaded?.Invoke(document.Map, TextureSet.Load(wad));
 				return;
 			}
 
@@ -49,7 +52,7 @@ public partial class OpenMapMenu : PanelContainer
 			if (classicMapNames.Count > 0)
 			{
 				var (map, _) = ClassicMapReader.Read(wad, classicMapNames[0]);
-				MapLoaded?.Invoke(map);
+				MapLoaded?.Invoke(map, TextureSet.Load(wad));
 				return;
 			}
 

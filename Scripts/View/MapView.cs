@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
 using DoomArchitect.Interop;
 using DoomArchitect.Rendering;
@@ -28,6 +29,7 @@ public partial class MapView : Node3D
 	private GridToolbar _gridToolbar;
 	private StatusBar _statusBar;
 	private MapData _map;
+	private TextureCache _textureCache;
 	private UndoStack _undoStack = new();
 	private bool _in3D;
 
@@ -43,6 +45,10 @@ public partial class MapView : Node3D
 		_statusBar = GetNode<StatusBar>("UI/StatusBar");
 		_statusBar.Overlay = _overlay;
 		GetNode<OpenMapMenu>("UI/MarginContainer/TopToolbar/OpenMapGroup").MapLoaded += LoadMap;
+
+		// No WAD is open yet - every texture/flat lookup just resolves to
+		// the shared placeholder until a real map is loaded.
+		_textureCache = new TextureCache(TextureSet.CreateEmpty());
 
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
@@ -65,6 +71,8 @@ public partial class MapView : Node3D
 			var instances = _sectorMeshes[sector];
 			instances.Floor.Mesh = mesh.Floor;
 			instances.Ceiling.Mesh = mesh.Ceiling;
+			ApplyFlatMaterial(instances.Floor, sector.FloorTexture);
+			ApplyFlatMaterial(instances.Ceiling, sector.CeilingTexture);
 
 			// A wall's shape can depend on both of a linedef's sectors (a
 			// two-sided step), so any linedef touching this sector needs
@@ -89,7 +97,7 @@ public partial class MapView : Node3D
 	/// real loaded map is very unlikely to sit in the same 256x256 area
 	/// the sample room did.
 	/// </summary>
-	private void LoadMap(MapData newMap)
+	private void LoadMap(MapData newMap, TextureSet textures)
 	{
 		foreach (var (floor, ceiling) in _sectorMeshes.Values)
 		{
@@ -105,6 +113,8 @@ public partial class MapView : Node3D
 		}
 
 		_wallMeshes.Clear();
+
+		_textureCache = new TextureCache(textures);
 
 		_map = newMap;
 		foreach (var sector in newMap.Sectors)
@@ -151,19 +161,46 @@ public partial class MapView : Node3D
 		var mesh = SectorMeshBuilder.Build(sector);
 		var floor = new MeshInstance3D { Mesh = mesh.Floor };
 		var ceiling = new MeshInstance3D { Mesh = mesh.Ceiling, Layers = ThreeDOnlyRenderLayer };
+		ApplyFlatMaterial(floor, sector.FloorTexture);
+		ApplyFlatMaterial(ceiling, sector.CeilingTexture);
 		AddChild(floor);
 		AddChild(ceiling);
 		_sectorMeshes[sector] = (floor, ceiling);
 	}
 
-	private void CreateWallMeshInstance(Linedef linedef)
+	/// <summary>
+	/// "-" is the map-format sentinel for "no texture" - not a genuinely
+	/// missing/unresolvable name, so it deliberately skips TextureCache
+	/// entirely (leaving Godot's own default material) instead of showing
+	/// the placeholder that's reserved for an actually-unresolvable name.
+	/// </summary>
+	private void ApplyFlatMaterial(MeshInstance3D instance, string textureName)
 	{
-		var instance = new MeshInstance3D { Mesh = WallMeshBuilder.Build(linedef), Layers = ThreeDOnlyRenderLayer };
-		AddChild(instance);
-		_wallMeshes[linedef] = instance;
+		if (textureName == "-") return;
+		instance.SetSurfaceOverrideMaterial(0, _textureCache.GetFlatMaterial(textureName));
 	}
 
-	private void RebuildWallMesh(Linedef linedef) => _wallMeshes[linedef].Mesh = WallMeshBuilder.Build(linedef);
+	private void CreateWallMeshInstance(Linedef linedef)
+	{
+		var instance = new MeshInstance3D { Layers = ThreeDOnlyRenderLayer };
+		AddChild(instance);
+		_wallMeshes[linedef] = instance;
+		RebuildWallMesh(linedef);
+	}
+
+	private void RebuildWallMesh(Linedef linedef)
+	{
+		var instance = _wallMeshes[linedef];
+		var result = WallMeshBuilder.Build(linedef, _textureCache);
+		instance.Mesh = result.Mesh;
+
+		for (var i = 0; i < result.SurfaceTextures.Count; i++)
+		{
+			// Same "-" skip as ApplyFlatMaterial - see its remarks.
+			if (result.SurfaceTextures[i] == "-") continue;
+			instance.SetSurfaceOverrideMaterial(i, _textureCache.GetWallMaterial(result.SurfaceTextures[i]));
+		}
+	}
 
 	/// <summary>
 	/// Ctrl+Z/Ctrl+Y match UDB's own default undo/redo keys exactly

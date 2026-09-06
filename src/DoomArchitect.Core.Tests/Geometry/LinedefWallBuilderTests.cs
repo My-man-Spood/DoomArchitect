@@ -202,4 +202,95 @@ public class LinedefWallBuilderTests
         Assert.Equal(0, lower.Bottom);
         Assert.Equal(64, lower.Top);
     }
+
+    [Fact]
+    public void Build_TwoSided_MiddleTextureSet_NoHeightLookupProvided_SkipsMaskedMiddleEntirely()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128); // equal floors/ceilings - no upper/lower wall either
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        Assert.Empty(LinedefWallBuilder.Build(linedef));
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_ShorterThanOpening_AnchorsToOpeningTop()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(88, middle.Bottom); // opening top (128) - texture height (40)
+        Assert.Equal(128, middle.Top);
+        Assert.Equal("MIDBARS1", middle.Texture);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_TallerThanOpening_ClipsToWholeOpening()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 64);
+        var back = map.CreateSector(0, 64);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 500);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(0, middle.Bottom);
+        Assert.Equal(64, middle.Top);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_OpeningBoundsUseBothSectors_LikeUpperAndLowerWalls()
+    {
+        // Same "step" shape as the upper/lower opening tests: the opening
+        // is [max(floors), min(ceilings)], not either sector's own full
+        // height range.
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(16, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 1000);
+
+        Assert.Contains(segments, s => s.Texture == "MIDBARS1" && s.Bottom == 16 && s.Top == 128);
+    }
+
+    [Fact]
+    public void Build_TwoSided_NoMiddleTextureOnEitherSide_ProducesNoMaskedMiddleSegment()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        // Neither side's MiddleTexture is set - both default to "-".
+
+        Assert.Empty(LinedefWallBuilder.Build(linedef, _ => 40));
+    }
+
+    [Fact]
+    public void Build_TwoSided_BothSidesHaveMiddleTextures_ProducesOneSegmentPerSide()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "FRONTFENCE";
+        linedef.Back!.MiddleTexture = "BACKFENCE";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        Assert.Equal(2, segments.Count);
+        Assert.Contains(segments, s => s.Texture == "FRONTFENCE");
+        Assert.Contains(segments, s => s.Texture == "BACKFENCE");
+    }
 }

@@ -14,14 +14,21 @@ namespace DoomArchitect.Rendering;
 /// </summary>
 internal static class DoubleSidedMesh
 {
-    public static void AddTriangle(SurfaceTool surfaceTool, Vector3 a, Vector3 b, Vector3 c)
+    public static void AddTriangle(
+        SurfaceTool surfaceTool, Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC)
     {
+        surfaceTool.SetUV(uvA);
         surfaceTool.AddVertex(a);
+        surfaceTool.SetUV(uvB);
         surfaceTool.AddVertex(b);
+        surfaceTool.SetUV(uvC);
         surfaceTool.AddVertex(c);
 
+        surfaceTool.SetUV(uvA);
         surfaceTool.AddVertex(a);
+        surfaceTool.SetUV(uvC);
         surfaceTool.AddVertex(c);
+        surfaceTool.SetUV(uvB);
         surfaceTool.AddVertex(b);
     }
 }

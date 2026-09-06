@@ -23,6 +23,10 @@ public readonly record struct SectorMesh(ArrayMesh Floor, ArrayMesh Ceiling);
 /// </summary>
 public static class SectorMeshBuilder
 {
+    // Doom flats are conventionally 64x64 map units per tile - this is
+    // the UV scale that makes a flat repeat at its native pixel size.
+    private const float FlatTextureSize = 64f;
+
     public static SectorMesh Build(Sector sector)
     {
         var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(sector)));
@@ -57,7 +61,11 @@ public static class SectorMeshBuilder
     {
         foreach (var (a, b, c) in triangles)
         {
-            DoubleSidedMesh.AddTriangle(surfaceTool, a.ToWorld(height), b.ToWorld(height), c.ToWorld(height));
+            DoubleSidedMesh.AddTriangle(
+                surfaceTool, a.ToWorld(height), b.ToWorld(height), c.ToWorld(height),
+                ToFlatUv(a), ToFlatUv(b), ToFlatUv(c));
         }
     }
+
+    private static Vector2 ToFlatUv(MapVector2 position) => new(position.X / FlatTextureSize, position.Y / FlatTextureSize);
 }
