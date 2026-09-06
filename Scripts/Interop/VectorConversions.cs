@@ -46,4 +46,22 @@ public static class VectorConversions
     /// <summary>Inverse of <see cref="ToWorld"/> - drops the height component.</summary>
     public static System.Numerics.Vector2 ToDoom(this Godot.Vector3 worldPosition) =>
         new(worldPosition.X, -worldPosition.Z);
+
+    /// <summary>
+    /// The full-3D counterpart of <see cref="ToWorld"/>/<see cref="ToDoom"/>
+    /// (which take/return a 2D position plus a separate height) - for
+    /// things that are genuinely 3D vectors in their own right, like a
+    /// camera ray's origin/direction (<see cref="Core.Geometry.MapRaycaster"/>).
+    /// Same mapping, just carrying all three components at once: Doom's Z
+    /// (height) is Godot's Y, and the same load-bearing Y negation applies
+    /// (see <see cref="ToWorld"/>'s remarks) - a direction vector transforms
+    /// identically to a position here, since this mapping has no
+    /// translation component to worry about.
+    /// </summary>
+    public static Godot.Vector3 ToWorld3D(this System.Numerics.Vector3 doom) =>
+        new(doom.X, doom.Z, -doom.Y);
+
+    /// <summary>Inverse of <see cref="ToWorld3D"/>.</summary>
+    public static System.Numerics.Vector3 ToDoom3D(this Godot.Vector3 world) =>
+        new(world.X, -world.Z, world.Y);
 }

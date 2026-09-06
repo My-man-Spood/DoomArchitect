@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
@@ -33,6 +34,16 @@ public partial class MapView : Node3D
 	private UndoStack _undoStack = new();
 	private bool _in3D;
 
+	// "What am I looking at" 3D targeting - see MapRaycaster's own remarks
+	// for why this is hand-rolled Core geometry rather than Godot physics.
+	private const double PickIntervalSeconds = 0.08; // matches UDB's own 80ms PICK_INTERVAL
+	private readonly IMapSpatialIndex _spatialIndex = new UniformGridSpatialIndex();
+	private IMapTargetFinder _targetFinder;
+	private TargetHighlight _targetHighlight;
+	private Crosshair _crosshair;
+	private MapTarget? _currentTarget;
+	private double _timeSinceLastPick;
+
 	public override void _Ready()
 	{
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
@@ -49,6 +60,19 @@ public partial class MapView : Node3D
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.
 		_textureCache = new TextureCache(TextureSet.CreateEmpty());
+
+		// Reads _textureCache/_map fresh on every call rather than a
+		// captured value, so this keeps working correctly across LoadMap
+		// swapping both fields out from under it later.
+		_targetFinder = new MapRaycaster(_spatialIndex, name => _textureCache.GetWallTextureSize(name).Y);
+		_targetHighlight = new TargetHighlight();
+		AddChild(_targetHighlight);
+		// Parented under the same screen-space overlay layer MapOverlay
+		// already renders correctly through, rather than directly under
+		// this Node3D - that layer is the proven place for 2D content to
+		// draw on top of the 3D scene.
+		_crosshair = new Crosshair { Visible = false };
+		GetNode<Node>("Overlay").AddChild(_crosshair);
 
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
@@ -87,6 +111,52 @@ public partial class MapView : Node3D
 
 			_map.ClearDirty(sector);
 		}
+
+		if (_in3D)
+		{
+			_timeSinceLastPick += delta;
+			if (_timeSinceLastPick >= PickIntervalSeconds)
+			{
+				_timeSinceLastPick = 0;
+				UpdateTarget();
+			}
+		}
+	}
+
+	/// <summary>
+	/// Re-picks whatever the perspective camera is currently looking at,
+	/// throttled to <see cref="PickIntervalSeconds"/> rather than every
+	/// frame (see MapRaycaster/UniformGridSpatialIndex's own remarks on
+	/// why - directly adopted from UDB's own proven throttle). The
+	/// highlight itself is only touched when the target's actual identity
+	/// changes, not on every poll tick.
+	/// </summary>
+	private void UpdateTarget()
+	{
+		_spatialIndex.Rebuild(_map);
+
+		var origin = _perspectiveCamera.GlobalPosition.ToDoom3D();
+		var direction = (-_perspectiveCamera.GlobalTransform.Basis.Z).ToDoom3D();
+		var target = _targetFinder.FindTarget(origin, direction);
+
+		if (target == _currentTarget) return;
+
+		_currentTarget = target;
+		switch (target)
+		{
+			case null:
+				_targetHighlight.HideHighlight();
+				break;
+			case { Kind: TargetSurfaceKind.Floor }:
+				_targetHighlight.ShowFloor(target.Value.Sector);
+				break;
+			case { Kind: TargetSurfaceKind.Ceiling }:
+				_targetHighlight.ShowCeiling(target.Value.Sector);
+				break;
+			case { Kind: TargetSurfaceKind.Wall }:
+				_targetHighlight.ShowWall(target.Value.WallSegment!.Value, new MapVector2(origin.X, origin.Y));
+				break;
+		}
 	}
 
 	/// <summary>
@@ -115,6 +185,11 @@ public partial class MapView : Node3D
 		_wallMeshes.Clear();
 
 		_textureCache = new TextureCache(textures);
+
+		// The old target may reference a Sector/WallSegment from the map
+		// being discarded - never carry that across a load.
+		_currentTarget = null;
+		_targetHighlight.HideHighlight();
 
 		_map = newMap;
 		foreach (var sector in newMap.Sectors)
@@ -232,7 +307,16 @@ public partial class MapView : Node3D
 				_overlay.Visible = !_in3D;
 				_modeToolbar.Visible = !_in3D;
 				_statusBar.Visible = !_in3D;
+				_crosshair.Visible = _in3D;
 				Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+				if (!_in3D)
+				{
+					// Leaving 3D - don't leave a stale highlight showing,
+					// and force a fresh pick next time 3D mode is entered.
+					_currentTarget = null;
+					_targetHighlight.HideHighlight();
+				}
+
 				break;
 			case Key.Key1:
 				_overlay.Mode = EditMode.Vertices;
