@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using DoomArchitect.Core.Geometry;
+using DoomArchitect.Core.Lighting;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Interop;
 using Godot;
@@ -36,20 +37,26 @@ public static class SectorMeshBuilder
             triangleLists.Add(EarClipper.Clip(polygon));
         }
 
-        var floor = BuildFace(triangleLists, (float)sector.FloorHeight);
-        var ceiling = BuildFace(triangleLists, (float)sector.CeilingHeight);
+        // Floors and ceilings never get fake contrast (that's a wall-only
+        // trick) and this codebase has no separate floor/ceiling light
+        // level yet (a ZDoom UDMF extension) - both just use the plain
+        // curve on the sector's own brightness.
+        var color = SectorBrightness.Calculate(sector.Brightness).ToBrightnessColor();
+
+        var floor = BuildFace(triangleLists, (float)sector.FloorHeight, color);
+        var ceiling = BuildFace(triangleLists, (float)sector.CeilingHeight, color);
         return new SectorMesh(floor, ceiling);
     }
 
     private static ArrayMesh BuildFace(
-        List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>> triangleLists, float height)
+        List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>> triangleLists, float height, Color color)
     {
         var surfaceTool = new SurfaceTool();
         surfaceTool.Begin(Mesh.PrimitiveType.Triangles);
 
         foreach (var triangles in triangleLists)
         {
-            AddDoubleSidedFace(surfaceTool, triangles, height);
+            AddDoubleSidedFace(surfaceTool, triangles, height, color);
         }
 
         surfaceTool.GenerateNormals();
@@ -57,13 +64,14 @@ public static class SectorMeshBuilder
     }
 
     private static void AddDoubleSidedFace(
-        SurfaceTool surfaceTool, IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)> triangles, float height)
+        SurfaceTool surfaceTool, IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)> triangles, float height,
+        Color color)
     {
         foreach (var (a, b, c) in triangles)
         {
             DoubleSidedMesh.AddTriangle(
                 surfaceTool, a.ToWorld(height), b.ToWorld(height), c.ToWorld(height),
-                ToFlatUv(a), ToFlatUv(b), ToFlatUv(c));
+                ToFlatUv(a), ToFlatUv(b), ToFlatUv(c), color);
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Geometry;
+using DoomArchitect.Core.Lighting;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Interop;
 using Godot;
@@ -27,6 +28,12 @@ public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<strin
 /// UVs are top-pegged (V=0 at the segment's own top edge, offset by the
 /// originating sidedef's OffsetX/OffsetY) - see LinedefWallBuilder's
 /// remarks on why real linedef-flag pegging isn't modeled yet.
+///
+/// Each quad also gets a single flat brightness color (see
+/// <c>Core.Lighting.SectorBrightness</c>) baked onto all of its vertices,
+/// including the classic "fake contrast" wall-orientation shading -
+/// computed from the wall's own sector, since a two-sided linedef's two
+/// sides can belong to sectors with different light levels entirely.
 /// </summary>
 public static class WallMeshBuilder
 {
@@ -88,7 +95,15 @@ public static class WallMeshBuilder
         var uvEndBottom = new Vector2(uEnd, vBottom);
         var uvEndTop = new Vector2(uEnd, vTop);
 
-        DoubleSidedMesh.AddTriangle(surfaceTool, startBottom, startTop, endTop, uvStartBottom, uvStartTop, uvEndTop);
-        DoubleSidedMesh.AddTriangle(surfaceTool, startBottom, endTop, endBottom, uvStartBottom, uvEndTop, uvEndBottom);
+        // Fake contrast only depends on the wall's own direction, not
+        // which end is "start" vs "end" - see SectorBrightness's remarks.
+        var wallDirection = segment.End.Position - segment.Start.Position;
+        var brightness = SectorBrightness.CalculateForWall(segment.Side.Sector.Brightness, wallDirection);
+        var color = brightness.ToBrightnessColor();
+
+        DoubleSidedMesh.AddTriangle(
+            surfaceTool, startBottom, startTop, endTop, uvStartBottom, uvStartTop, uvEndTop, color);
+        DoubleSidedMesh.AddTriangle(
+            surfaceTool, startBottom, endTop, endBottom, uvStartBottom, uvEndTop, uvEndBottom, color);
     }
 }

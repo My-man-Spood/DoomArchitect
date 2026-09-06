@@ -63,6 +63,16 @@ public sealed class TextureCache
             // preserves that look instead of Godot's default smoothing. A
             // rendering choice, not a UDB behavior.
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
+            // Sector/wall brightness is baked as a per-vertex color (see
+            // SectorMeshBuilder/WallMeshBuilder) rather than driven by a
+            // real Godot light - Doom's own lighting has no concept of
+            // light direction or shadows, so letting the scene's actual
+            // light respond to surface normals would look wrong and
+            // wouldn't reflect a sector's real light level at all.
+            // Unshaded turns that off entirely; VertexColorUseAsAlbedo is
+            // what makes the baked color actually multiply the texture.
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            VertexColorUseAsAlbedo = true,
         };
     }
 }
