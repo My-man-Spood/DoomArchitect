@@ -23,4 +23,13 @@ public static class SectorHitTest
 
         return inside;
     }
+
+    /// <summary>
+    /// Which of <paramref name="sectors"/> contains <paramref name="point"/>,
+    /// or <c>null</c> if none do (e.g. a Thing placed outside the map's
+    /// geometry). A brute-force scan is fine here - callers only need this
+    /// once per Thing at load/rebuild time, never per-frame.
+    /// </summary>
+    public static Sector? FindContaining(IEnumerable<Sector> sectors, Vector2 point) =>
+        sectors.FirstOrDefault(sector => Contains(sector, point));
 }

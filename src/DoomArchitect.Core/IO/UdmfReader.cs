@@ -14,13 +14,14 @@ namespace DoomArchitect.Core.IO;
 /// </summary>
 public static class UdmfReader
 {
-    private static readonly string[] KnownBlockNames = { "namespace", "vertex", "sector", "linedef", "sidedef" };
+    private static readonly string[] KnownBlockNames = { "namespace", "vertex", "sector", "linedef", "sidedef", "thing" };
     private static readonly HashSet<string> KnownVertexFields = new() { "x", "y" };
     private static readonly HashSet<string> KnownSectorFields =
         new() { "heightfloor", "heightceiling", "texturefloor", "textureceiling", "lightlevel" };
     private static readonly HashSet<string> KnownLinedefFields = new() { "v1", "v2", "sidefront", "sideback" };
     private static readonly HashSet<string> KnownSidedefFields =
         new() { "sector", "offsetx", "offsety", "texturetop", "texturebottom", "texturemiddle" };
+    private static readonly HashSet<string> KnownThingFields = new() { "x", "y", "height", "angle", "type" };
 
     public static UdmfDocument Read(string text)
     {
@@ -32,6 +33,7 @@ public static class UdmfReader
         var vertices = ReadVertices(map, FindBlocks(root, "vertex"));
         var sectors = ReadSectors(map, FindBlocks(root, "sector"));
         ReadLinedefs(map, FindBlocks(root, "linedef"), vertices, sectors, FindBlocks(root, "sidedef"), warnings);
+        ReadThings(map, FindBlocks(root, "thing"));
 
         var unknownBlocks = root.Blocks.Where(b => !KnownBlockNames.Contains(b.Name)).ToList();
 
@@ -161,6 +163,22 @@ public static class UdmfReader
         sidedef.LowerTexture = block.Find("texturebottom")?.AsString() ?? "-";
         sidedef.MiddleTexture = block.Find("texturemiddle")?.AsString() ?? "-";
         ApplyCustomFields(sidedef.SetCustomField, block, KnownSidedefFields);
+    }
+
+    private static void ReadThings(MapData map, List<UdmfBlock> blocks)
+    {
+        foreach (var block in blocks)
+        {
+            var x = block.Find("x")?.AsDouble() ?? 0.0;
+            var y = block.Find("y")?.AsDouble() ?? 0.0;
+            var type = block.Find("type")?.AsInt() ?? 0;
+
+            var thing = map.CreateThing(new MapVector2((float)x, (float)y), type);
+            thing.Height = block.Find("height")?.AsDouble() ?? 0.0;
+            thing.Angle = block.Find("angle")?.AsInt() ?? 0;
+
+            ApplyCustomFields(thing.SetCustomField, block, KnownThingFields);
+        }
     }
 
     private static void ApplyCustomFields(Action<string, object> setCustomField, UdmfBlock block, HashSet<string> knownFields)

@@ -22,6 +22,9 @@ public partial class MapView : Node3D
 
 	private readonly Dictionary<Sector, (MeshInstance3D Floor, MeshInstance3D Ceiling)> _sectorMeshes = new();
 	private readonly Dictionary<Linedef, MeshInstance3D> _wallMeshes = new();
+	private readonly Dictionary<Thing, MeshInstance3D> _thingMeshes = new();
+	private ArrayMesh _thingMesh;
+	private StandardMaterial3D _thingMaterial;
 
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
@@ -74,12 +77,20 @@ public partial class MapView : Node3D
 		_crosshair = new Crosshair { Visible = false };
 		GetNode<Node>("Overlay").AddChild(_crosshair);
 
+		_thingMesh = ThingMeshBuilder.Build();
+		_thingMaterial = ThingMeshBuilder.BuildMaterial();
+
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
 		CreateSectorMeshInstances(sector);
 		foreach (var linedef in _map.Linedefs)
 		{
 			CreateWallMeshInstance(linedef);
+		}
+
+		foreach (var thing in _map.Things)
+		{
+			CreateThingMeshInstance(thing);
 		}
 
 		_overlay.Map = _map;
@@ -184,6 +195,13 @@ public partial class MapView : Node3D
 
 		_wallMeshes.Clear();
 
+		foreach (var thing in _thingMeshes.Values)
+		{
+			thing.QueueFree();
+		}
+
+		_thingMeshes.Clear();
+
 		_textureCache = new TextureCache(textures);
 
 		// The old target may reference a Sector/WallSegment from the map
@@ -200,6 +218,11 @@ public partial class MapView : Node3D
 		foreach (var linedef in newMap.Linedefs)
 		{
 			CreateWallMeshInstance(linedef);
+		}
+
+		foreach (var thing in newMap.Things)
+		{
+			CreateThingMeshInstance(thing);
 		}
 
 		_undoStack = new UndoStack();
@@ -275,6 +298,28 @@ public partial class MapView : Node3D
 			if (result.SurfaceTextures[i] == "-") continue;
 			instance.SetSurfaceOverrideMaterial(i, _textureCache.GetWallMaterial(result.SurfaceTextures[i]));
 		}
+	}
+
+	/// <summary>
+	/// Things aren't edited in this pass (see the Things plan), so this
+	/// only ever runs once per Thing at load time - no dirty-tracking or
+	/// rebuild path needed, unlike sectors/walls.
+	/// </summary>
+	private void CreateThingMeshInstance(Thing thing)
+	{
+		var containingSector = SectorHitTest.FindContaining(_map.Sectors, thing.Position);
+		var worldZ = (containingSector?.FloorHeight ?? 0) + thing.Height;
+
+		var instance = new MeshInstance3D
+		{
+			Mesh = _thingMesh,
+			Position = thing.Position.ToWorld((float)worldZ),
+			Layers = ThreeDOnlyRenderLayer,
+		};
+		instance.SetSurfaceOverrideMaterial(0, _thingMaterial);
+
+		AddChild(instance);
+		_thingMeshes[thing] = instance;
 	}
 
 	/// <summary>

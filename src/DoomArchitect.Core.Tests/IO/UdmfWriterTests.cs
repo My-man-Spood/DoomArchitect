@@ -88,6 +88,48 @@ public class UdmfWriterTests
     }
 
     [Fact]
+    public void Write_ThingAtDefaultHeight_OmitsHeightButAlwaysWritesTheRest()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(64, 128), type: 1);
+        thing.Angle = 90;
+
+        var text = UdmfWriter.Write(EmptyDocument(map));
+
+        Assert.Contains("x = 64.0;", text);
+        Assert.Contains("y = 128.0;", text);
+        Assert.Contains("angle = 90;", text);
+        Assert.Contains("type = 1;", text);
+        Assert.DoesNotContain("height", text);
+    }
+
+    [Fact]
+    public void Write_ThingWithNonZeroHeight_WritesIt()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(0, 0), type: 1);
+        thing.Height = 16;
+
+        var text = UdmfWriter.Write(EmptyDocument(map));
+
+        Assert.Contains("height = 16.0;", text);
+    }
+
+    [Fact]
+    public void RoundTrip_ThingCustomFields_SurviveLoadThenSave()
+    {
+        var doc = UdmfReader.Read(
+            "namespace = \"doom\"; thing { x = 0; y = 0; type = 1; ambush = true; id = 7; }");
+
+        var text = UdmfWriter.Write(doc);
+        var reloaded = UdmfReader.Read(text);
+
+        var thing = Assert.Single(reloaded.Map.Things);
+        Assert.Equal(true, thing.CustomFields["ambush"]);
+        Assert.Equal(7L, thing.CustomFields["id"]);
+    }
+
+    [Fact]
     public void Write_CustomFields_AreWrittenAfterTypedFields()
     {
         // Custom fields only ever get populated via UdmfReader in

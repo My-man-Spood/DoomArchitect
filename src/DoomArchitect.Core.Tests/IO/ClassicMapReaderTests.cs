@@ -5,12 +5,13 @@ namespace DoomArchitect.Core.Tests.IO;
 public class ClassicMapReaderTests
 {
     private static byte[] BuildWad(
-        byte[] linedefs, byte[] sidedefs, byte[] vertexes, byte[] sectors, string mapName = "MAP01", bool includeBehavior = false)
+        byte[] linedefs, byte[] sidedefs, byte[] vertexes, byte[] sectors, string mapName = "MAP01",
+        bool includeBehavior = false, byte[]? things = null)
     {
         var lumps = new List<(string, byte[])>
         {
             (mapName, Array.Empty<byte>()),
-            ("THINGS", Array.Empty<byte>()),
+            ("THINGS", things ?? Array.Empty<byte>()),
             ("LINEDEFS", linedefs),
             ("SIDEDEFS", sidedefs),
             ("VERTEXES", vertexes),
@@ -69,6 +70,34 @@ public class ClassicMapReaderTests
         Assert.Null(linedef.Back);
         Assert.Same(sector, linedef.Front!.Sector);
         Assert.Equal("STARTAN2", linedef.Front.MiddleTexture);
+    }
+
+    [Fact]
+    public void Read_Things_ParsesPositionAngleTypeAndFlags()
+    {
+        var vertexes = BinaryMapTestBuilder.Vertex(0, 0);
+        var things = BinaryMapTestBuilder.Concat(
+            BinaryMapTestBuilder.Thing(64, 128, 90, 1, 7),
+            BinaryMapTestBuilder.Thing(-32, 16, 180, 3001, 0));
+        var wad = WadFile.Read(new MemoryStream(
+            BuildWad(Array.Empty<byte>(), Array.Empty<byte>(), vertexes, Array.Empty<byte>(), things: things)));
+
+        var (map, _) = ClassicMapReader.Read(wad, "MAP01");
+
+        Assert.Equal(2, map.Things.Count);
+
+        var first = map.Things[0];
+        Assert.Equal(new System.Numerics.Vector2(64, 128), first.Position);
+        Assert.Equal(90, first.Angle);
+        Assert.Equal(1, first.Type);
+        Assert.Equal(7, first.RawFlags);
+        Assert.Equal(0, first.Height);
+
+        var second = map.Things[1];
+        Assert.Equal(new System.Numerics.Vector2(-32, 16), second.Position);
+        Assert.Equal(180, second.Angle);
+        Assert.Equal(3001, second.Type);
+        Assert.Equal(0, second.RawFlags);
     }
 
     [Fact]

@@ -7,11 +7,12 @@ namespace DoomArchitect.Core.IO;
 /// Writes a <see cref="UdmfDocument"/> back to UDMF text. A close port of
 /// UDB's own <c>UniversalStreamWriter</c> (UniversalStreamWriter.cs:115-328):
 /// same block order (namespace, unknown blocks, vertices, linedefs,
-/// sidedefs, sectors) and the same per-block field-omission rules, which
-/// are inconsistent by design across block types - sector always writes
-/// its five core fields, sidedef omits offsets-when-zero and
+/// sidedefs, sectors, things) and the same per-block field-omission rules,
+/// which are inconsistent by design across block types - sector always
+/// writes its five core fields, sidedef omits offsets-when-zero and
 /// textures-when-"-", linedef always writes <c>sidefront</c>/<c>sideback</c>
-/// (as -1 when absent).
+/// (as -1 when absent), thing omits <c>height</c> only when exactly 0
+/// (`UniversalStreamWriter.WriteThings`, lines 338-347).
 /// </summary>
 public static class UdmfWriter
 {
@@ -35,6 +36,7 @@ public static class UdmfWriter
         WriteLinedefs(sb, map.Linedefs, vertexIndex, sidedefIndex);
         WriteSidedefs(sb, sidedefs, sectorIndex);
         WriteSectors(sb, map.Sectors);
+        WriteThings(sb, map.Things);
 
         return sb.ToString();
     }
@@ -132,6 +134,21 @@ public static class UdmfWriter
             UdmfTreeWriter.WriteAssignment(sb, 1, "textureceiling", sector.CeilingTexture);
             UdmfTreeWriter.WriteAssignment(sb, 1, "lightlevel", sector.Brightness);
             WriteCustomFields(sb, sector.CustomFields);
+            EndBlock(sb);
+        }
+    }
+
+    private static void WriteThings(StringBuilder sb, IReadOnlyList<Thing> things)
+    {
+        foreach (var thing in things)
+        {
+            BeginBlock(sb, "thing");
+            UdmfTreeWriter.WriteAssignment(sb, 1, "x", (double)thing.Position.X);
+            UdmfTreeWriter.WriteAssignment(sb, 1, "y", (double)thing.Position.Y);
+            if (thing.Height != 0) UdmfTreeWriter.WriteAssignment(sb, 1, "height", thing.Height);
+            UdmfTreeWriter.WriteAssignment(sb, 1, "angle", thing.Angle);
+            UdmfTreeWriter.WriteAssignment(sb, 1, "type", thing.Type);
+            WriteCustomFields(sb, thing.CustomFields);
             EndBlock(sb);
         }
     }

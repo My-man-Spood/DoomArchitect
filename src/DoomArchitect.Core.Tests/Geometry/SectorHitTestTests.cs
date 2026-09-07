@@ -55,4 +55,31 @@ public class SectorHitTestTests
 
         Assert.True(SectorHitTest.Contains(sector, new Vector2(30, 30)));
     }
+
+    [Fact]
+    public void FindContaining_PointInsideOneOfSeveralSectors_ReturnsThatSector()
+    {
+        var map = new MapData();
+        var (near, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 100), new Vector2(100, 100), new Vector2(100, 0));
+        var (far, _) = map.CreateClosedSector(0, 128,
+            new Vector2(200, 200), new Vector2(200, 300), new Vector2(300, 300), new Vector2(300, 200));
+
+        var found = SectorHitTest.FindContaining(map.Sectors, new Vector2(50, 50));
+
+        Assert.Equal(near, found);
+        Assert.NotEqual(far, found);
+    }
+
+    [Fact]
+    public void FindContaining_PointOutsideEverySector_ReturnsNull()
+    {
+        var map = new MapData();
+        map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 100), new Vector2(100, 100), new Vector2(100, 0));
+
+        var found = SectorHitTest.FindContaining(map.Sectors, new Vector2(500, 500));
+
+        Assert.Null(found);
+    }
 }

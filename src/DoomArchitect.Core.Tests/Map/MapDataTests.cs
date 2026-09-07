@@ -77,4 +77,16 @@ public class MapDataTests
         Assert.Contains(linedef, v1.Linedefs);
         Assert.Contains(linedef, v2.Linedefs);
     }
+
+    [Fact]
+    public void CreateThing_AddsToThings()
+    {
+        var map = new MapData();
+
+        var thing = map.CreateThing(new Vector2(64, 128), type: 1);
+
+        Assert.Contains(thing, map.Things);
+        Assert.Equal(new Vector2(64, 128), thing.Position);
+        Assert.Equal(1, thing.Type);
+    }
 }

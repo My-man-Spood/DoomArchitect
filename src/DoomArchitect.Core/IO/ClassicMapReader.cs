@@ -17,10 +17,10 @@ namespace DoomArchitect.Core.IO;
 /// record layouts entirely (16-byte linedefs with 5 args instead of a
 /// tag, thing flags/specials laid out differently) and isn't ported here.
 ///
-/// <c>THINGS</c> is skipped entirely - there's no Things data model yet,
-/// and unlike UDMF's unknown-block preservation there's no writer for
-/// this format to round-trip through, so there's nothing to gain by
-/// holding onto its bytes.
+/// <c>THINGS</c> uses vanilla Doom's 10-byte record
+/// (<c>x, y, angle, type, flags</c>) - the 20-byte Hexen-format record
+/// (which adds a tid/z/action/args) doesn't apply here, since Hexen/ZDoom
+/// maps are already rejected above via the <c>BEHAVIOR</c> check.
 /// </summary>
 public static class ClassicMapReader
 {
@@ -28,6 +28,7 @@ public static class ClassicMapReader
     private const int SectorRecordSize = 26;
     private const int SidedefRecordSize = 30;
     private const int LinedefRecordSize = 14;
+    private const int ThingRecordSize = 10;
     private const int NoSidedef = ushort.MaxValue;
 
     private static readonly string[] MapLumpNames =
@@ -58,7 +59,29 @@ public static class ClassicMapReader
         var sectors = ReadSectors(map, sectorsData);
         ReadLinedefs(map, linedefsData, sidedefsData, vertices, sectors, warnings);
 
+        var thingsLump = lumps.FirstOrDefault(l => l.Name.Equals("THINGS", StringComparison.OrdinalIgnoreCase));
+        if (thingsLump != null) ReadThings(map, thingsLump.Data);
+
         return (map, warnings);
+    }
+
+    private static void ReadThings(MapData map, byte[] data)
+    {
+        var count = data.Length / ThingRecordSize;
+        using var reader = new BinaryReader(new MemoryStream(data));
+
+        for (var i = 0; i < count; i++)
+        {
+            var x = reader.ReadInt16();
+            var y = reader.ReadInt16();
+            var angle = reader.ReadInt16();
+            var type = reader.ReadInt16();
+            var flags = reader.ReadUInt16();
+
+            var thing = map.CreateThing(new MapVector2(x, y), type);
+            thing.Angle = angle;
+            thing.RawFlags = flags;
+        }
     }
 
     /// <summary>

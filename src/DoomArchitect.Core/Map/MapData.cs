@@ -12,10 +12,12 @@ public sealed class MapData
     private readonly List<Vertex> _vertices = new();
     private readonly List<Linedef> _linedefs = new();
     private readonly List<Sector> _sectors = new();
+    private readonly List<Thing> _things = new();
 
     public IReadOnlyList<Vertex> Vertices => _vertices;
     public IReadOnlyList<Linedef> Linedefs => _linedefs;
     public IReadOnlyList<Sector> Sectors => _sectors;
+    public IReadOnlyList<Thing> Things => _things;
 
     public Vertex CreateVertex(Vector2 position)
     {
@@ -29,6 +31,13 @@ public sealed class MapData
         var sector = new Sector(floorHeight, ceilingHeight);
         _sectors.Add(sector);
         return sector;
+    }
+
+    public Thing CreateThing(Vector2 position, int type)
+    {
+        var thing = new Thing(position, type);
+        _things.Add(thing);
+        return thing;
     }
 
     public Linedef CreateLinedef(Vertex start, Vertex end, Sector? front, Sector? back)

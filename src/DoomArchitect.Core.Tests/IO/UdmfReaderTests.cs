@@ -151,13 +151,61 @@ public class UdmfReaderTests
     [Fact]
     public void Read_UnknownTopLevelBlock_IsPreservedVerbatim()
     {
-        var text = "namespace = \"doom\"; thing { x = 0; y = 0; type = 1; }";
+        var text = "namespace = \"doom\"; zone { id = 1; }";
 
         var doc = UdmfReader.Read(text);
 
-        var thing = Assert.Single(doc.UnknownBlocks);
-        Assert.Equal("thing", thing.Name);
-        Assert.Equal(1L, thing.Find("type")!.Value.AsLong());
+        var zone = Assert.Single(doc.UnknownBlocks);
+        Assert.Equal("zone", zone.Name);
+        Assert.Equal(1L, zone.Find("id")!.Value.AsLong());
+    }
+
+    [Fact]
+    public void Read_Thing_IsNoLongerSweptIntoUnknownBlocks()
+    {
+        var doc = UdmfReader.Read("namespace = \"doom\"; thing { x = 0; y = 0; type = 1; }");
+
+        Assert.Empty(doc.UnknownBlocks);
+        Assert.Single(doc.Map.Things);
+    }
+
+    [Fact]
+    public void Read_Thing_UsesDefaultsForMissingOptionalFields()
+    {
+        var doc = UdmfReader.Read("namespace = \"doom\"; thing { x = 12.5; y = -3.0; type = 3001; }");
+
+        var thing = Assert.Single(doc.Map.Things);
+        Assert.Equal(12.5f, thing.Position.X);
+        Assert.Equal(-3.0f, thing.Position.Y);
+        Assert.Equal(3001, thing.Type);
+        Assert.Equal(0.0, thing.Height);
+        Assert.Equal(0, thing.Angle);
+    }
+
+    [Fact]
+    public void Read_Thing_ReadsAllTypedFields()
+    {
+        var doc = UdmfReader.Read(
+            "namespace = \"doom\"; thing { x = 64; y = 128; height = 16; angle = 90; type = 1; }");
+
+        var thing = Assert.Single(doc.Map.Things);
+        Assert.Equal(64f, thing.Position.X);
+        Assert.Equal(128f, thing.Position.Y);
+        Assert.Equal(16.0, thing.Height);
+        Assert.Equal(90, thing.Angle);
+        Assert.Equal(1, thing.Type);
+    }
+
+    [Fact]
+    public void Read_UnrecognizedThingField_BecomesCustomField()
+    {
+        var doc = UdmfReader.Read(
+            "namespace = \"doom\"; thing { x = 0; y = 0; type = 1; ambush = true; skill3 = true; id = 7; }");
+
+        var thing = Assert.Single(doc.Map.Things);
+        Assert.Equal(true, thing.CustomFields["ambush"]);
+        Assert.Equal(true, thing.CustomFields["skill3"]);
+        Assert.Equal(7L, thing.CustomFields["id"]);
     }
 
     [Fact]

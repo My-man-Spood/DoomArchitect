@@ -4,6 +4,7 @@ using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Undo;
 using DoomArchitect.Interop;
+using DoomArchitect.Rendering;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
 
@@ -52,6 +53,8 @@ public partial class MapOverlay : Control
 	public UndoStack UndoStack { get; set; }
 	public EditMode Mode { get; set; } = EditMode.Vertices;
 	public float GridSize { get; set; } = DefaultGridSize;
+
+	private Texture2D _thingIcon;
 
 	/// <summary>
 	/// The persistent on/off state (matches UDB's toolbar checkbox, which
@@ -112,6 +115,11 @@ public partial class MapOverlay : Control
 
 	private MapVector2 SnapIfEnabled(MapVector2 position) =>
 		EffectiveSnap ? GridSnapper.Snap(position, GridSize) : position;
+
+	public override void _Ready()
+	{
+		_thingIcon = GD.Load<Texture2D>("res://Assets/Icons/icon_thing.svg");
+	}
 
 	public override void _Process(double delta)
 	{
@@ -342,6 +350,7 @@ public partial class MapOverlay : Control
 		DrawSectorHighlight();
 		DrawLinedefs();
 		DrawVertices();
+		DrawThings();
 	}
 
 	/// <summary>
@@ -370,7 +379,7 @@ public partial class MapOverlay : Control
 	private void DrawGridTier(float baseSize, Color color)
 	{
 		var size = baseSize;
-		for (var i = 0; i < MaxGridDoublings && CellPixelSize(size) <= MinGridCellPixels; i++)
+		for (var i = 0; i < MaxGridDoublings && WorldSizeToScreenPixels(size) <= MinGridCellPixels; i++)
 		{
 			size *= 2f;
 		}
@@ -392,7 +401,7 @@ public partial class MapOverlay : Control
 		}
 	}
 
-	private float CellPixelSize(float size) =>
+	private float WorldSizeToScreenPixels(float size) =>
 		Project(new MapVector2(size, 0)).DistanceTo(Project(MapVector2.Zero));
 
 	/// <summary>
@@ -457,6 +466,34 @@ public partial class MapOverlay : Control
 			var center = Project(vertex.Position);
 			var baseColor = vertex == _hoveredVertex ? HoverColor : UnselectedVertexColor;
 			DrawRect(new Rect2(center - half, new Vector2(VertexSize, VertexSize)), new Color(baseColor, alpha));
+		}
+	}
+
+	/// <summary>
+	/// Sized in world space (scaling with zoom) rather than the fixed
+	/// screen-pixel size <see cref="DrawVertices"/> uses - a thing's
+	/// radius is a real map-unit footprint, worth showing at its actual
+	/// relative scale. Rotated to the thing's own <see cref="Thing.Angle"/>
+	/// via <see cref="DrawSetTransform"/> rather than the front-indicator-
+	/// tick approach linedefs use, since the icon's direction is baked
+	/// into its own art (a notch cut out of the circle) rather than drawn
+	/// as a separate line.
+	/// </summary>
+	private void DrawThings()
+	{
+		if (_thingIcon == null) return;
+
+		var screenRadius = WorldSizeToScreenPixels(ThingMeshBuilder.Radius);
+		var diameter = screenRadius * 2f;
+
+		foreach (var thing in Map.Things)
+		{
+			var center = Project(thing.Position);
+			var rotation = -Mathf.DegToRad(thing.Angle);
+
+			DrawSetTransform(center, rotation, Vector2.One);
+			DrawTextureRect(_thingIcon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false);
+			DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 		}
 	}
 

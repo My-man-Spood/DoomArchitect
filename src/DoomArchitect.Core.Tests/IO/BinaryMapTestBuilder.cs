@@ -59,6 +59,18 @@ internal static class BinaryMapTestBuilder
         return stream.ToArray();
     }
 
+    public static byte[] Thing(short x, short y, short angle, short type, ushort flags)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        writer.Write(x);
+        writer.Write(y);
+        writer.Write(angle);
+        writer.Write(type);
+        writer.Write(flags);
+        return stream.ToArray();
+    }
+
     public static byte[] Concat(params byte[][] records) => records.SelectMany(r => r).ToArray();
 
     private static byte[] PaddedName(string name)
