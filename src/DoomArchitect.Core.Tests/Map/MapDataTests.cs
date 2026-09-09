@@ -663,4 +663,197 @@ public class MapDataTests
         Assert.False(sector.IsSelected);
         Assert.All(sector.Sidedefs, sd => Assert.False(sd.Linedef.IsSelected));
     }
+
+    [Fact]
+    public void MarqueeSelectVertices_SelectMode_ReplacesSelectionWithRectangleContents()
+    {
+        var map = new MapData();
+        var inside = map.CreateVertex(new Vector2(10, 10));
+        var outside = map.CreateVertex(new Vector2(100, 100));
+        map.SelectOnly(outside);
+
+        map.MarqueeSelectVertices(new Vector2(0, 0), new Vector2(20, 20), MarqueeSelectionMode.Select);
+
+        Assert.True(inside.IsSelected);
+        Assert.False(outside.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectVertices_AddMode_UnionsWithoutClearingPriorSelection()
+    {
+        var map = new MapData();
+        var inside = map.CreateVertex(new Vector2(10, 10));
+        var alreadySelected = map.CreateVertex(new Vector2(100, 100));
+        map.SelectOnly(alreadySelected);
+
+        map.MarqueeSelectVertices(new Vector2(0, 0), new Vector2(20, 20), MarqueeSelectionMode.Add);
+
+        Assert.True(inside.IsSelected);
+        Assert.True(alreadySelected.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectVertices_SubtractMode_RemovesOnlyRectangleContents()
+    {
+        var map = new MapData();
+        var inside = map.CreateVertex(new Vector2(10, 10));
+        var outside = map.CreateVertex(new Vector2(100, 100));
+        map.SelectOnly(inside);
+        map.ToggleSelect(outside);
+
+        map.MarqueeSelectVertices(new Vector2(0, 0), new Vector2(20, 20), MarqueeSelectionMode.Subtract);
+
+        Assert.False(inside.IsSelected);
+        Assert.True(outside.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectVertices_IntersectMode_KeepsOnlySelectedAndInsideRectangle()
+    {
+        var map = new MapData();
+        var insideSelected = map.CreateVertex(new Vector2(10, 10));
+        var insideUnselected = map.CreateVertex(new Vector2(11, 11));
+        var outsideSelected = map.CreateVertex(new Vector2(100, 100));
+        map.SelectOnly(insideSelected);
+        map.ToggleSelect(outsideSelected);
+
+        map.MarqueeSelectVertices(new Vector2(0, 0), new Vector2(20, 20), MarqueeSelectionMode.Intersect);
+
+        Assert.True(insideSelected.IsSelected);
+        Assert.False(insideUnselected.IsSelected);
+        Assert.False(outsideSelected.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectLinedefs_Default_RequiresBothEndpointsInside()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(0, 0));
+        var v2 = map.CreateVertex(new Vector2(10, 0));
+        var v3 = map.CreateVertex(new Vector2(100, 0));
+        var sector = map.CreateSector(0, 128);
+        var bothInside = map.CreateLinedef(v1, v2, front: sector, back: null);
+        var oneOutside = map.CreateLinedef(v2, v3, front: sector, back: null);
+
+        map.MarqueeSelectLinedefs(new Vector2(-5, -5), new Vector2(15, 5), MarqueeSelectionMode.Select, touching: false);
+
+        Assert.True(bothInside.IsSelected);
+        Assert.False(oneOutside.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectLinedefs_Touching_SelectsLinedefWithOnlyOneEndpointInside()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(0, 0));
+        var v2 = map.CreateVertex(new Vector2(10, 0));
+        var v3 = map.CreateVertex(new Vector2(100, 0));
+        var sector = map.CreateSector(0, 128);
+        var oneOutside = map.CreateLinedef(v2, v3, front: sector, back: null);
+
+        map.MarqueeSelectLinedefs(new Vector2(-5, -5), new Vector2(15, 5), MarqueeSelectionMode.Select, touching: true);
+
+        Assert.True(oneOutside.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectLinedefs_Touching_SelectsLinedefCrossingRectangleWithBothEndpointsOutside()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(-100, 0));
+        var v2 = map.CreateVertex(new Vector2(100, 0));
+        var sector = map.CreateSector(0, 128);
+        var crossing = map.CreateLinedef(v1, v2, front: sector, back: null);
+
+        map.MarqueeSelectLinedefs(new Vector2(-10, -10), new Vector2(10, 10), MarqueeSelectionMode.Select, touching: true);
+
+        Assert.True(crossing.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectLinedefs_Touching_DoesNotSelectALinedefEntirelyOutsideAndNotCrossing()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(50, 50));
+        var v2 = map.CreateVertex(new Vector2(60, 60));
+        var sector = map.CreateSector(0, 128);
+        var farAway = map.CreateLinedef(v1, v2, front: sector, back: null);
+
+        map.MarqueeSelectLinedefs(new Vector2(-10, -10), new Vector2(10, 10), MarqueeSelectionMode.Select, touching: true);
+
+        Assert.False(farAway.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectSectors_Default_RequiresEveryVertexInside()
+    {
+        var map = new MapData();
+        var (sector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+
+        map.MarqueeSelectSectors(new Vector2(-10, -10), new Vector2(100, 100), MarqueeSelectionMode.Select, touching: false);
+
+        Assert.True(sector.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectSectors_Default_OneVertexOutsideDisqualifies()
+    {
+        var map = new MapData();
+        var (sector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+
+        map.MarqueeSelectSectors(new Vector2(-10, -10), new Vector2(50, 50), MarqueeSelectionMode.Select, touching: false);
+
+        Assert.False(sector.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectSectors_ResyncsBorderingLinedefSelectionAfterward()
+    {
+        var map = new MapData();
+        var (sector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+
+        map.MarqueeSelectSectors(new Vector2(-10, -10), new Vector2(100, 100), MarqueeSelectionMode.Select, touching: false);
+
+        Assert.All(sector.Sidedefs, sd => Assert.True(sd.Linedef.IsSelected));
+    }
+
+    [Fact]
+    public void MarqueeSelectSectors_Touching_SelectsSectorWithOnlyPartialOverlap()
+    {
+        var map = new MapData();
+        var (sector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+
+        map.MarqueeSelectSectors(new Vector2(-10, -10), new Vector2(10, 10), MarqueeSelectionMode.Select, touching: true);
+
+        Assert.True(sector.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectSectors_Touching_DoesNotSelectASectorWithNoOverlapAtAll()
+    {
+        var map = new MapData();
+        var (sector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+
+        map.MarqueeSelectSectors(new Vector2(500, 500), new Vector2(600, 600), MarqueeSelectionMode.Select, touching: true);
+
+        Assert.False(sector.IsSelected);
+    }
+
+    [Fact]
+    public void MarqueeSelectThings_SelectsByPositionInsideRectangle()
+    {
+        var map = new MapData();
+        var inside = map.CreateThing(new Vector2(10, 10), type: 1);
+        var outside = map.CreateThing(new Vector2(100, 100), type: 1);
+
+        map.MarqueeSelectThings(new Vector2(0, 0), new Vector2(20, 20), MarqueeSelectionMode.Select);
+
+        Assert.True(inside.IsSelected);
+        Assert.False(outside.IsSelected);
+    }
 }

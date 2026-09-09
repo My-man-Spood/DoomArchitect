@@ -11,12 +11,17 @@ using MapVector2 = System.Numerics.Vector2;
 
 /// <summary>
 /// Screen-space gizmo layer for the 2D (top-down) view: grid, vertices,
-/// linedefs, and a sector fill highlight, plus the per-mode hover/drag
-/// interactions for whichever of those <see cref="Mode"/> currently
-/// targets. Deliberately separate from the 3D floor/ceiling meshes -
-/// projected fresh from map-space via <see cref="Camera3D.UnprojectPosition"/>
-/// every frame instead of baked into world geometry, so it stays crisp at
-/// any zoom.
+/// linedefs, and a sector fill highlight, plus the per-mode hover/select/
+/// drag interactions for whichever of those <see cref="Mode"/> currently
+/// targets. Left-click only ever selects (toggles the clicked element,
+/// never moves anything); right-click-drag is the only thing that moves
+/// geometry, matching UDB's own real button split exactly - pressing on
+/// an unselected element replaces the selection with just that one before
+/// dragging it, pressing on an already-selected element drags the entire
+/// current selection together. Deliberately separate from the 3D floor/
+/// ceiling meshes - projected fresh from map-space via
+/// <see cref="Camera3D.UnprojectPosition"/> every frame instead of baked
+/// into world geometry, so it stays crisp at any zoom.
 /// </summary>
 public partial class MapOverlay : Control
 {
@@ -52,6 +57,12 @@ public partial class MapOverlay : Control
 	/// <summary>Persistent multi-selection tint - always drawn in place of the base color, but hover always wins over it (see <see cref="DrawVertices"/>/<see cref="DrawLinedefs"/>/<see cref="DrawThings"/>).</summary>
 	private static readonly Color SelectedColor = new(0.9f, 0.15f, 0.15f);
 	private static readonly Color SectorSelectedHighlightColor = new(0.9f, 0.15f, 0.15f, 0.18f);
+
+	/// <summary>One color per <see cref="MarqueeSelectionMode"/>, matching which combine mode the current marquee drag would apply on release (see <see cref="GetMarqueeSelectionMode"/>) - this project's own color choices, not a port of UDB's actual theme values.</summary>
+	private static readonly Color MarqueeSelectColor = new(0.9f, 0.9f, 0.9f);
+	private static readonly Color MarqueeAddColor = new(0.3f, 0.9f, 0.3f);
+	private static readonly Color MarqueeSubtractColor = new(0.9f, 0.3f, 0.3f);
+	private static readonly Color MarqueeIntersectColor = new(0.6f, 0.4f, 0.9f);
 
 	public MapData Map { get; set; }
 	public Camera3D Camera { get; set; }
@@ -94,6 +105,17 @@ public partial class MapOverlay : Control
 
 	public float GridSize { get; set; } = DefaultGridSize;
 
+	/// <summary>
+	/// Whether a Linedefs/Sectors-mode marquee selects anything merely
+	/// touching the rectangle (default UDB's real "select inside" mode
+	/// only selects fully-enclosed elements) - matches UDB's own real
+	/// <c>MarqueSelectTouching</c> toggle exactly: session-only, never
+	/// persisted, defaults off. Meaningless for Vertices/Things (a single
+	/// point has no touching-vs-enclosed distinction), so their marquee
+	/// methods never read this.
+	/// </summary>
+	public bool MarqueeSelectTouching { get; set; }
+
 	private Texture2D _thingIcon;
 	private Texture2D _thingIconNoDirection;
 
@@ -132,24 +154,96 @@ public partial class MapOverlay : Control
 		if (GridSize >= MinGridSize * 2) GridSize /= 2f;
 	}
 
-	private Vertex _draggedVertex;
 	private Vertex _hoveredVertex;
-	private MapVector2 _dragStartVertexPosition;
-
-	private Linedef _draggedLinedef;
 	private Linedef _hoveredLinedef;
-
-	private Sector _draggedSector;
 	private Sector _hoveredSector;
-
-	private Thing _draggedThing;
 	private Thing _hoveredThing;
-	private MapVector2 _dragStartThingPosition;
 
+	/// <summary>
+	/// Every field below is null when no right-button drag is in progress
+	/// for that mode, else a snapshot of each dragged element's start
+	/// position - the whole selection when the pressed element was
+	/// already selected, just that one element otherwise (see each
+	/// <c>Handle*Input</c>'s right-button press case). Shared
+	/// <see cref="_dragOrigin"/> is the snapped mouse position at press
+	/// time, common to all four.
+	/// </summary>
 	private MapVector2 _dragOrigin;
-	private MapVector2 _dragStartLineStart;
-	private MapVector2 _dragStartLineEnd;
+	private Dictionary<Vertex, MapVector2> _dragStartVertices;
+	private Dictionary<Vertex, MapVector2> _dragStartLinedefVertices;
 	private Dictionary<Vertex, MapVector2> _dragStartSectorVertices;
+	private Dictionary<Thing, MapVector2> _dragStartThings;
+
+	private const float MarqueeStartThresholdPixels = 2f; // matches UDB's own MouseSelectionThreshold default
+	private const float MarqueeMinSize = 0.1f; // matches UDB's own selectionvolume guard
+
+	/// <summary>
+	/// Left-button marquee/box-select tracking - a separate concept from
+	/// the right-button move-drag fields above, shared across all four
+	/// modes since there's only ever one marquee in flight regardless of
+	/// which mode is active. <see cref="_selecting"/> only becomes true
+	/// once the drag has moved more than <see cref="MarqueeStartThresholdPixels"/>
+	/// from the press point - below that, releasing the button is a plain
+	/// click (see each <c>Handle*Input</c>'s left-button cases).
+	/// </summary>
+	private Vector2 _selectPressScreen;
+	private MapVector2 _selectStartMap;
+	private MapVector2 _selectEndMap;
+	private bool _selecting;
+
+	/// <summary>Ported from UDB's real <c>BaseClassicMode.GetMultiSelectionMode</c>.</summary>
+	private static MarqueeSelectionMode GetMarqueeSelectionMode()
+	{
+		var ctrl = Input.IsKeyPressed(Key.Ctrl);
+		var shift = Input.IsKeyPressed(Key.Shift);
+		if (ctrl && shift) return MarqueeSelectionMode.Intersect;
+		if (ctrl) return MarqueeSelectionMode.Subtract;
+		if (shift) return MarqueeSelectionMode.Add;
+		return MarqueeSelectionMode.Select;
+	}
+
+	/// <summary>Left-button press: record where a marquee would start from, without yet deciding whether this becomes a click or a drag.</summary>
+	private void BeginMarqueeOrClick(Vector2 screenPosition)
+	{
+		_selectPressScreen = screenPosition;
+		_selectStartMap = Unproject(screenPosition);
+		_selectEndMap = _selectStartMap;
+		_selecting = false;
+	}
+
+	/// <summary>
+	/// Call on every left-button-held motion event. Crosses into
+	/// "selecting" once past <see cref="MarqueeStartThresholdPixels"/> and
+	/// keeps the live rectangle updated from then on. Returns whether a
+	/// marquee is (now) in progress, so the caller knows not to also
+	/// update hover this frame - matches the existing "hover freezes
+	/// during a drag" convention already used for right-button move-drags.
+	/// </summary>
+	private bool UpdateMarquee(Vector2 screenPosition)
+	{
+		if (!_selecting && _selectPressScreen.DistanceTo(screenPosition) > MarqueeStartThresholdPixels)
+		{
+			_selecting = true;
+		}
+
+		if (!_selecting) return false;
+
+		_selectEndMap = Unproject(screenPosition);
+		return true;
+	}
+
+	/// <summary>Left-button release while a marquee was in progress: applies the combine mode over the final rectangle, unless it's too small to have been a real drag (matches UDB's own <c>selectionvolume</c> guard).</summary>
+	private void EndMarquee(System.Action<MapVector2, MapVector2> applySelection)
+	{
+		var min = MapVector2.Min(_selectStartMap, _selectEndMap);
+		var max = MapVector2.Max(_selectStartMap, _selectEndMap);
+		if (max.X - min.X > MarqueeMinSize && max.Y - min.Y > MarqueeMinSize)
+		{
+			applySelection(min, max);
+		}
+
+		_selecting = false;
+	}
 
 	/// <summary>
 	/// Ported from UDB's own <c>ShiftState ^ SnapToGrid</c> pattern (used
@@ -182,6 +276,24 @@ public partial class MapOverlay : Control
 			else if (wheel.ButtonIndex == MouseButton.WheelDown) ZoomAt(wheel.Position, 1f / ZoomFactor);
 		}
 
+		// Space-held pans the view (UDB's own real "pan_view" action - held
+		// key + mouse move, no button needed at all) and suppresses every
+		// other mouse interaction for as long as it's held, matching UDB's
+		// own per-mode "if(panning) return;" guard at the top of its
+		// OnMouseMove - here centralized once instead of once per mode,
+		// since this project doesn't have separate mode classes to guard
+		// individually. Deliberately a stricter suppression than UDB's own
+		// (which only guards hover/marquee/drag-threshold logic, not the
+		// button-press handlers themselves) - simpler, and avoids any
+		// chance of also starting a select/drag/marquee gesture while
+		// panning, which is straightforwardly better than replicating
+		// UDB's own partial guard.
+		if (Input.IsKeyPressed(Key.Space))
+		{
+			if (@event is InputEventMouseMotion motion) PanView(motion);
+			return;
+		}
+
 		switch (Mode)
 		{
 			case EditMode.Vertices:
@@ -204,29 +316,50 @@ public partial class MapOverlay : Control
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
-				_draggedVertex = FindVertexNear(press.Position);
-				_hoveredVertex = _draggedVertex;
-				if (_draggedVertex != null)
-				{
-					_dragStartVertexPosition = _draggedVertex.Position;
-					Map.ToggleSelect(_draggedVertex);
-				}
-				else
-				{
-					Map.ClearSelectedVertices();
-				}
+				BeginMarqueeOrClick(press.Position);
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-				if (_draggedVertex != null && _draggedVertex.Position != _dragStartVertexPosition)
+				if (_selecting)
 				{
-					UndoStack.Record(new MoveVertexCommand(
-						Map, _draggedVertex, _dragStartVertexPosition, _draggedVertex.Position));
+					EndMarquee((min, max) => Map.MarqueeSelectVertices(min, max, GetMarqueeSelectionMode()));
 				}
-
-				_draggedVertex = null;
+				else if (_hoveredVertex != null) Map.ToggleSelect(_hoveredVertex);
+				else Map.ClearSelectedVertices();
 				break;
-			case InputEventMouseMotion motion when _draggedVertex != null:
-				Map.MoveVertex(_draggedVertex, SnapIfEnabled(Unproject(motion.Position)));
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } press:
+				var target = FindVertexNear(press.Position);
+				_hoveredVertex = target;
+				if (target != null)
+				{
+					if (!target.IsSelected) Map.SelectOnly(target);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
+					_dragStartVertices = Map.GetSelectedVertices().ToDictionary(v => v, v => v.Position);
+				}
+				break;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false }:
+				if (_dragStartVertices != null)
+				{
+					if (_dragStartVertices.Any(kvp => kvp.Key.Position != kvp.Value))
+					{
+						var commands = _dragStartVertices
+							.Select(kvp => (ICommand)new MoveVertexCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
+							.ToList();
+						UndoStack.Record(new CommandGroup(commands));
+					}
+
+					_dragStartVertices = null;
+				}
+				break;
+			case InputEventMouseMotion motion when _dragStartVertices != null:
+				var delta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
+				foreach (var (vertex, startPosition) in _dragStartVertices)
+				{
+					Map.MoveVertex(vertex, startPosition + delta);
+				}
+				break;
+			case InputEventMouseMotion motion when motion.ButtonMask.HasFlag(MouseButtonMask.Left):
+				if (UpdateMarquee(motion.Position)) break;
+				_hoveredVertex = FindVertexNear(motion.Position);
 				break;
 			case InputEventMouseMotion motion:
 				_hoveredVertex = FindVertexNear(motion.Position);
@@ -239,40 +372,53 @@ public partial class MapOverlay : Control
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
-				_draggedLinedef = FindLinedefNear(press.Position);
-				_hoveredLinedef = _draggedLinedef;
-				if (_draggedLinedef != null)
-				{
-					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
-					_dragStartLineStart = _draggedLinedef.Start.Position;
-					_dragStartLineEnd = _draggedLinedef.End.Position;
-					Map.ToggleSelect(_draggedLinedef);
-				}
-				else
-				{
-					Map.ClearSelectedLinedefs();
-				}
+				BeginMarqueeOrClick(press.Position);
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-				if (_draggedLinedef != null &&
-					(_draggedLinedef.Start.Position != _dragStartLineStart ||
-					 _draggedLinedef.End.Position != _dragStartLineEnd))
+				if (_selecting)
 				{
-					UndoStack.Record(new CommandGroup(new ICommand[]
-					{
-						new MoveVertexCommand(
-							Map, _draggedLinedef.Start, _dragStartLineStart, _draggedLinedef.Start.Position),
-						new MoveVertexCommand(
-							Map, _draggedLinedef.End, _dragStartLineEnd, _draggedLinedef.End.Position),
-					}));
+					EndMarquee((min, max) => Map.MarqueeSelectLinedefs(min, max, GetMarqueeSelectionMode(), MarqueeSelectTouching));
 				}
-
-				_draggedLinedef = null;
+				else if (_hoveredLinedef != null) Map.ToggleSelect(_hoveredLinedef);
+				else Map.ClearSelectedLinedefs();
 				break;
-			case InputEventMouseMotion motion when _draggedLinedef != null:
-				var lineDelta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
-				Map.MoveVertex(_draggedLinedef.Start, _dragStartLineStart + lineDelta);
-				Map.MoveVertex(_draggedLinedef.End, _dragStartLineEnd + lineDelta);
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } press:
+				var target = FindLinedefNear(press.Position);
+				_hoveredLinedef = target;
+				if (target != null)
+				{
+					if (!target.IsSelected) Map.SelectOnly(target);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
+					_dragStartLinedefVertices = Map.GetSelectedLinedefs()
+						.SelectMany(l => new[] { l.Start, l.End })
+						.Distinct()
+						.ToDictionary(v => v, v => v.Position);
+				}
+				break;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false }:
+				if (_dragStartLinedefVertices != null)
+				{
+					if (_dragStartLinedefVertices.Any(kvp => kvp.Key.Position != kvp.Value))
+					{
+						var commands = _dragStartLinedefVertices
+							.Select(kvp => (ICommand)new MoveVertexCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
+							.ToList();
+						UndoStack.Record(new CommandGroup(commands));
+					}
+
+					_dragStartLinedefVertices = null;
+				}
+				break;
+			case InputEventMouseMotion motion when _dragStartLinedefVertices != null:
+				var delta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
+				foreach (var (vertex, startPosition) in _dragStartLinedefVertices)
+				{
+					Map.MoveVertex(vertex, startPosition + delta);
+				}
+				break;
+			case InputEventMouseMotion motion when motion.ButtonMask.HasFlag(MouseButtonMask.Left):
+				if (UpdateMarquee(motion.Position)) break;
+				_hoveredLinedef = FindLinedefNear(motion.Position);
 				break;
 			case InputEventMouseMotion motion:
 				_hoveredLinedef = FindLinedefNear(motion.Position);
@@ -285,38 +431,53 @@ public partial class MapOverlay : Control
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
-				_draggedSector = FindSectorAt(press.Position);
-				_hoveredSector = _draggedSector;
-				if (_draggedSector != null)
-				{
-					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
-					_dragStartSectorVertices = SectorVertices(_draggedSector).ToDictionary(v => v, v => v.Position);
-					Map.ToggleSelect(_draggedSector);
-				}
-				else
-				{
-					Map.ClearSelectedSectors();
-				}
+				BeginMarqueeOrClick(press.Position);
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-				if (_draggedSector != null &&
-					_dragStartSectorVertices.Any(kvp => kvp.Key.Position != kvp.Value))
+				if (_selecting)
 				{
-					var commands = _dragStartSectorVertices
-						.Select(kvp => (ICommand)new MoveVertexCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
-						.ToList();
-					UndoStack.Record(new CommandGroup(commands));
+					EndMarquee((min, max) => Map.MarqueeSelectSectors(min, max, GetMarqueeSelectionMode(), MarqueeSelectTouching));
 				}
-
-				_draggedSector = null;
-				_dragStartSectorVertices = null;
+				else if (_hoveredSector != null) Map.ToggleSelect(_hoveredSector);
+				else Map.ClearSelectedSectors();
 				break;
-			case InputEventMouseMotion motion when _draggedSector != null:
-				var sectorDelta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } press:
+				var target = FindSectorAt(press.Position);
+				_hoveredSector = target;
+				if (target != null)
+				{
+					if (!target.IsSelected) Map.SelectOnly(target);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
+					_dragStartSectorVertices = Map.GetSelectedSectors()
+						.SelectMany(SectorVertices)
+						.Distinct()
+						.ToDictionary(v => v, v => v.Position);
+				}
+				break;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false }:
+				if (_dragStartSectorVertices != null)
+				{
+					if (_dragStartSectorVertices.Any(kvp => kvp.Key.Position != kvp.Value))
+					{
+						var commands = _dragStartSectorVertices
+							.Select(kvp => (ICommand)new MoveVertexCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
+							.ToList();
+						UndoStack.Record(new CommandGroup(commands));
+					}
+
+					_dragStartSectorVertices = null;
+				}
+				break;
+			case InputEventMouseMotion motion when _dragStartSectorVertices != null:
+				var delta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
 				foreach (var (vertex, startPosition) in _dragStartSectorVertices)
 				{
-					Map.MoveVertex(vertex, startPosition + sectorDelta);
+					Map.MoveVertex(vertex, startPosition + delta);
 				}
+				break;
+			case InputEventMouseMotion motion when motion.ButtonMask.HasFlag(MouseButtonMask.Left):
+				if (UpdateMarquee(motion.Position)) break;
+				_hoveredSector = FindSectorAt(motion.Position);
 				break;
 			case InputEventMouseMotion motion:
 				_hoveredSector = FindSectorAt(motion.Position);
@@ -329,29 +490,50 @@ public partial class MapOverlay : Control
 		switch (@event)
 		{
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
-				_draggedThing = FindThingNear(press.Position);
-				_hoveredThing = _draggedThing;
-				if (_draggedThing != null)
-				{
-					_dragStartThingPosition = _draggedThing.Position;
-					Map.ToggleSelect(_draggedThing);
-				}
-				else
-				{
-					Map.ClearSelectedThings();
-				}
+				BeginMarqueeOrClick(press.Position);
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
-				if (_draggedThing != null && _draggedThing.Position != _dragStartThingPosition)
+				if (_selecting)
 				{
-					UndoStack.Record(new MoveThingCommand(
-						Map, _draggedThing, _dragStartThingPosition, _draggedThing.Position));
+					EndMarquee((min, max) => Map.MarqueeSelectThings(min, max, GetMarqueeSelectionMode()));
 				}
-
-				_draggedThing = null;
+				else if (_hoveredThing != null) Map.ToggleSelect(_hoveredThing);
+				else Map.ClearSelectedThings();
 				break;
-			case InputEventMouseMotion motion when _draggedThing != null:
-				Map.MoveThing(_draggedThing, SnapIfEnabled(Unproject(motion.Position)));
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } press:
+				var target = FindThingNear(press.Position);
+				_hoveredThing = target;
+				if (target != null)
+				{
+					if (!target.IsSelected) Map.SelectOnly(target);
+					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
+					_dragStartThings = Map.GetSelectedThings().ToDictionary(t => t, t => t.Position);
+				}
+				break;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: false }:
+				if (_dragStartThings != null)
+				{
+					if (_dragStartThings.Any(kvp => kvp.Key.Position != kvp.Value))
+					{
+						var commands = _dragStartThings
+							.Select(kvp => (ICommand)new MoveThingCommand(Map, kvp.Key, kvp.Value, kvp.Key.Position))
+							.ToList();
+						UndoStack.Record(new CommandGroup(commands));
+					}
+
+					_dragStartThings = null;
+				}
+				break;
+			case InputEventMouseMotion motion when _dragStartThings != null:
+				var delta = SnapIfEnabled(Unproject(motion.Position)) - _dragOrigin;
+				foreach (var (thing, startPosition) in _dragStartThings)
+				{
+					Map.MoveThing(thing, startPosition + delta);
+				}
+				break;
+			case InputEventMouseMotion motion when motion.ButtonMask.HasFlag(MouseButtonMask.Left):
+				if (UpdateMarquee(motion.Position)) break;
+				_hoveredThing = FindThingNear(motion.Position);
 				break;
 			case InputEventMouseMotion motion:
 				_hoveredThing = FindThingNear(motion.Position);
@@ -461,6 +643,24 @@ public partial class MapOverlay : Control
 		if (DynamicGridSizeEnabled) ApplyDynamicGridSize();
 	}
 
+	/// <summary>
+	/// Grab-and-drag view panning while Space is held - a direct port of
+	/// UDB's own real <c>ClassicMode.OnUpdateViewPanning</c>/
+	/// <c>ScrollBy(lastmappos - mousemappos)</c>: the map point that was
+	/// under the cursor before this motion event ends up under the cursor
+	/// again after it, at whatever the current zoom's screen-to-map ratio
+	/// is - no separate pan speed to tune. Reuses the exact same
+	/// before/after-unproject-then-shift-camera trick <see cref="ZoomAt"/>
+	/// already established for keeping a point fixed under the cursor,
+	/// just for a translation instead of a zoom change.
+	/// </summary>
+	private void PanView(InputEventMouseMotion motion)
+	{
+		var before = Unproject(motion.Position - motion.Relative);
+		var after = Unproject(motion.Position);
+		Camera.Position += (before - after).ToWorld(0f);
+	}
+
 	/// <summary>Ported from UDB's <c>ClassicMode.MatchGridSizeToDisplayScale</c>, called on every zoom change.</summary>
 	private void ApplyDynamicGridSize()
 	{
@@ -479,6 +679,33 @@ public partial class MapOverlay : Control
 		DrawLinedefs();
 		DrawVertices();
 		DrawThings();
+		DrawMarquee();
+	}
+
+	/// <summary>
+	/// The live marquee rectangle while a left-button drag is in progress
+	/// - an unfilled outline, matching UDB's own real
+	/// <c>ClassicMode.RenderMultiSelection</c> (a border-only rectangle,
+	/// not a filled one). Color reflects whichever combine mode would
+	/// apply if released right now, so the modifier-key feedback is live.
+	/// </summary>
+	private void DrawMarquee()
+	{
+		if (!_selecting) return;
+
+		var color = GetMarqueeSelectionMode() switch
+		{
+			MarqueeSelectionMode.Add => MarqueeAddColor,
+			MarqueeSelectionMode.Subtract => MarqueeSubtractColor,
+			MarqueeSelectionMode.Intersect => MarqueeIntersectColor,
+			_ => MarqueeSelectColor,
+		};
+
+		var a = Project(_selectStartMap);
+		var b = Project(_selectEndMap);
+		var min = new Vector2(Mathf.Min(a.X, b.X), Mathf.Min(a.Y, b.Y));
+		var max = new Vector2(Mathf.Max(a.X, b.X), Mathf.Max(a.Y, b.Y));
+		DrawRect(new Rect2(min, max - min), color, false, 2f);
 	}
 
 	/// <summary>
@@ -552,11 +779,35 @@ public partial class MapOverlay : Control
 			{
 				foreach (var (a, b, c) in EarClipper.Clip(polygon))
 				{
-					DrawColoredPolygon(new[] { Project(a), Project(b), Project(c) }, color);
+					var pa = Project(a);
+					var pb = Project(b);
+					var pc = Project(c);
+					if (IsDegenerateTriangle(pa, pb, pc)) continue;
+					DrawColoredPolygon(new[] { pa, pb, pc }, color);
 				}
 			}
 		}
 	}
+
+	/// <summary>
+	/// A real ear-clipped triangle from valid map geometry should never be
+	/// degenerate, but projecting to screen space can still collapse one
+	/// to zero area (or produce a non-finite point) for a sector whose
+	/// vertices happen to coincide at that instant - e.g. mid-drag, before
+	/// a vertex has moved away from one it started stacked on. Godot's own
+	/// <see cref="DrawColoredPolygon"/> hard-crashes on a zero-area input
+	/// ("Invalid polygon data, triangulation failed") rather than silently
+	/// skipping it, so this has to be caught before the call, not after.
+	/// </summary>
+	private static bool IsDegenerateTriangle(Vector2 a, Vector2 b, Vector2 c)
+	{
+		if (!IsFinite(a) || !IsFinite(b) || !IsFinite(c)) return true;
+
+		var area = (b.X - a.X) * (c.Y - a.Y) - (b.Y - a.Y) * (c.X - a.X);
+		return Mathf.Abs(area) < 0.01f;
+	}
+
+	private static bool IsFinite(Vector2 v) => float.IsFinite(v.X) && float.IsFinite(v.Y);
 
 	private void DrawLinedefs()
 	{

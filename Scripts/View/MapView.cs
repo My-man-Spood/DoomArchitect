@@ -78,7 +78,7 @@ public partial class MapView : Node3D
 		var openMapMenu = GetNode<OpenMapMenu>("UI/OpenMapMenu");
 		openMapMenu.MapLoaded += LoadMap;
 		openMapMenu.MapResourcesChanged += RefreshResources;
-		GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar").Initialize(openMapMenu);
+		GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar").Initialize(openMapMenu, _overlay);
 
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.

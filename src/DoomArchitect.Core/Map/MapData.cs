@@ -1,4 +1,5 @@
 using System.Numerics;
+using DoomArchitect.Core.Geometry;
 
 namespace DoomArchitect.Core.Map;
 
@@ -320,6 +321,130 @@ public sealed class MapData
             {
                 foreach (var sidedef in sector.Sidedefs) sidedef.Linedef.IsSelected = true;
             }
+        }
+    }
+
+    // Marquee/box-select - a close port of UDB's real per-mode marquee
+    // hit-tests and 4-case SELECT/ADD/SUBTRACT/INTERSECT apply logic
+    // (BaseClassicMode.GetMultiSelectionMode + each classic mode's own
+    // OnEndMultiSelection). Vertices/Things take no "touching" parameter
+    // at all - a single point has no fully-enclosed-vs-crossing
+    // distinction to make, matching UDB's own real scope (its touching
+    // toggle only ever appears in Linedefs/Sectors mode toolbars).
+
+    public void MarqueeSelectVertices(Vector2 min, Vector2 max, MarqueeSelectionMode mode)
+    {
+        foreach (var vertex in _vertices)
+        {
+            var inside = Contains(min, max, vertex.Position);
+            ApplyMarquee(inside, mode, v => vertex.IsSelected = v);
+        }
+    }
+
+    public void MarqueeSelectLinedefs(Vector2 min, Vector2 max, MarqueeSelectionMode mode, bool touching)
+    {
+        foreach (var linedef in _linedefs)
+        {
+            var inside = IsLinedefInRect(linedef, min, max, touching);
+            ApplyMarquee(inside, mode, v => linedef.IsSelected = v);
+        }
+    }
+
+    public void MarqueeSelectSectors(Vector2 min, Vector2 max, MarqueeSelectionMode mode, bool touching)
+    {
+        foreach (var sector in _sectors)
+        {
+            var vertices = SectorTracer.Trace(sector).SelectMany(loop => loop.Vertices).Distinct().ToList();
+            var inside = IsSectorInRect(sector, vertices, min, max, touching);
+            ApplyMarquee(inside, mode, v => sector.IsSelected = v);
+        }
+
+        foreach (var sector in _sectors) ResyncSectorBoundarySelection(sector);
+    }
+
+    public void MarqueeSelectThings(Vector2 min, Vector2 max, MarqueeSelectionMode mode)
+    {
+        foreach (var thing in _things)
+        {
+            var inside = Contains(min, max, thing.Position);
+            ApplyMarquee(inside, mode, v => thing.IsSelected = v);
+        }
+    }
+
+    /// <summary>
+    /// Default (non-touching): both endpoints must be inside. Touching:
+    /// either endpoint inside, or the segment crosses a rectangle edge
+    /// with both endpoints outside - matches UDB's real
+    /// <c>LinedefsMode.IsInSelectionRect</c>.
+    /// </summary>
+    private static bool IsLinedefInRect(Linedef linedef, Vector2 min, Vector2 max, bool touching)
+    {
+        var startInside = Contains(min, max, linedef.Start.Position);
+        var endInside = Contains(min, max, linedef.End.Position);
+        if (!touching) return startInside && endInside;
+
+        return startInside || endInside
+            || IntersectsRectEdge(linedef.Start.Position, linedef.End.Position, min, max);
+    }
+
+    /// <summary>
+    /// Default (non-touching): every vertex of the sector must be inside
+    /// (equivalent to UDB's real "bounding box fully contained" test).
+    /// Touching: a fully-enclosed sector still always counts; otherwise
+    /// selected if any bordering linedef has an endpoint inside the rect
+    /// or crosses one of its edges - matches UDB's real
+    /// <c>SectorsMode.IsInSelectionRect</c>.
+    /// </summary>
+    private static bool IsSectorInRect(Sector sector, List<Vertex> vertices, Vector2 min, Vector2 max, bool touching)
+    {
+        if (vertices.Count == 0) return false;
+        if (vertices.All(v => Contains(min, max, v.Position))) return true;
+
+        if (!touching) return false;
+
+        foreach (var sidedef in sector.Sidedefs)
+        {
+            if (Contains(min, max, sidedef.Linedef.Start.Position) || Contains(min, max, sidedef.Linedef.End.Position))
+            {
+                return true;
+            }
+        }
+
+        foreach (var sidedef in sector.Sidedefs)
+        {
+            if (IntersectsRectEdge(sidedef.Linedef.Start.Position, sidedef.Linedef.End.Position, min, max))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IntersectsRectEdge(Vector2 a, Vector2 b, Vector2 min, Vector2 max)
+    {
+        var topLeft = new Vector2(min.X, min.Y);
+        var topRight = new Vector2(max.X, min.Y);
+        var bottomRight = new Vector2(max.X, max.Y);
+        var bottomLeft = new Vector2(min.X, max.Y);
+
+        return SegmentIntersection.Intersects(a, b, topLeft, topRight)
+            || SegmentIntersection.Intersects(a, b, topRight, bottomRight)
+            || SegmentIntersection.Intersects(a, b, bottomRight, bottomLeft)
+            || SegmentIntersection.Intersects(a, b, bottomLeft, topLeft);
+    }
+
+    private static bool Contains(Vector2 min, Vector2 max, Vector2 point) =>
+        point.X >= min.X && point.X <= max.X && point.Y >= min.Y && point.Y <= max.Y;
+
+    private static void ApplyMarquee(bool inside, MarqueeSelectionMode mode, Action<bool> setSelected)
+    {
+        switch (mode)
+        {
+            case MarqueeSelectionMode.Select: setSelected(inside); break;
+            case MarqueeSelectionMode.Add: if (inside) setSelected(true); break;
+            case MarqueeSelectionMode.Subtract: if (inside) setSelected(false); break;
+            case MarqueeSelectionMode.Intersect: if (!inside) setSelected(false); break;
         }
     }
 }

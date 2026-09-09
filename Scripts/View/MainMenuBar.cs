@@ -12,11 +12,13 @@ using Godot;
 public partial class MainMenuBar : MenuBar
 {
 	private OpenMapMenu _openMapMenu;
+	private MapOverlay _overlay;
 	private PreferencesDialog _preferencesDialog;
 
-	public void Initialize(OpenMapMenu openMapMenu)
+	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
 	{
 		_openMapMenu = openMapMenu;
+		_overlay = overlay;
 
 		var fileMenu = GetNode<PopupMenu>("File");
 		fileMenu.AddItem("Open Map...", 0);
@@ -37,6 +39,37 @@ public partial class MainMenuBar : MenuBar
 		preferencesMenu.IdPressed += id =>
 		{
 			if (id == 0) OpenPreferences();
+		};
+
+		InitializeSelectionBoxMenu(preferencesMenu);
+	}
+
+	/// <summary>
+	/// "Select Inside"/"Select Touching" - real UDB terminology (its own
+	/// toolbar button is literally labeled "Select Touching", with the
+	/// off state referred to as "select inside" in its own tooltip/status
+	/// text), moved here into a Preferences submenu instead of UDB's real
+	/// per-mode toolbar button placement since this project's menu bar is
+	/// where settings-like toggles already live. Session-only, matching
+	/// UDB's own real behavior - see <see cref="MapOverlay.MarqueeSelectTouching"/>.
+	/// Godot doesn't auto-enforce mutual exclusion between radio-checkable
+	/// items, even adjacent ones, so both checkmarks are set explicitly on
+	/// every press.
+	/// </summary>
+	private void InitializeSelectionBoxMenu(PopupMenu preferencesMenu)
+	{
+		var selectionBoxMenu = GetNode<PopupMenu>("Preferences/SelectionBox");
+		preferencesMenu.AddSubmenuNodeItem("Selection Box", selectionBoxMenu);
+
+		selectionBoxMenu.AddRadioCheckItem("Select Inside", 0);
+		selectionBoxMenu.AddRadioCheckItem("Select Touching", 1);
+		selectionBoxMenu.SetItemChecked(0, true);
+
+		selectionBoxMenu.IdPressed += id =>
+		{
+			_overlay.MarqueeSelectTouching = id == 1;
+			selectionBoxMenu.SetItemChecked(0, id == 0);
+			selectionBoxMenu.SetItemChecked(1, id == 1);
 		};
 	}
 

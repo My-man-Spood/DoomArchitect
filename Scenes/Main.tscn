@@ -80,6 +80,8 @@ script = ExtResource("12")
 
 [node name="Preferences" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar" unique_id=1882479314]
 
+[node name="SelectionBox" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar/Preferences"]
+
 [node name="ToolbarMargin" type="MarginContainer" parent="UI/TopBar" unique_id=1380224137]
 layout_mode = 2
 theme_override_constants/margin_left = 5

@@ -1122,6 +1122,122 @@ file just tracks what's built and what's next.
       resync) for that internal bookkeeping use, keeping the public,
       resync-enabled `ClearSelectedSectors()` for actual user-facing
       sector-deselection gestures only.
+
+      **Update, fixed a real reported bug - dragging a multi-selection
+      only moved the hovered element and deselected it:** root cause was
+      that every `Handle*Input` method conflated two different gestures
+      into one left-click handler - "click to toggle selection" and
+      "press-and-drag to move" - so starting a drag on an already-selected
+      element immediately toggled it *off* (the same code path always
+      flipped selection), then only ever moved the one field-tracked
+      dragged element, never the rest of the selection. Verified against
+      UDB's real source rather than reinvented (the user explicitly asked
+      for this): UDB never conflates the two gestures at all - **left
+      mouse button only ever selects/toggles (drag-with-left is reserved
+      for box-select, not built here); right mouse button is the only
+      thing that ever moves geometry**, confirmed identical across
+      `VerticesMode`/`LinedefsMode`/`SectorsMode`/`ThingsMode`'s
+      `OnDragStart`. Its real rule: pressing on an unselected element
+      replaces the whole selection with just that one before dragging it;
+      pressing on an already-selected element preserves and drags the
+      *entire* current selection together, with nothing deselected on a
+      successful drag. Ported this exactly: all four `Handle*Input`
+      methods now split left-click (toggle only, never drags) from
+      right-click-drag (the `SelectOnly`-if-unselected rule, then a
+      snapshot of every selected element's start position - a
+      `Dictionary<Vertex, MapVector2>`, or `Dictionary<Thing, MapVector2>`
+      for Things - moved by one shared delta per frame, deduplicated via
+      `.Distinct()` where a Linedef/Sector selection can share vertices
+      with a neighbor, batched into one `CommandGroup` undo step on
+      release). Pure App-layer change (`Scripts/View/MapOverlay.cs`) - no
+      Core changes needed, every primitive it uses already existed from
+      the selection foundation work (`SelectOnly` in particular had no
+      real caller until this).
+- [x] 2D marquee/box-select, ported from UDB's real mechanics
+      (`Source/Plugins/BuilderModes/ClassicModes/*Mode.cs`,
+      `Source/Core/Editing/ClassicMode.cs`) - the natural next piece once
+      left-click stopped moving anything (see above). A real surprise
+      worth recording: UDB's marquee isn't "point-in-rectangle for
+      everything" - Linedefs need **both** endpoints inside by default;
+      Sectors need **every** vertex inside (equivalent to a fully
+      contained bounding box); Things use plain center-point with **no
+      radius consideration at all**, despite Things having real radius
+      data used everywhere else in this codebase (hover-picking, 2D icon
+      sizing, 3D billboarding) - confirmed as UDB's own actual behavior,
+      not something to "fix." `Core.Map.MarqueeSelectionMode`
+      (Select/Add/Subtract/Intersect, chosen from Ctrl/Shift exactly like
+      UDB's real `BaseClassicMode.GetMultiSelectionMode`) plus 4 new
+      `MapData.MarqueeSelectX` methods implement the exact per-type hit
+      tests and the real 4-case apply logic (iterates *every* element of
+      that type, not just already-selected ones); Sectors mode also
+      re-runs the existing `ResyncSectorBoundarySelection` afterward,
+      same as the earlier sector-toggle fix. `MapOverlay`'s left-button
+      handling had to move its plain-click toggle from press to release,
+      gated on whether the drag ever crossed a 2px threshold (matching
+      UDB's own `MouseSelectionThreshold`/`!selecting` split) - press no
+      longer decides click-vs-drag by itself.
+      **Update, the "select touching" toggle got added back in**: this
+      pass initially scoped out UDB's secondary `MarqueSelectTouching`
+      toggle (loosens Linedefs/Sectors to a crossing/intersecting test)
+      as its own separate UI feature with no obvious home - the user
+      pushed back and asked for it built too, as a real menu toggle, with
+      correct terminology looked up rather than invented. UDB's own real
+      strings (`Source/Plugins/BuilderModes/Interface/
+      MenusForm.Designer.cs:804-815`, a toolbar `ToolStripButton`) are
+      **"Select Touching"** and (from its own tooltip/status text) "select
+      inside" - both reused directly for a new Preferences > **"Selection
+      Box"** submenu with two radio-checkable, mutually-exclusive items
+      (`MainMenuBar.cs`, `Scenes/Main.tscn`'s new `SelectionBox` PopupMenu
+      node), instead of UDB's real per-mode toolbar button placement -
+      this project's menu bar is where settings-like toggles already
+      live. Session-only, matching UDB's own confirmed real behavior
+      (`marqueSelectTouching` has no `ReadPluginSetting`/
+      `WritePluginSetting` anywhere, unlike its sibling settings that do -
+      always resets to "off" on relaunch) - not persisted into
+      `AppSettings`. New `Core.Geometry.SegmentIntersection` (a standard
+      orientation-based segment-vs-segment test, written fresh rather than
+      sourced - ordinary well-known 2D math, not a map-format fact needing
+      a UDB citation) backs the crossing tests for both Linedefs and
+      Sectors touching-mode.
+      **Deliberately not built**: UDB's `AdditiveSelect` toggle (would
+      invert plain-Shift's meaning - not needed, its default already
+      matches what's here); distance-ordered marquee selection (UDB sorts
+      a marquee's hit-set by distance from the drag origin for index-
+      label purposes - no such labeling feature exists here yet); any
+      marquee/box-select concept in 3D visual mode (UDB doesn't have one
+      there either).
+- [x] 2D view panning (`MapOverlay.PanView`), ported from UDB's real
+      `pan_view` action (`Source/Core/Resources/Actions.cfg:311-319`,
+      `Source/Core/Editing/ClassicMode.cs:955-997`) - simpler than
+      expected: hold **Space** and move the mouse, no mouse button
+      involved at all (confirmed - `pan_view`'s default binding is
+      literally just the Space key, `UDBuilder.default.cfg:93`). 1:1
+      grab-and-drag, no separate pan-speed setting: the map point under
+      the cursor before a motion event ends up under the cursor again
+      after it, at whatever the current zoom's screen-to-map ratio is.
+      Reuses the exact same before/after-`Unproject`-then-shift-camera
+      trick `ZoomAt` already established for scroll-zoom, just for a
+      translation instead of a zoom change - one new small method, no
+      Core changes. Implemented once in UDB (`ClassicMode`, shared by
+      every classic mode via inheritance); ported here as one centralized
+      check at the top of `MapOverlay._UnhandledInput` instead, since
+      this project dispatches all four modes from one place rather than
+      separate mode classes to guard individually.
+      **Deliberate, flagged divergence**: while Space is held, this
+      suppresses *every* other mouse interaction (button press/release
+      included, not just motion-driven hover/marquee/drag-threshold
+      logic) - stricter than UDB's own real guard, which is only
+      `if(panning) return;` at the top of `OnMouseMove` and technically
+      leaves `OnSelectBegin`/`OnEditBegin` unguarded (harmless in
+      practice there only because nothing gets highlighted while
+      panning). Full suppression is simpler and strictly safer - no
+      possible path to also starting a select/drag/marquee gesture while
+      panning - so it was chosen over replicating UDB's narrower guard
+      exactly. No cursor change while panning, matching UDB (confirmed no
+      `Cursor`-equivalent change exists in its own real pan code either).
+      3D visual mode is untouched - UDB's own visual-mode camera movement
+      is a fully separate WASD/mouselook system with no relation to this
+      action at all, matching this project's existing `FreeFlyCamera`.
 - [ ] Property editing UI (sector/linedef/thing dialogs) - the foundation
       above (selection + `Fields`/`UniFields`/`UniValue` + generic
       `SetFieldCommand`) unblocks this; not yet started. Per prior
