@@ -13,6 +13,7 @@
 [ext_resource type="Script" path="res://Scripts/View/GridToolbar.cs" id="10"]
 [ext_resource type="Script" path="res://Scripts/View/OpenMapMenu.cs" id="11"]
 [ext_resource type="Script" path="res://Scripts/View/MainMenuBar.cs" id="12"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/icon_thing_nodir.svg" id="13"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -113,7 +114,7 @@ theme_override_constants/separation = 10
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Vertices mode (1)"
+tooltip_text = "Vertices mode (V)"
 toggle_mode = true
 button_pressed = true
 button_group = SubResource("ButtonGroup_1")
@@ -124,7 +125,7 @@ expand_icon = true
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Linedefs mode (2)"
+tooltip_text = "Linedefs mode (L)"
 toggle_mode = true
 button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("6")
@@ -134,10 +135,20 @@ expand_icon = true
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
-tooltip_text = "Sectors mode (3)"
+tooltip_text = "Sectors mode (S)"
 toggle_mode = true
 button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("7")
+expand_icon = true
+
+[node name="ThingModeButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(28, 28)
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "Things mode (T)"
+toggle_mode = true
+button_group = SubResource("ButtonGroup_1")
+icon = ExtResource("13")
 expand_icon = true
 
 [node name="GridToolbar" type="PanelContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar"]

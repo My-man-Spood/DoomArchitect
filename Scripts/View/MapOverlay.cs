@@ -104,6 +104,10 @@ public partial class MapOverlay : Control
 	private Sector _draggedSector;
 	private Sector _hoveredSector;
 
+	private Thing _draggedThing;
+	private Thing _hoveredThing;
+	private MapVector2 _dragStartThingPosition;
+
 	private MapVector2 _dragOrigin;
 	private MapVector2 _dragStartLineStart;
 	private MapVector2 _dragStartLineEnd;
@@ -150,6 +154,9 @@ public partial class MapOverlay : Control
 				break;
 			case EditMode.Sectors:
 				HandleSectorInput(@event);
+				break;
+			case EditMode.Things:
+				HandleThingInput(@event);
 				break;
 		}
 	}
@@ -261,6 +268,33 @@ public partial class MapOverlay : Control
 		}
 	}
 
+	private void HandleThingInput(InputEvent @event)
+	{
+		switch (@event)
+		{
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
+				_draggedThing = FindThingNear(press.Position);
+				_hoveredThing = _draggedThing;
+				if (_draggedThing != null) _dragStartThingPosition = _draggedThing.Position;
+				break;
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
+				if (_draggedThing != null && _draggedThing.Position != _dragStartThingPosition)
+				{
+					UndoStack.Record(new MoveThingCommand(
+						Map, _draggedThing, _dragStartThingPosition, _draggedThing.Position));
+				}
+
+				_draggedThing = null;
+				break;
+			case InputEventMouseMotion motion when _draggedThing != null:
+				Map.MoveThing(_draggedThing, SnapIfEnabled(Unproject(motion.Position)));
+				break;
+			case InputEventMouseMotion motion:
+				_hoveredThing = FindThingNear(motion.Position);
+				break;
+		}
+	}
+
 	private Vertex FindVertexNear(Vector2 screenPosition)
 	{
 		Vertex closest = null;
@@ -300,6 +334,32 @@ public partial class MapOverlay : Control
 	{
 		var point = Unproject(screenPosition);
 		return Map.Sectors.FirstOrDefault(sector => SectorHitTest.Contains(sector, point));
+	}
+
+	/// <summary>
+	/// Picks against each Thing's own real on-screen radius rather than a
+	/// small fixed pick radius like <see cref="FindVertexNear"/> - a
+	/// Thing's footprint varies hugely by type (a Spider Mastermind vs. a
+	/// key), so "click what you see" is truer here than a uniform hit
+	/// circle would be for the big ones.
+	/// </summary>
+	private Thing FindThingNear(Vector2 screenPosition)
+	{
+		Thing closest = null;
+		var closestDistance = float.MaxValue;
+		foreach (var thing in Map.Things)
+		{
+			var radius = GameConfiguration?.GetThingType(thing.Type)?.Radius ?? ThingMeshBuilder.FallbackRadius;
+			var screenRadius = WorldSizeToScreenPixels(radius);
+			var distance = Project(thing.Position).DistanceTo(screenPosition);
+			if (distance <= screenRadius && distance < closestDistance)
+			{
+				closest = thing;
+				closestDistance = distance;
+			}
+		}
+
+		return closest;
 	}
 
 	private static IEnumerable<Vertex> SectorVertices(Sector sector) =>
@@ -487,6 +547,8 @@ public partial class MapOverlay : Control
 	{
 		if (_thingIcon == null) return;
 
+		var alpha = Mode == EditMode.Things ? 1f : InactiveModeAlpha;
+
 		foreach (var thing in Map.Things)
 		{
 			var info = GameConfiguration?.GetThingType(thing.Type);
@@ -502,13 +564,17 @@ public partial class MapOverlay : Control
 			// directional icon, matching this project's existing "assume
 			// nothing" default from before per-type data existed.
 			var icon = info is { ShowsDirection: false } ? _thingIconNoDirection : _thingIcon;
-			var tint = ThingCategoryColors.Get(info?.ColorIndex ?? 0);
+			// Hovered/dragged swaps the category tint for HoverColor
+			// outright, the same treatment vertices/linedefs already use,
+			// rather than a new visual language just for Things.
+			var isHighlighted = Mode == EditMode.Things && thing == _hoveredThing;
+			var tint = isHighlighted ? HoverColor : ThingCategoryColors.Get(info?.ColorIndex ?? 0);
 
 			var center = Project(thing.Position);
 			var rotation = -Mathf.DegToRad(thing.Angle);
 
 			DrawSetTransform(center, rotation, Vector2.One);
-			DrawTextureRect(icon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false, tint);
+			DrawTextureRect(icon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false, new Color(tint, alpha));
 			DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 		}
 	}

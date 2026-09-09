@@ -131,6 +131,13 @@ public partial class MapView : Node3D
 			_map.ClearDirty(sector);
 		}
 
+		foreach (var thing in _map.GetDirtyThings())
+		{
+			var hangs = _gameConfiguration.GetThingType(thing.Type)?.Hangs ?? false;
+			_thingMeshes[thing].Position = thing.Position.ToWorld((float)ResolveThingWorldZ(thing, hangs));
+			_map.ClearDirty(thing);
+		}
+
 		if (_in3D)
 		{
 			_timeSinceLastPick += delta;
@@ -340,19 +347,15 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// Things aren't edited in this pass (see the Things plan), so this
-	/// only ever runs once per Thing at load time - no dirty-tracking or
-	/// rebuild path needed, unlike sectors/walls.
+	/// Creates a Thing's mesh instance once at load time; subsequent moves
+	/// (Things edit mode) resync its position via the dirty-things loop in
+	/// <see cref="_Process"/> instead of recreating it - see
+	/// <see cref="ResolveThingWorldZ"/>, shared by both paths.
 	/// </summary>
 	private void CreateThingMeshInstance(Thing thing)
 	{
-		var containingSector = SectorHitTest.FindContaining(_map.Sectors, thing.Position);
 		var (mesh, material, hangs) = ResolveThingMeshAndMaterial(thing.Type);
-
-		var floorHeight = containingSector?.FloorHeight ?? 0;
-		var worldZ = hangs
-			? (containingSector?.CeilingHeight ?? 0) - thing.Height
-			: floorHeight + thing.Height;
+		var worldZ = ResolveThingWorldZ(thing, hangs);
 
 		var instance = new MeshInstance3D
 		{
@@ -364,6 +367,22 @@ public partial class MapView : Node3D
 
 		AddChild(instance);
 		_thingMeshes[thing] = instance;
+	}
+
+	/// <summary>
+	/// A hanging Thing (e.g. a ceiling-attached decoration) measures
+	/// <see cref="Thing.Height"/> down from its containing sector's
+	/// ceiling instead of up from its floor - shared by
+	/// <see cref="CreateThingMeshInstance"/> and the dirty-things resync
+	/// in <see cref="_Process"/>, so a moved Thing's height stays correct
+	/// even if it crosses into a different sector.
+	/// </summary>
+	private double ResolveThingWorldZ(Thing thing, bool hangs)
+	{
+		var containingSector = SectorHitTest.FindContaining(_map.Sectors, thing.Position);
+		return hangs
+			? (containingSector?.CeilingHeight ?? 0) - thing.Height
+			: (containingSector?.FloorHeight ?? 0) + thing.Height;
 	}
 
 	/// <summary>
@@ -399,14 +418,21 @@ public partial class MapView : Node3D
 
 	/// <summary>
 	/// Ctrl+Z/Ctrl+Y match UDB's own default undo/redo keys exactly
-	/// (verified against its default keybind config, not guessed). 1/2/3
-	/// switch edit mode; the rest are grid/snap controls on
-	/// <see cref="_overlay"/>. <c>[</c>/<c>]</c> (double/halve, 1..1024)
-	/// and <c>G</c> (snap toggle) match UDB's own keys and bounds, except
-	/// <c>G</c> and <c>D</c> themselves - UDB binds neither by default,
-	/// since both are toolbar checkboxes there. Manually resizing the
-	/// grid disables dynamic sizing, matching UDB's own
-	/// <c>DisableDynamicGridResize</c>.
+	/// (verified against its default keybind config, not guessed). V/L/S/T
+	/// switch edit mode - matches UDB's own real defaults
+	/// (<c>Assets/Common/UDBuilder.default.cfg</c>:
+	/// <c>buildermodes_verticesmode/linedefsmode/sectorsmode/thingsmode =
+	/// 86/76/83/84</c>, i.e. the raw key codes for V/L/S/T). An earlier
+	/// version of this method used 1/2/3 for the first three modes - an
+	/// uncorrected divergence from UDB's real defaults, found and fixed
+	/// once Things mode needed a fourth key. The rest are grid/snap
+	/// controls on <see cref="_overlay"/>. <c>[</c>/<c>]</c> (double/halve,
+	/// 1..1024) and <c>G</c> (snap toggle) match UDB's own keys and bounds,
+	/// except <c>G</c> and <c>D</c> themselves - UDB binds neither by
+	/// default, since both are toolbar checkboxes there. Manually resizing
+	/// the grid disables dynamic sizing, matching UDB's own
+	/// <c>DisableDynamicGridResize</c>. None of this is user-rebindable
+	/// yet - see TODO.md.
 	/// </summary>
 	public override void _UnhandledInput(InputEvent @event)
 	{
@@ -438,14 +464,17 @@ public partial class MapView : Node3D
 				}
 
 				break;
-			case Key.Key1:
+			case Key.V:
 				_overlay.Mode = EditMode.Vertices;
 				break;
-			case Key.Key2:
+			case Key.L:
 				_overlay.Mode = EditMode.Linedefs;
 				break;
-			case Key.Key3:
+			case Key.S:
 				_overlay.Mode = EditMode.Sectors;
+				break;
+			case Key.T:
+				_overlay.Mode = EditMode.Things;
 				break;
 			case Key.G:
 				_overlay.SnapEnabled = !_overlay.SnapEnabled;

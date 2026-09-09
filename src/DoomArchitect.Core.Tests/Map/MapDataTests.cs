@@ -89,4 +89,42 @@ public class MapDataTests
         Assert.Equal(new Vector2(64, 128), thing.Position);
         Assert.Equal(1, thing.Type);
     }
+
+    [Fact]
+    public void MoveThing_UpdatesPositionAndMarksItDirty()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(0, 0), type: 1);
+
+        map.MoveThing(thing, new Vector2(12, 34));
+
+        Assert.Equal(new Vector2(12, 34), thing.Position);
+        Assert.True(thing.NeedsUpdate);
+    }
+
+    [Fact]
+    public void GetDirtyThings_ReturnsOnlyThingsThatMoved()
+    {
+        var map = new MapData();
+        var moved = map.CreateThing(new Vector2(0, 0), type: 1);
+        var untouched = map.CreateThing(new Vector2(64, 64), type: 1);
+        foreach (var thing in map.Things) map.ClearDirty(thing);
+
+        map.MoveThing(moved, new Vector2(10, 10));
+
+        Assert.Contains(moved, map.GetDirtyThings());
+        Assert.DoesNotContain(untouched, map.GetDirtyThings());
+    }
+
+    [Fact]
+    public void ClearDirty_Thing_RemovesItFromTheDirtySet()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(0, 0), type: 1);
+        map.MoveThing(thing, new Vector2(10, 10));
+
+        map.ClearDirty(thing);
+
+        Assert.DoesNotContain(thing, map.GetDirtyThings());
+    }
 }

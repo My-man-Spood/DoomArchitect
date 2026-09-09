@@ -80,4 +80,14 @@ public sealed class MapData
     public IEnumerable<Sector> GetDirtySectors() => _sectors.Where(s => s.NeedsRebuild);
 
     public void ClearDirty(Sector sector) => sector.NeedsRebuild = false;
+
+    public void MoveThing(Thing thing, Vector2 newPosition)
+    {
+        thing.Position = newPosition;
+        thing.NeedsUpdate = true;
+    }
+
+    public IEnumerable<Thing> GetDirtyThings() => _things.Where(t => t.NeedsUpdate);
+
+    public void ClearDirty(Thing thing) => thing.NeedsUpdate = false;
 }

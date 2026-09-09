@@ -42,6 +42,15 @@ public sealed class Thing
     /// </summary>
     public ushort RawFlags { get; set; }
 
+    /// <summary>
+    /// Set whenever this Thing moves such that its rendered position is
+    /// stale. Cleared by the rendering layer once it has resynced (see
+    /// <c>MapView</c>); Core never clears it on its own - the same idiom
+    /// as <see cref="Sector.NeedsRebuild"/>, named for what a Thing
+    /// actually needs (a position sync, not a mesh rebuild).
+    /// </summary>
+    public bool NeedsUpdate { get; internal set; }
+
     public IReadOnlyDictionary<string, object> CustomFields => _customFields;
 
     internal void SetCustomField(string key, object value) => _customFields[key] = value;

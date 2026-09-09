@@ -861,6 +861,69 @@ file just tracks what's built and what's next.
       `ResourceListEditor` control, which is reused for exactly the same
       two purposes. No `DoomArchitect.Core` changes - App/Godot-layer UI
       only, so verification here is manual, not `dotnet test`.
+
+      **Known gap, verified against UDB's real bundled configs:** what we
+      call a "game configuration" (Doom/Doom2) only covers one of the
+      *three* axes UDB's own real configuration identity actually
+      combines - confirmed directly from UDB's real bundled filenames
+      (`Assets/Common/Configurations/*.cfg`, pattern
+      `<Engine>_<Game><Format>.cfg`: `Doom_DoomDoom.cfg`,
+      `Boom_Doom2Doom.cfg`, `ZDoom_DoomUDMF.cfg`,
+      `GZDoom_HexenHexen.cfg`, etc.) - **engine** (vanilla Doom / Boom /
+      MBF21 / Eternity / ZDoom / GZDoom / Zandronum / ...), **game**
+      (Doom/Doom2/Heretic/Hexen/Strife), and **map format** (Doom binary/
+      Hexen binary/UDMF). Telling detail: there is no `Doom_DoomUDMF.cfg`
+      - the vanilla engine has no UDMF variant at all, since actual
+      vanilla Doom.exe could never read UDMF; UDB doesn't even offer that
+      combination.
+      DoomArchitect currently collapses this to just the **game** axis,
+      applied identically regardless of map format - deliberate, not an
+      oversight, for two reasons: (1) no engine-level extensions are
+      modeled at all yet (no Boom generalized specials, no MBF/ZDoom
+      additions), so "engine" isn't a real axis for us today - there is
+      only ever the one vanilla ruleset; (2) map **format** (UDMF vs.
+      classic binary) is auto-detected directly from the WAD's own
+      structure (unambiguous, unlike "which game"), so there's no reason
+      to make the user pick it the way UDB's users do.
+      Revisit this once Boom/MBF/ZDoom-style extensions become a real
+      goal (a natural step under `feedback_aim_for_full_udb_port` /
+      `project_doomarchitect_projects_vision`) - at that point "engine"
+      needs to become its own real, user-selectable axis again, the way
+      UDB does it, most likely still decoupled from map format for the
+      same reason given above.
+- [x] Things edit mode (select/hover/move) - a 4th `EditMode`, added
+      ahead of Property editing UI below since that item reminded the
+      user Things had no selection mode at all yet. Mirrors the existing
+      Vertices/Linedefs/Sectors hover-find + drag + undo-record pattern
+      in `MapOverlay.cs` exactly (`HandleThingInput`/`FindThingNear`, a
+      new `Core.Undo.MoveThingCommand`, `MapData.MoveThing`/
+      `GetDirtyThings`/`ClearDirty(Thing)` mirroring `Sector.NeedsRebuild`'s
+      dirty-flag idiom, named `Thing.NeedsUpdate` since a moved Thing only
+      needs a position resync, not a mesh rebuild - `MapView` extracts a
+      shared `ResolveThingWorldZ` helper used both at creation and by a
+      new per-frame dirty-things sync). Picking uses each Thing's own real
+      on-screen radius (via the same per-type lookup `DrawThings` already
+      does) rather than a small fixed pick radius - truer "click what you
+      see" given how much Thing footprints vary (a Spider Mastermind vs.
+      a key). Movement snaps to grid through the same `EffectiveSnap`
+      helper every other mode already shares.
+      **Real bug found and fixed in the process**: this project's
+      existing Vertices/Linedefs/Sectors keybinds (1/2/3) never actually
+      matched UDB's real defaults at all - confirmed via UDB's own
+      bundled `Assets/Common/UDBuilder.default.cfg`
+      (`buildermodes_verticesmode/linedefsmode/sectorsmode/thingsmode =
+      86/76/83/84`, the raw key codes for **V**/**L**/**S**/**T** - letter
+      keys, not numbers). An uncorrected divergence from before this
+      session, only caught while looking up a real default key for the
+      new Things mode. Corrected all four to V/L/S/T rather than bolting
+      "4" onto an already-wrong scheme.
+- [ ] Keybinding management - every keybind (undo/redo, mode switches,
+      grid controls, etc.) is still hardcoded in `MapView._UnhandledInput`
+      with zero user configurability, unlike UDB's own real
+      `Actions.cfg`-driven, fully rebindable system. Noted as a direct
+      consequence of finding and fixing the V/L/S/T keybind mismatch
+      above - worth a real settings surface once enough editing features
+      exist to make rebinding actually useful.
 - [ ] Property editing UI (sector/linedef/thing dialogs)
 - [ ] Full-bright toggle + real sector/wall brightness editing (Ctrl+Scroll,
       matching UDB's own `togglebrightness`/`raisebrightness8`/
