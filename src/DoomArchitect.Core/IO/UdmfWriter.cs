@@ -87,7 +87,7 @@ public static class UdmfWriter
             BeginBlock(sb, "vertex");
             UdmfTreeWriter.WriteAssignment(sb, 1, "x", (double)vertex.Position.X);
             UdmfTreeWriter.WriteAssignment(sb, 1, "y", (double)vertex.Position.Y);
-            WriteCustomFields(sb, vertex.CustomFields);
+            WriteFields(sb, vertex.Fields);
             EndBlock(sb);
         }
     }
@@ -102,7 +102,7 @@ public static class UdmfWriter
             UdmfTreeWriter.WriteAssignment(sb, 1, "v2", vertexIndex[linedef.End]);
             UdmfTreeWriter.WriteAssignment(sb, 1, "sidefront", linedef.Front != null ? sidedefIndex[linedef.Front] : -1);
             UdmfTreeWriter.WriteAssignment(sb, 1, "sideback", linedef.Back != null ? sidedefIndex[linedef.Back] : -1);
-            WriteCustomFields(sb, linedef.CustomFields);
+            WriteFields(sb, linedef.Fields);
             EndBlock(sb);
         }
     }
@@ -118,7 +118,7 @@ public static class UdmfWriter
             if (sidedef.UpperTexture != "-") UdmfTreeWriter.WriteAssignment(sb, 1, "texturetop", sidedef.UpperTexture);
             if (sidedef.LowerTexture != "-") UdmfTreeWriter.WriteAssignment(sb, 1, "texturebottom", sidedef.LowerTexture);
             if (sidedef.MiddleTexture != "-") UdmfTreeWriter.WriteAssignment(sb, 1, "texturemiddle", sidedef.MiddleTexture);
-            WriteCustomFields(sb, sidedef.CustomFields);
+            WriteFields(sb, sidedef.Fields);
             EndBlock(sb);
         }
     }
@@ -133,7 +133,7 @@ public static class UdmfWriter
             UdmfTreeWriter.WriteAssignment(sb, 1, "texturefloor", sector.FloorTexture);
             UdmfTreeWriter.WriteAssignment(sb, 1, "textureceiling", sector.CeilingTexture);
             UdmfTreeWriter.WriteAssignment(sb, 1, "lightlevel", sector.Brightness);
-            WriteCustomFields(sb, sector.CustomFields);
+            WriteFields(sb, sector.Fields);
             EndBlock(sb);
         }
     }
@@ -148,16 +148,16 @@ public static class UdmfWriter
             if (thing.Height != 0) UdmfTreeWriter.WriteAssignment(sb, 1, "height", thing.Height);
             UdmfTreeWriter.WriteAssignment(sb, 1, "angle", thing.Angle);
             UdmfTreeWriter.WriteAssignment(sb, 1, "type", thing.Type);
-            WriteCustomFields(sb, thing.CustomFields);
+            WriteFields(sb, thing.Fields);
             EndBlock(sb);
         }
     }
 
-    private static void WriteCustomFields(StringBuilder sb, IReadOnlyDictionary<string, object> customFields)
+    private static void WriteFields(StringBuilder sb, UniFields fields)
     {
-        foreach (var (key, value) in customFields)
+        foreach (var (key, uniValue) in fields)
         {
-            UdmfTreeWriter.WriteAssignment(sb, 1, key, value);
+            UdmfTreeWriter.WriteAssignment(sb, 1, key, uniValue.Value);
         }
     }
 

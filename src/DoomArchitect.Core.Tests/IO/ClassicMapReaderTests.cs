@@ -207,13 +207,13 @@ public class ClassicMapReaderTests
         var (map, _) = ClassicMapReader.Read(wad, "MAP01");
 
         var linedef = Assert.Single(map.Linedefs);
-        Assert.Equal(1L, linedef.CustomFields["flags"]);
-        Assert.Equal(97L, linedef.CustomFields["special"]);
-        Assert.Equal(5L, linedef.CustomFields["id"]);
+        Assert.Equal(1L, linedef.Fields["flags"].Value);
+        Assert.Equal(97L, linedef.Fields["special"].Value);
+        Assert.Equal(5L, linedef.Fields["id"].Value);
 
         var sector = Assert.Single(map.Sectors);
-        Assert.Equal(9L, sector.CustomFields["special"]);
-        Assert.Equal(3L, sector.CustomFields["id"]);
+        Assert.Equal(9L, sector.Fields["special"].Value);
+        Assert.Equal(3L, sector.Fields["id"].Value);
     }
 
     [Fact]

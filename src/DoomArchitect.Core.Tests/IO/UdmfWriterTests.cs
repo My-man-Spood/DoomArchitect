@@ -125,18 +125,13 @@ public class UdmfWriterTests
         var reloaded = UdmfReader.Read(text);
 
         var thing = Assert.Single(reloaded.Map.Things);
-        Assert.Equal(true, thing.CustomFields["ambush"]);
-        Assert.Equal(7L, thing.CustomFields["id"]);
+        Assert.Equal(true, thing.Fields["ambush"].Value);
+        Assert.Equal(7L, thing.Fields["id"].Value);
     }
 
     [Fact]
     public void Write_CustomFields_AreWrittenAfterTypedFields()
     {
-        // Custom fields only ever get populated via UdmfReader in
-        // practice (SetCustomField is internal, matching the rest of the
-        // codebase's convention of no InternalsVisibleTo for tests) - so
-        // build the input by loading a small document rather than hand-
-        // constructing one.
         var doc = UdmfReader.Read("namespace = \"doom\"; sector { id = 7; }");
 
         var text = UdmfWriter.Write(doc);
@@ -212,7 +207,7 @@ public class UdmfWriterTests
         var reloaded = UdmfReader.Read(text);
 
         var linedef = Assert.Single(reloaded.Map.Linedefs);
-        Assert.Equal(1L, linedef.CustomFields["special"]);
-        Assert.Equal(5L, linedef.CustomFields["arg0"]);
+        Assert.Equal(1L, linedef.Fields["special"].Value);
+        Assert.Equal(5L, linedef.Fields["arg0"].Value);
     }
 }

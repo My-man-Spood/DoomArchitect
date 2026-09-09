@@ -12,9 +12,6 @@ corner_radius_top_right = 4
 corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_topbar"]
-bg_color = Color(0.14, 0.14, 0.16, 1)
-
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_menubar"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menubar_hover"]
@@ -31,18 +28,21 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_topbar"]
+bg_color = Color(0.14, 0.14, 0.16, 1)
+
 [resource]
 Button/colors/icon_pressed_color = Color(0.85, 0.55, 0.3, 1)
 Button/constants/icon_max_width = 20
 ButtonGroupPanel/base_type = &"PanelContainer"
 ButtonGroupPanel/styles/panel = SubResource("StyleBoxFlat_8vi0c")
-TopBarPanel/base_type = &"PanelContainer"
-TopBarPanel/styles/panel = SubResource("StyleBoxFlat_topbar")
 MarginContainer/constants/margin_bottom = 5
 MarginContainer/constants/margin_left = 5
 MarginContainer/constants/margin_right = 5
 MarginContainer/constants/margin_top = 5
-MenuBar/styles/normal = SubResource("StyleBoxEmpty_menubar")
 MenuBar/styles/disabled = SubResource("StyleBoxEmpty_menubar")
 MenuBar/styles/hover = SubResource("StyleBoxFlat_menubar_hover")
+MenuBar/styles/normal = SubResource("StyleBoxEmpty_menubar")
 MenuBar/styles/pressed = SubResource("StyleBoxFlat_menubar_pressed")
+TopBarPanel/base_type = &"PanelContainer"
+TopBarPanel/styles/panel = SubResource("StyleBoxFlat_topbar")

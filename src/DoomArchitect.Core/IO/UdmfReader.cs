@@ -62,7 +62,7 @@ public static class UdmfReader
             var y = block.Find("y")?.AsDouble() ?? 0.0;
 
             var vertex = map.CreateVertex(new MapVector2((float)x, (float)y));
-            ApplyCustomFields(vertex.SetCustomField, block, KnownVertexFields);
+            ApplyFields(vertex.Fields, block, KnownVertexFields);
             vertices.Add(vertex);
         }
 
@@ -83,7 +83,7 @@ public static class UdmfReader
             sector.CeilingTexture = block.Find("textureceiling")?.AsString() ?? "-";
             sector.Brightness = block.Find("lightlevel")?.AsInt() ?? 160;
 
-            ApplyCustomFields(sector.SetCustomField, block, KnownSectorFields);
+            ApplyFields(sector.Fields, block, KnownSectorFields);
             sectors.Add(sector);
         }
 
@@ -123,7 +123,7 @@ public static class UdmfReader
             var back = ResolveSidedef(block.Find("sideback")?.AsInt() ?? -1, sidedefBlocks, sectors, i, "back", warnings);
 
             var linedef = map.CreateLinedef(start, end, front?.Sector, back?.Sector);
-            ApplyCustomFields(linedef.SetCustomField, block, KnownLinedefFields);
+            ApplyFields(linedef.Fields, block, KnownLinedefFields);
 
             if (front.HasValue) ApplySidedefData(linedef.Front!, front.Value.Block);
             if (back.HasValue) ApplySidedefData(linedef.Back!, back.Value.Block);
@@ -162,7 +162,7 @@ public static class UdmfReader
         sidedef.UpperTexture = block.Find("texturetop")?.AsString() ?? "-";
         sidedef.LowerTexture = block.Find("texturebottom")?.AsString() ?? "-";
         sidedef.MiddleTexture = block.Find("texturemiddle")?.AsString() ?? "-";
-        ApplyCustomFields(sidedef.SetCustomField, block, KnownSidedefFields);
+        ApplyFields(sidedef.Fields, block, KnownSidedefFields);
     }
 
     private static void ReadThings(MapData map, List<UdmfBlock> blocks)
@@ -177,18 +177,27 @@ public static class UdmfReader
             thing.Height = block.Find("height")?.AsDouble() ?? 0.0;
             thing.Angle = block.Find("angle")?.AsInt() ?? 0;
 
-            ApplyCustomFields(thing.SetCustomField, block, KnownThingFields);
+            ApplyFields(thing.Fields, block, KnownThingFields);
         }
     }
 
-    private static void ApplyCustomFields(Action<string, object> setCustomField, UdmfBlock block, HashSet<string> knownFields)
+    private static void ApplyFields(UniFields fields, UdmfBlock block, HashSet<string> knownFields)
     {
         foreach (var assignment in block.Assignments)
         {
             if (knownFields.Contains(assignment.Key)) continue;
-            setCustomField(assignment.Key, assignment.Value.ToObject());
+            fields[assignment.Key] = new UniValue(ToUniversalType(assignment.Value.Kind), assignment.Value.ToObject());
         }
     }
+
+    private static UniversalType ToUniversalType(UdmfValueKind kind) => kind switch
+    {
+        UdmfValueKind.Int => UniversalType.Integer,
+        UdmfValueKind.Double => UniversalType.Float,
+        UdmfValueKind.Bool => UniversalType.Boolean,
+        UdmfValueKind.String => UniversalType.String,
+        _ => throw new InvalidOperationException($"Unhandled {nameof(UdmfValueKind)}: {kind}"),
+    };
 
     private static float ManhattanDistance(MapVector2 a, MapVector2 b) =>
         MathF.Abs(a.X - b.X) + MathF.Abs(a.Y - b.Y);

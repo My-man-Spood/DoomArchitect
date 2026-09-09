@@ -50,6 +50,19 @@ public partial class MapView : Node3D
 	private MapTarget? _currentTarget;
 	private double _timeSinceLastPick;
 
+	/// <summary>
+	/// 3D visual-mode selection - genuinely separate from the classic 2D
+	/// selection (<c>Sector.IsSelected</c>/<c>Linedef.IsSelected</c>),
+	/// matching UDB's own real model (its visual-mode wrapper objects
+	/// carry their own local <c>selected</c> flag, distinct from
+	/// <c>MapElement.Selected</c>). Bridged with the classic selection
+	/// only at the moment of entering/leaving 3D mode (see the
+	/// <c>Key.Tab</c> case in <see cref="_UnhandledInput"/>), not shared
+	/// live the way an earlier version of this feature did.
+	/// </summary>
+	private readonly HashSet<Sector> _selectedSectors3D = new();
+	private readonly HashSet<Linedef> _selectedLinedefs3D = new();
+
 	public override void _Ready()
 	{
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
@@ -75,7 +88,7 @@ public partial class MapView : Node3D
 		// captured value, so this keeps working correctly across LoadMap
 		// swapping both fields out from under it later.
 		_targetFinder = new MapRaycaster(_spatialIndex, name => _textureCache.GetWallTextureSize(name).Y);
-		_targetHighlight = new TargetHighlight();
+		_targetHighlight = new TargetHighlight { MiddleTextureHeightLookup = name => _textureCache.GetWallTextureSize(name).Y };
 		AddChild(_targetHighlight);
 		// Parented under the same screen-space overlay layer MapOverlay
 		// already renders correctly through, rather than directly under
@@ -153,9 +166,12 @@ public partial class MapView : Node3D
 	/// Re-picks whatever the perspective camera is currently looking at,
 	/// throttled to <see cref="PickIntervalSeconds"/> rather than every
 	/// frame (see MapRaycaster/UniformGridSpatialIndex's own remarks on
-	/// why - directly adopted from UDB's own proven throttle). The
-	/// highlight itself is only touched when the target's actual identity
-	/// changes, not on every poll tick.
+	/// why - directly adopted from UDB's own proven throttle). Rebuilds
+	/// the highlight every tick regardless of whether the hover target's
+	/// identity changed, since a selection-only change (from a click, with
+	/// no hover-target change) needs to be reflected too - still cheap at
+	/// this cadence for realistic selection sizes (see TargetHighlight's
+	/// own remarks).
 	/// </summary>
 	private void UpdateTarget()
 	{
@@ -163,25 +179,47 @@ public partial class MapView : Node3D
 
 		var origin = _perspectiveCamera.GlobalPosition.ToDoom3D();
 		var direction = (-_perspectiveCamera.GlobalTransform.Basis.Z).ToDoom3D();
-		var target = _targetFinder.FindTarget(origin, direction);
+		_currentTarget = _targetFinder.FindTarget(origin, direction);
 
-		if (target == _currentTarget) return;
+		_targetHighlight.UpdateHighlights(_currentTarget, _selectedSectors3D, _selectedLinedefs3D, new MapVector2(origin.X, origin.Y));
+	}
 
-		_currentTarget = target;
-		switch (target)
+	/// <summary>
+	/// 3D visual-mode click-to-select: acts on whichever target
+	/// <see cref="UpdateTarget"/> most recently found (kept fresh every
+	/// <see cref="PickIntervalSeconds"/>), at Sector/Linedef granularity -
+	/// clicking any part of a wall selects its whole Linedef, any part of
+	/// a floor/ceiling selects its whole Sector. A plain click always
+	/// toggles (adds if unselected, removes if selected) - UDB's own real
+	/// visual-mode click (<c>BaseVisualGeometrySector.OnSelectEnd</c>/
+	/// <c>BaseVisualGeometrySidedef.OnSelectEnd</c>) does the identical
+	/// toggle, with no modifier needed. Touches only the local 3D
+	/// selection (<see cref="_selectedSectors3D"/>/
+	/// <see cref="_selectedLinedefs3D"/>), not the classic 2D selection -
+	/// they're bridged only on entering/leaving 3D mode, matching UDB's
+	/// real separate-selection model. Unlike 2D, there's no "current mode"
+	/// restricting which type can be selected - clicking a floor then a
+	/// wall naturally builds a mixed Sector+Linedef selection, matching
+	/// UDB's real visual-mode behavior.
+	/// </summary>
+	private void HandleThreeDSelectClick()
+	{
+		if (_currentTarget is { } target)
 		{
-			case null:
-				_targetHighlight.HideHighlight();
-				break;
-			case { Kind: TargetSurfaceKind.Floor }:
-				_targetHighlight.ShowFloor(target.Value.Sector);
-				break;
-			case { Kind: TargetSurfaceKind.Ceiling }:
-				_targetHighlight.ShowCeiling(target.Value.Sector);
-				break;
-			case { Kind: TargetSurfaceKind.Wall }:
-				_targetHighlight.ShowWall(target.Value.WallSegment!.Value, new MapVector2(origin.X, origin.Y));
-				break;
+			if (target.Kind == TargetSurfaceKind.Wall)
+			{
+				var linedef = target.WallSegment!.Value.Side.Linedef;
+				if (!_selectedLinedefs3D.Remove(linedef)) _selectedLinedefs3D.Add(linedef);
+			}
+			else
+			{
+				if (!_selectedSectors3D.Remove(target.Sector)) _selectedSectors3D.Add(target.Sector);
+			}
+		}
+		else
+		{
+			_selectedSectors3D.Clear();
+			_selectedLinedefs3D.Clear();
 		}
 	}
 
@@ -249,10 +287,14 @@ public partial class MapView : Node3D
 		_thingMeshes.Clear();
 		_thingTypeMeshes.Clear();
 
-		// The old target may reference a Sector/WallSegment from meshes
-		// being discarded - never carry that across a rebuild.
+		// The old target - and the local 3D selection, which holds its own
+		// Sector/Linedef references independent of the classic 2D
+		// selection - may reference meshes being discarded here; never
+		// carry either across a rebuild.
 		_currentTarget = null;
-		_targetHighlight.HideHighlight();
+		_selectedSectors3D.Clear();
+		_selectedLinedefs3D.Clear();
+		_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
 
 		foreach (var sector in _map.Sectors)
 		{
@@ -436,6 +478,12 @@ public partial class MapView : Node3D
 	/// </summary>
 	public override void _UnhandledInput(InputEvent @event)
 	{
+		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
+		{
+			HandleThreeDSelectClick();
+			return;
+		}
+
 		if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
 		switch (key.Keycode)
@@ -455,12 +503,29 @@ public partial class MapView : Node3D
 				_statusBar.Visible = !_in3D;
 				_crosshair.Visible = _in3D;
 				Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
-				if (!_in3D)
+				if (_in3D)
 				{
-					// Leaving 3D - don't leave a stale highlight showing,
-					// and force a fresh pick next time 3D mode is entered.
+					// Entering 3D - seed the local 3D selection from
+					// whatever's currently selected in 2D (UDB's real
+					// sync-on-entry bridge between the two selections).
+					_selectedSectors3D.Clear();
+					_selectedSectors3D.UnionWith(_map.GetSelectedSectors());
+					_selectedLinedefs3D.Clear();
+					_selectedLinedefs3D.UnionWith(_map.GetSelectedLinedefs());
+				}
+				else
+				{
+					// Leaving 3D - write the local 3D selection back out
+					// (the matching sync-on-exit bridge), then don't leave
+					// a stale highlight showing and force a fresh pick
+					// next time 3D mode is entered.
+					_map.ClearSelectedSectors();
+					_map.ClearSelectedLinedefs();
+					foreach (var sector in _selectedSectors3D) _map.ToggleSelect(sector);
+					foreach (var linedef in _selectedLinedefs3D) _map.ToggleSelect(linedef);
+
 					_currentTarget = null;
-					_targetHighlight.HideHighlight();
+					_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
 				}
 
 				break;

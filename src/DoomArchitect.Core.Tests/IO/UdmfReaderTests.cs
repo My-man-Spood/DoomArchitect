@@ -1,4 +1,5 @@
 using DoomArchitect.Core.IO;
+using DoomArchitect.Core.Map;
 
 namespace DoomArchitect.Core.Tests.IO;
 
@@ -203,9 +204,11 @@ public class UdmfReaderTests
             "namespace = \"doom\"; thing { x = 0; y = 0; type = 1; ambush = true; skill3 = true; id = 7; }");
 
         var thing = Assert.Single(doc.Map.Things);
-        Assert.Equal(true, thing.CustomFields["ambush"]);
-        Assert.Equal(true, thing.CustomFields["skill3"]);
-        Assert.Equal(7L, thing.CustomFields["id"]);
+        Assert.Equal(true, thing.Fields["ambush"].Value);
+        Assert.Equal(UniversalType.Boolean, thing.Fields["ambush"].Type);
+        Assert.Equal(true, thing.Fields["skill3"].Value);
+        Assert.Equal(7L, thing.Fields["id"].Value);
+        Assert.Equal(UniversalType.Integer, thing.Fields["id"].Type);
     }
 
     [Fact]
@@ -217,8 +220,8 @@ public class UdmfReaderTests
         var doc = UdmfReader.Read(text);
 
         var linedef = Assert.Single(doc.Map.Linedefs);
-        Assert.Equal(1L, linedef.CustomFields["special"]);
-        Assert.Equal(5L, linedef.CustomFields["arg0"]);
+        Assert.Equal(1L, linedef.Fields["special"].Value);
+        Assert.Equal(5L, linedef.Fields["arg0"].Value);
     }
 
     [Fact]
@@ -227,7 +230,7 @@ public class UdmfReaderTests
         var doc = UdmfReader.Read("namespace = \"doom\"; sector { id = 7; }");
 
         var sector = Assert.Single(doc.Map.Sectors);
-        Assert.Equal(7L, sector.CustomFields["id"]);
+        Assert.Equal(7L, sector.Fields["id"].Value);
     }
 
     [Fact]
@@ -236,7 +239,8 @@ public class UdmfReaderTests
         var doc = UdmfReader.Read("namespace = \"doom\"; vertex { x = 0; y = 0; zfloor = 12.0; }");
 
         var vertex = Assert.Single(doc.Map.Vertices);
-        Assert.Equal(12.0, vertex.CustomFields["zfloor"]);
+        Assert.Equal(12.0, vertex.Fields["zfloor"].Value);
+        Assert.Equal(UniversalType.Float, vertex.Fields["zfloor"].Type);
     }
 
     [Fact]
@@ -249,7 +253,7 @@ public class UdmfReaderTests
         var doc = UdmfReader.Read(text);
 
         var linedef = Assert.Single(doc.Map.Linedefs);
-        Assert.Equal(true, linedef.Front!.CustomFields["wrapmidtex"]);
+        Assert.Equal(true, linedef.Front!.Fields["wrapmidtex"].Value);
     }
 
     [Fact]

@@ -2,8 +2,6 @@ namespace DoomArchitect.Core.Map;
 
 public sealed class Sidedef
 {
-    private readonly Dictionary<string, object> _customFields = new();
-
     internal Sidedef(Sector sector, Linedef linedef)
     {
         Sector = sector;
@@ -26,7 +24,5 @@ public sealed class Sidedef
     /// round-trip doesn't lose them, even though nothing can interpret or
     /// edit them yet.
     /// </summary>
-    public IReadOnlyDictionary<string, object> CustomFields => _customFields;
-
-    internal void SetCustomField(string key, object value) => _customFields[key] = value;
+    public UniFields Fields { get; } = new();
 }

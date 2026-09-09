@@ -49,11 +49,49 @@ public partial class MapOverlay : Control
 	private static readonly Color HoverColor = new(1f, 0.55f, 0.1f);
 	private static readonly Color SectorHighlightColor = new(1f, 0.55f, 0.1f, 0.25f);
 
+	/// <summary>Persistent multi-selection tint - always drawn in place of the base color, but hover always wins over it (see <see cref="DrawVertices"/>/<see cref="DrawLinedefs"/>/<see cref="DrawThings"/>).</summary>
+	private static readonly Color SelectedColor = new(0.9f, 0.15f, 0.15f);
+	private static readonly Color SectorSelectedHighlightColor = new(0.9f, 0.15f, 0.15f, 0.18f);
+
 	public MapData Map { get; set; }
 	public Camera3D Camera { get; set; }
 	public UndoStack UndoStack { get; set; }
 	public IGameConfiguration GameConfiguration { get; set; }
-	public EditMode Mode { get; set; } = EditMode.Vertices;
+
+	private EditMode _mode = EditMode.Vertices;
+
+	/// <summary>
+	/// Switching to Vertices/Linedefs/Sectors re-derives that type's
+	/// selection from whatever's currently selected across all three,
+	/// exactly matching UDB's real <c>MapSet.ConvertSelection</c> (called
+	/// by every classic mode's <c>OnEngage</c>) - not a clear, not a
+	/// no-op. Switching to <see cref="EditMode.Things"/> runs no
+	/// conversion at all; Thing selection is independent of this entirely,
+	/// matching UDB.
+	/// </summary>
+	public EditMode Mode
+	{
+		get => _mode;
+		set
+		{
+			if (_mode == value) return;
+			_mode = value;
+
+			switch (value)
+			{
+				case EditMode.Vertices:
+					Map?.ConvertGeometrySelection(GeometrySelectionType.Vertices);
+					break;
+				case EditMode.Linedefs:
+					Map?.ConvertGeometrySelection(GeometrySelectionType.Linedefs);
+					break;
+				case EditMode.Sectors:
+					Map?.ConvertGeometrySelection(GeometrySelectionType.Sectors);
+					break;
+			}
+		}
+	}
+
 	public float GridSize { get; set; } = DefaultGridSize;
 
 	private Texture2D _thingIcon;
@@ -168,7 +206,15 @@ public partial class MapOverlay : Control
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				_draggedVertex = FindVertexNear(press.Position);
 				_hoveredVertex = _draggedVertex;
-				if (_draggedVertex != null) _dragStartVertexPosition = _draggedVertex.Position;
+				if (_draggedVertex != null)
+				{
+					_dragStartVertexPosition = _draggedVertex.Position;
+					Map.ToggleSelect(_draggedVertex);
+				}
+				else
+				{
+					Map.ClearSelectedVertices();
+				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
 				if (_draggedVertex != null && _draggedVertex.Position != _dragStartVertexPosition)
@@ -200,6 +246,11 @@ public partial class MapOverlay : Control
 					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
 					_dragStartLineStart = _draggedLinedef.Start.Position;
 					_dragStartLineEnd = _draggedLinedef.End.Position;
+					Map.ToggleSelect(_draggedLinedef);
+				}
+				else
+				{
+					Map.ClearSelectedLinedefs();
 				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
@@ -240,6 +291,11 @@ public partial class MapOverlay : Control
 				{
 					_dragOrigin = SnapIfEnabled(Unproject(press.Position));
 					_dragStartSectorVertices = SectorVertices(_draggedSector).ToDictionary(v => v, v => v.Position);
+					Map.ToggleSelect(_draggedSector);
+				}
+				else
+				{
+					Map.ClearSelectedSectors();
 				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
@@ -275,7 +331,15 @@ public partial class MapOverlay : Control
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				_draggedThing = FindThingNear(press.Position);
 				_hoveredThing = _draggedThing;
-				if (_draggedThing != null) _dragStartThingPosition = _draggedThing.Position;
+				if (_draggedThing != null)
+				{
+					_dragStartThingPosition = _draggedThing.Position;
+					Map.ToggleSelect(_draggedThing);
+				}
+				else
+				{
+					Map.ClearSelectedThings();
+				}
 				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: false }:
 				if (_draggedThing != null && _draggedThing.Position != _dragStartThingPosition)
@@ -476,14 +540,20 @@ public partial class MapOverlay : Control
 	/// </summary>
 	private void DrawSectorHighlight()
 	{
-		if (Mode != EditMode.Sectors || _hoveredSector == null) return;
+		if (Mode != EditMode.Sectors) return;
 
-		var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(_hoveredSector)));
-		foreach (var polygon in polygons)
+		foreach (var sector in Map.Sectors)
 		{
-			foreach (var (a, b, c) in EarClipper.Clip(polygon))
+			if (sector != _hoveredSector && !sector.IsSelected) continue;
+
+			var color = sector == _hoveredSector ? SectorHighlightColor : SectorSelectedHighlightColor;
+			var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(sector)));
+			foreach (var polygon in polygons)
 			{
-				DrawColoredPolygon(new[] { Project(a), Project(b), Project(c) }, SectorHighlightColor);
+				foreach (var (a, b, c) in EarClipper.Clip(polygon))
+				{
+					DrawColoredPolygon(new[] { Project(a), Project(b), Project(c) }, color);
+				}
 			}
 		}
 	}
@@ -494,7 +564,9 @@ public partial class MapOverlay : Control
 		foreach (var linedef in Map.Linedefs)
 		{
 			var isHighlighted = Mode == EditMode.Linedefs && linedef == _hoveredLinedef;
-			var baseColor = isHighlighted ? HoverColor : linedef.Back == null ? OneSidedColor : TwoSidedColor;
+			var baseColor = isHighlighted ? HoverColor
+				: linedef.IsSelected ? SelectedColor
+				: linedef.Back == null ? OneSidedColor : TwoSidedColor;
 			var color = new Color(baseColor, alpha);
 			DrawWorldLine(linedef.Start.Position, linedef.End.Position, color, LinedefWidth);
 
@@ -528,7 +600,9 @@ public partial class MapOverlay : Control
 		foreach (var vertex in Map.Vertices)
 		{
 			var center = Project(vertex.Position);
-			var baseColor = vertex == _hoveredVertex ? HoverColor : UnselectedVertexColor;
+			var baseColor = vertex == _hoveredVertex ? HoverColor
+				: vertex.IsSelected ? SelectedColor
+				: UnselectedVertexColor;
 			DrawRect(new Rect2(center - half, new Vector2(VertexSize, VertexSize)), new Color(baseColor, alpha));
 		}
 	}
@@ -568,7 +642,9 @@ public partial class MapOverlay : Control
 			// outright, the same treatment vertices/linedefs already use,
 			// rather than a new visual language just for Things.
 			var isHighlighted = Mode == EditMode.Things && thing == _hoveredThing;
-			var tint = isHighlighted ? HoverColor : ThingCategoryColors.Get(info?.ColorIndex ?? 0);
+			var tint = isHighlighted ? HoverColor
+				: thing.IsSelected ? SelectedColor
+				: ThingCategoryColors.Get(info?.ColorIndex ?? 0);
 
 			var center = Project(thing.Position);
 			var rotation = -Mathf.DegToRad(thing.Angle);

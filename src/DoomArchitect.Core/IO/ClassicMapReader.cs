@@ -164,8 +164,8 @@ public static class ClassicMapReader
             sector.FloorTexture = floorTexture;
             sector.CeilingTexture = ceilingTexture;
             sector.Brightness = brightness;
-            if (special != 0) sector.SetCustomField("special", (long)special);
-            if (tag != 0) sector.SetCustomField("id", (long)tag);
+            if (special != 0) sector.Fields["special"] = new UniValue(UniversalType.Integer, (long)special);
+            if (tag != 0) sector.Fields["id"] = new UniValue(UniversalType.Integer, (long)tag);
             sectors.Add(sector);
         }
 
@@ -208,9 +208,9 @@ public static class ClassicMapReader
             var back = ResolveSidedef(s2Index, sidedefsData, sidedefCount, sectors, i, warnings);
 
             var linedef = map.CreateLinedef(start, end, front?.Sector, back?.Sector);
-            if (flags != 0) linedef.SetCustomField("flags", (long)flags);
-            if (special != 0) linedef.SetCustomField("special", (long)special);
-            if (tag != 0) linedef.SetCustomField("id", (long)tag);
+            if (flags != 0) linedef.Fields["flags"] = new UniValue(UniversalType.Integer, (long)flags);
+            if (special != 0) linedef.Fields["special"] = new UniValue(UniversalType.Integer, (long)special);
+            if (tag != 0) linedef.Fields["id"] = new UniValue(UniversalType.Integer, (long)tag);
 
             if (front.HasValue) ApplySidedefData(linedef.Front!, front.Value.Record);
             if (back.HasValue) ApplySidedefData(linedef.Back!, back.Value.Record);

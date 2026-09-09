@@ -8,14 +8,12 @@ namespace DoomArchitect.Core.Map;
 /// modeled as typed properties (matching UDB's own required/defaulted
 /// UDMF <c>thing</c> fields); everything else (id, pitch/roll/scale,
 /// Hexen-style special/args, and every boolean flag) round-trips through
-/// <see cref="CustomFields"/> instead - see the Things plan for why this
+/// <see cref="Fields"/> instead - see the Things plan for why this
 /// is enough for a faithful load-then-save without needing a translation
 /// table this codebase has no data for yet.
 /// </summary>
 public sealed class Thing
 {
-    private readonly Dictionary<string, object> _customFields = new();
-
     internal Thing(Vector2 position, int type)
     {
         Position = position;
@@ -51,7 +49,11 @@ public sealed class Thing
     /// </summary>
     public bool NeedsUpdate { get; internal set; }
 
-    public IReadOnlyDictionary<string, object> CustomFields => _customFields;
+    /// <summary>
+    /// Set whenever this Thing's selection state changes. Not undoable -
+    /// selection is view state, not document state.
+    /// </summary>
+    public bool IsSelected { get; internal set; }
 
-    internal void SetCustomField(string key, object value) => _customFields[key] = value;
+    public UniFields Fields { get; } = new();
 }

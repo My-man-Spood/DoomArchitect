@@ -3,7 +3,6 @@ namespace DoomArchitect.Core.Map;
 public sealed class Sector
 {
     private readonly List<Sidedef> _sidedefs = new();
-    private readonly Dictionary<string, object> _customFields = new();
 
     internal Sector(double floorHeight, double ceilingHeight)
     {
@@ -28,16 +27,20 @@ public sealed class Sector
     public bool NeedsRebuild { get; internal set; }
 
     /// <summary>
+    /// Set whenever this sector's selection state changes. Not undoable -
+    /// selection is view state, not document state.
+    /// </summary>
+    public bool IsSelected { get; internal set; }
+
+    /// <summary>
     /// UDMF fields recognized by the format but not modeled as a typed
     /// property here (e.g. <c>special</c>/<c>id</c>/slope planes/flags) -
     /// preserved so a load-then-save round-trip doesn't lose them, even
     /// though nothing can interpret or edit them yet.
     /// </summary>
-    public IReadOnlyDictionary<string, object> CustomFields => _customFields;
+    public UniFields Fields { get; } = new();
 
     internal void AddSidedef(Sidedef sidedef) => _sidedefs.Add(sidedef);
 
     internal void RemoveSidedef(Sidedef sidedef) => _sidedefs.Remove(sidedef);
-
-    internal void SetCustomField(string key, object value) => _customFields[key] = value;
 }
