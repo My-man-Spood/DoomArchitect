@@ -373,6 +373,20 @@ file just tracks what's built and what's next.
   reconsider factoring `UdmfTreeParser`'s already-generic tokenizer out
   into something shared - not before
 
+  **Update, Game configuration system:** the second consumer arrived - a
+  real `.cfg`-format parser (`Core.Configuration.CfgParser`) for
+  DoomArchitect's own bundled `Doom.cfg`/`Doom2.cfg`, and eventually a
+  real UDB `.cfg` file a user might supply. Reconsidering at that point,
+  as promised, landed on *not* sharing a tokenizer with `UdmfTreeParser`
+  after all - confirmed via reading UDB's own real `Configuration.cs`
+  source that UDB itself keeps `UniversalParser` (UDMF) and
+  `Configuration` (`.cfg`) as two separate classes despite both being
+  curly-brace/assignment grammars, because the two genuinely differ (a
+  `.cfg` key can be a bare integer or contain arbitrary characters up to
+  the next delimiter, UDMF's cannot; `.cfg` has `include()` and
+  case-sensitive keys, UDMF has neither). Following UDB's own precedent
+  here rather than guessing.
+
 ## Later / someday
 
 - [x] Texture pipeline: Doom picture format decode (`Core.Textures`) ->
@@ -638,8 +652,122 @@ file just tracks what's built and what's next.
       per-angle system needs real sprite data this pass doesn't have -
       confirmed via source, not guessed, so this isn't a gap waiting to be
       noticed later, it's a documented, deliberate deferral).
-- [ ] Game configuration system (linedef actions, thing types, sector
-      specials) - data + parsing, ported from UDB's game configs
+- [x] Game configuration system (linedef actions, thing types, sector
+      specials) - a real, from-scratch parser for UDB's actual `.cfg`
+      grammar (`Core.Configuration.CfgParser`/`CfgLoader`), not hardcoded
+      C# data. Two decisions changed this from the original "port UDB's
+      game configs" wording, both discussed with the user directly:
+      **(1) External file, not hardcoded C#** - the first draft of this
+      plan proposed a static C# table, reasoning that two known,
+      unchanging vanilla games didn't need a parsed external format. The
+      user pushed back with this project's actual end goal in view:
+      DoomArchitect targets full UDB feature parity plus custom
+      extensions (recorded as its own standing principle,
+      `feedback_aim_for_full_udb_port` in memory), and UDB itself uses
+      external, user-authorable `.cfg` files specifically because it's an
+      open-ended, moddable editor - a future DECORATE-defined-actor
+      feature (confirmed in scope, not built yet) and a stated wish to let
+      someone bring their own real UDB `.cfg` file over both need that
+      same foundation. **(2) Licensing** - UDB's own bundled `.cfg` data
+      files are GPLv3, this repo is MIT. Building a parser for the
+      *grammar* has no licensing issue (freshly written from reading
+      UDB's real `Configuration.cs`, not copied from it - the same
+      "read the source, write fresh code" approach used everywhere else in
+      this project); a user pointing DoomArchitect at their own existing
+      UDB `.cfg` file isn't a licensing issue either (no redistribution by
+      DoomArchitect). What needed care: DoomArchitect's own *bundled and
+      shipped* `Doom.cfg`/`Doom2.cfg`/`Includes/*.cfg`
+      (`src/DoomArchitect.Core/Configuration/GameConfigs/`, embedded
+      resources so they're covered by `DoomArchitect.Core.Tests` with no
+      Godot dependency) are authored fresh from public, decades-established
+      vanilla Doom engine knowledge (DoomWiki-level facts, independently
+      republished across dozens of differently-licensed source ports),
+      not copied or closely derived from UDB's actual files.
+      `CfgParser`/`CfgLoader`'s grammar and merge semantics were verified
+      against UDB's real `Source/Core/IO/Configuration.cs`, not assumed -
+      notably, `include()`'s merge favors the *included* file's values
+      over whatever the including scope already had at that point for a
+      plain leaf conflict (`Combine(cs, inc)` - `inc` wins), which is the
+      opposite of the "local overrides always win" assumption it'd be easy
+      to guess instead; self-inclusion is rejected using UDB's own real
+      (narrow) check - the include argument as literally written compared
+      against the including file's bare filename, not a general cycle
+      detector (UDB's own doesn't have one either, though a lightweight
+      recursion guard was added on top here purely to turn a genuine
+      multi-file cycle into a clear exception instead of a stack
+      overflow - a robustness addition, not a ported behavior). Doom2's
+      own `.cfg` needs no C#-level "fall back to Doom's table" logic at
+      all: it `include()`s the shared linedeftypes/sectortypes and base
+      thingtypes, then layers its own exclusive monsters/items into the
+      very same categories - the merge combines them automatically before
+      `GameConfigurationLoader` ever sees the result. `IGameConfiguration`
+      is deliberately an interface (mirroring the `IMapTargetFinder`
+      precedent) so a future DECORATE-lump-driven or user-supplied-file
+      implementation can sit behind the same seam later. Wired into the
+      concrete, visible payoff promised back in the Things pass: real
+      per-type radius/height and the real sprite texture (looked up by
+      the exact frame name a `.cfg` entry specifies, e.g. `"POSSA1"` - no
+      rotation-frame guessing needed) now render in both `MapView`'s 3D
+      billboard and `MapOverlay`'s 2D icon sizing, replacing the one
+      shared generic placeholder for any recognized type; `Hangs`
+      (ceiling-attached decorations) is modeled and honored, measuring
+      down from the sector's ceiling instead of up from its floor.
+      Game selection is an always-shown, explicit picker in
+      `OpenMapMenu` - matching UDB's own real "Configurations" dialog UX,
+      not a silent auto-detect - pre-selected by
+      `GameConfigurationDetector`'s best guess (map name pattern, then a
+      Doom2-exclusive-doomednum content signature, then a filename hint,
+      else Doom) but always requiring confirmation. No persistence of the
+      choice yet (asks again on every load - matches the multi-map
+      picker's existing precedent; UDB's own real mechanism, best
+      understanding not verified in source, is a `.dbs` sidecar file this
+      project has no equivalent concept for yet). **Deliberately not
+      built**: linedef-action/sector-special data is parsed and tested but
+      not wired into any UI yet (no Property editing UI exists); the
+      bundled `.cfg` content is an intentionally partial starter set (all
+      vanilla monsters/weapons/ammo/keys/health-armor for both games, a
+      representative handful of decorations and linedef actions/sector
+      specials, not an exhaustive transcription of every one that ever
+      shipped - each entry authored and spot-checked individually, not
+      mass-generated); viewing-angle sprite rotation selection (still just
+      one canonical frame per type, exactly as specified in the `.cfg`
+      data); DECORATE/ZScript custom-actor parsing (the real reason
+      `IGameConfiguration` is an interface, not a concrete class); and any
+      persistent per-WAD project-file storage of the chosen game
+      configuration.
+
+      **Update, thing categories + 2D marker color/direction:** two more
+      real UDB `.cfg` fields modeled - `arrow` (nonzero = show a facing
+      indicator) and `color` (a small palette index) - both category-
+      level with per-entry overrides, same inheritance rule as width/
+      height. `color` resolves against DoomArchitect's own palette
+      (`Rendering.ThingCategoryColors`), not UDB's actual editor color
+      scheme (that's UDB's own UI design, not a vanilla-Doom fact, unlike
+      radius/height/sprite names). The 2D marker now uses the plain ring
+      icon (`icon_thing_nodir.svg`, unused since the Things pass) for any
+      type that doesn't actually rotate in gameplay instead of the
+      directional notch one for everything - showing a facing indicator
+      for something with no meaningful facing is actively misleading, not
+      just extra detail. Per-key coloring (blue/yellow/red keys each
+      tinted their own color) was tried and reverted - ambiguous at a
+      glance against other categories using similar hues; one shared
+      "keys" color instead, matching how every other category works.
+      This also prompted checking the actual category *names/grouping*
+      against UDB's real `Doom_things.cfg`/`Doom2_things.cfg` directly
+      (cross-referenced via `awk`, not guessed) - two real mistakes found
+      and fixed: "Teleport landing" (14) is its own `teleports` category
+      in UDB, not part of `players`; and `health` splits from `powerups`
+      (soul sphere/invulnerability/berserk/partial invisibility/radiation
+      suit/computer area map/light amp visor/megasphere are `powerups`,
+      not `health` - a distinction easy to miss since they're all
+      pickups with a similar "buff" feel, but UDB keeps them separate).
+      Category names now match UDB's real ones exactly (players/
+      teleports/monsters/weapons/ammunition/health/powerups/keys/
+      obstacles) rather than DoomArchitect's own prior invented grouping
+      (which had merged health+powerups and used "ammo"/"decorations"
+      instead of "ammunition"/"obstacles"). UDB's own `lights` category
+      isn't represented yet - no light-emitting decoration thing types
+      are modeled in the current intentionally partial starter set.
 - [ ] Property editing UI (sector/linedef/thing dialogs)
 - [ ] Full-bright toggle + real sector/wall brightness editing (Ctrl+Scroll,
       matching UDB's own `togglebrightness`/`raisebrightness8`/

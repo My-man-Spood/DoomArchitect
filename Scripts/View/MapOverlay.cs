@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Undo;
@@ -51,10 +52,12 @@ public partial class MapOverlay : Control
 	public MapData Map { get; set; }
 	public Camera3D Camera { get; set; }
 	public UndoStack UndoStack { get; set; }
+	public IGameConfiguration GameConfiguration { get; set; }
 	public EditMode Mode { get; set; } = EditMode.Vertices;
 	public float GridSize { get; set; } = DefaultGridSize;
 
 	private Texture2D _thingIcon;
+	private Texture2D _thingIconNoDirection;
 
 	/// <summary>
 	/// The persistent on/off state (matches UDB's toolbar checkbox, which
@@ -119,6 +122,7 @@ public partial class MapOverlay : Control
 	public override void _Ready()
 	{
 		_thingIcon = GD.Load<Texture2D>("res://Assets/Icons/icon_thing.svg");
+		_thingIconNoDirection = GD.Load<Texture2D>("res://Assets/Icons/icon_thing_nodir.svg");
 	}
 
 	public override void _Process(double delta)
@@ -483,16 +487,28 @@ public partial class MapOverlay : Control
 	{
 		if (_thingIcon == null) return;
 
-		var screenRadius = WorldSizeToScreenPixels(ThingMeshBuilder.Radius);
-		var diameter = screenRadius * 2f;
-
 		foreach (var thing in Map.Things)
 		{
+			var info = GameConfiguration?.GetThingType(thing.Type);
+			var radius = info?.Radius ?? ThingMeshBuilder.FallbackRadius;
+			var screenRadius = WorldSizeToScreenPixels(radius);
+			var diameter = screenRadius * 2f;
+
+			// A type that doesn't actually rotate in gameplay (most
+			// pickups/decorations) gets the plain ring icon instead of
+			// the directional notch one - showing a facing indicator for
+			// something with no meaningful facing is actively misleading,
+			// not just unnecessary detail. Unrecognized types keep the
+			// directional icon, matching this project's existing "assume
+			// nothing" default from before per-type data existed.
+			var icon = info is { ShowsDirection: false } ? _thingIconNoDirection : _thingIcon;
+			var tint = ThingCategoryColors.Get(info?.ColorIndex ?? 0);
+
 			var center = Project(thing.Position);
 			var rotation = -Mathf.DegToRad(thing.Angle);
 
 			DrawSetTransform(center, rotation, Vector2.One);
-			DrawTextureRect(_thingIcon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false);
+			DrawTextureRect(icon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false, tint);
 			DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 		}
 	}

@@ -70,4 +70,56 @@ public class TextureSetTests
         Assert.NotNull(image);
         Assert.Contains(set.Warnings, w => w.Contains("NOSUCHTEX"));
     }
+
+    [Fact]
+    public void TryGetSpriteTexture_LumpWithinTheSpriteRange_DecodesIt()
+    {
+        var sprite = Patch(height: 1, new (byte, byte[])[] { (0, new byte[] { 0 }) });
+        var wad = BuildWad(
+            ("PLAYPAL", Playpal((9, 9, 9))),
+            ("S_START", Array.Empty<byte>()),
+            ("POSSA1", sprite),
+            ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var image = set.TryGetSpriteTexture("POSSA1");
+
+        Assert.NotNull(image);
+        Assert.Equal(1, image!.Width);
+    }
+
+    [Fact]
+    public void TryGetSpriteTexture_NameNotInTheSpriteRange_ReturnsNull()
+    {
+        var wad = BuildWad(("S_START", Array.Empty<byte>()), ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        Assert.Null(set.TryGetSpriteTexture("POSSA1"));
+    }
+
+    [Fact]
+    public void TryGetSpriteTexture_NoSpriteMarkersAtAll_ReturnsNull()
+    {
+        var wad = BuildWad();
+        var set = TextureSet.Load(wad);
+
+        Assert.Null(set.TryGetSpriteTexture("POSSA1"));
+    }
+
+    [Fact]
+    public void TryGetSpriteTexture_SameNameRequestedTwice_ReturnsSameCachedInstance()
+    {
+        var sprite = Patch(height: 1, new (byte, byte[])[] { (0, new byte[] { 0 }) });
+        var wad = BuildWad(
+            ("PLAYPAL", Playpal((9, 9, 9))),
+            ("S_START", Array.Empty<byte>()),
+            ("POSSA1", sprite),
+            ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var first = set.TryGetSpriteTexture("POSSA1");
+        var second = set.TryGetSpriteTexture("POSSA1");
+
+        Assert.Same(first, second);
+    }
 }

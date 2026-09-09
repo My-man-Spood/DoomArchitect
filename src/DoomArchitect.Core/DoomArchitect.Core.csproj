@@ -10,4 +10,12 @@
     <PackageReference Include="SixLabors.ImageSharp" Version="3.1.12" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- DoomArchitect's own bundled game-configuration data (see
+         Core.Configuration.GameConfigurations) - embedded so it's covered
+         by DoomArchitect.Core.Tests with no Godot dependency, the same way
+         every other Core resource in this project is testable. -->
+    <EmbeddedResource Include="Configuration\GameConfigs\**\*.cfg" />
+  </ItemGroup>
+
 </Project>

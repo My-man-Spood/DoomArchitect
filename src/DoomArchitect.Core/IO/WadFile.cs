@@ -83,6 +83,39 @@ public sealed class WadFile
         Lumps.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
+    /// Every lump strictly between the first <paramref name="startMarker"/>
+    /// and the next <paramref name="endMarker"/> that follows it (e.g.
+    /// <c>S_START</c>/<c>S_END</c> bounding a WAD's sprites) - empty if
+    /// either marker is missing. The first "marker-bounded range" lookup in
+    /// this codebase; <see cref="FindUdmfMapNames"/>/
+    /// <see cref="FindClassicMapNames"/> only ever need a single-lump
+    /// lookahead, not a whole range.
+    /// </summary>
+    public IReadOnlyList<WadLump> FindLumpsBetweenMarkers(string startMarker, string endMarker)
+    {
+        var startIndex = -1;
+        for (var i = 0; i < Lumps.Count; i++)
+        {
+            if (Lumps[i].Name.Equals(startMarker, StringComparison.OrdinalIgnoreCase))
+            {
+                startIndex = i;
+                break;
+            }
+        }
+
+        if (startIndex < 0) return Array.Empty<WadLump>();
+
+        var result = new List<WadLump>();
+        for (var i = startIndex + 1; i < Lumps.Count; i++)
+        {
+            if (Lumps[i].Name.Equals(endMarker, StringComparison.OrdinalIgnoreCase)) return result;
+            result.Add(Lumps[i]);
+        }
+
+        return Array.Empty<WadLump>();
+    }
+
+    /// <summary>
     /// Names of every map marker lump immediately followed by
     /// <c>TEXTMAP</c>, in file order - i.e. every map in this WAD that
     /// <see cref="ReadMapTextMap"/> can actually load.

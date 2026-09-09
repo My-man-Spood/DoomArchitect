@@ -88,6 +88,54 @@ public class WadFileTests
     }
 
     [Fact]
+    public void FindLumpsBetweenMarkers_ReturnsEverythingStrictlyBetweenTheMarkers()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("OTHER", Array.Empty<byte>()),
+            ("S_START", Array.Empty<byte>()),
+            ("POSSA1", new byte[] { 1 }),
+            ("TROOA1", new byte[] { 2 }),
+            ("S_END", Array.Empty<byte>()),
+            ("AFTER", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var sprites = wad.FindLumpsBetweenMarkers("S_START", "S_END");
+
+        Assert.Equal(new[] { "POSSA1", "TROOA1" }, sprites.Select(l => l.Name));
+    }
+
+    [Fact]
+    public void FindLumpsBetweenMarkers_MissingStartMarker_ReturnsEmpty()
+    {
+        var bytes = WadTestBuilder.Build(("POSSA1", Array.Empty<byte>()), ("S_END", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Empty(wad.FindLumpsBetweenMarkers("S_START", "S_END"));
+    }
+
+    [Fact]
+    public void FindLumpsBetweenMarkers_MissingEndMarker_ReturnsEmpty()
+    {
+        var bytes = WadTestBuilder.Build(("S_START", Array.Empty<byte>()), ("POSSA1", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Empty(wad.FindLumpsBetweenMarkers("S_START", "S_END"));
+    }
+
+    [Fact]
+    public void FindLumpsBetweenMarkers_AdjacentMarkersWithNothingBetween_ReturnsEmpty()
+    {
+        var bytes = WadTestBuilder.Build(("S_START", Array.Empty<byte>()), ("S_END", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Empty(wad.FindLumpsBetweenMarkers("S_START", "S_END"));
+    }
+
+    [Fact]
     public void ReadMapTextMap_ClassicBinaryFormatMap_ThrowsNotSupported()
     {
         // A pre-UDMF map's marker is immediately followed by THINGS, not

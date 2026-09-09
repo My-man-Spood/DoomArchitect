@@ -8,11 +8,13 @@ namespace DoomArchitect.Core.Textures;
 /// </summary>
 public sealed class PixelImage
 {
-    public PixelImage(int width, int height, byte[] rgba)
+    public PixelImage(int width, int height, byte[] rgba, int offsetX = 0, int offsetY = 0)
     {
         Width = width;
         Height = height;
         Rgba = rgba;
+        OffsetX = offsetX;
+        OffsetY = offsetY;
     }
 
     public int Width { get; }
@@ -20,4 +22,14 @@ public sealed class PixelImage
     public int Height { get; }
 
     public byte[] Rgba { get; }
+
+    /// <summary>
+    /// The Doom picture format's own offset fields - meaningful for
+    /// sprites (where they place the image relative to a thing's actual
+    /// world position), always 0 for flats and composed wall textures
+    /// (which never had these fields to begin with).
+    /// </summary>
+    public int OffsetX { get; }
+
+    public int OffsetY { get; }
 }

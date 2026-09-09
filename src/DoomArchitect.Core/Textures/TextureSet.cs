@@ -29,7 +29,9 @@ public sealed class TextureSet
     private readonly Dictionary<string, CompositeTextureDefinition> _wallDefinitions;
     private readonly Dictionary<string, PixelImage> _wallCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, PixelImage> _flatCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PixelImage> _spriteCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _warnings;
+    private IReadOnlyList<WadLump>? _spriteRange;
 
     private TextureSet(
         WadFile wad, Playpal palette, PatchImageResolver patchResolver,
@@ -131,6 +133,33 @@ public sealed class TextureSet
 
         _flatCache[name] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Looks up a sprite by its exact lump name (e.g. <c>"POSSA1"</c> - a
+    /// game-configuration thing-type entry stores the full, specific frame
+    /// to show, not just a 4-character prefix, so there's no rotation-frame
+    /// guessing to do here). Returns <c>null</c> rather than the
+    /// magenta/black placeholder on a miss: sprite/texture resolution is
+    /// scoped to a single loaded WAD (see this class's own remarks), and
+    /// sprites in particular usually live only in the IWAD - loading a
+    /// PWAD-only map without its parent IWAD is expected to hit this often,
+    /// not a load failure the placeholder is meant to signal. Callers
+    /// decide their own fallback (the generic Thing placeholder icon).
+    /// </summary>
+    public PixelImage? TryGetSpriteTexture(string spriteName)
+    {
+        if (_spriteCache.TryGetValue(spriteName, out var cached)) return cached;
+
+        _spriteRange ??= _wad.FindLumpsBetweenMarkers("S_START", "S_END");
+        var lump = _spriteRange.FirstOrDefault(l => l.Name.Equals(spriteName, StringComparison.OrdinalIgnoreCase));
+        if (lump == null) return null;
+
+        var image = DoomPictureReader.TryRead(lump.Data, _palette);
+        if (image == null) return null;
+
+        _spriteCache[spriteName] = image;
+        return image;
     }
 
     private PixelImage? ResolvePatchByName(string name)

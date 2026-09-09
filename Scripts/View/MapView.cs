@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
@@ -23,8 +24,10 @@ public partial class MapView : Node3D
 	private readonly Dictionary<Sector, (MeshInstance3D Floor, MeshInstance3D Ceiling)> _sectorMeshes = new();
 	private readonly Dictionary<Linedef, MeshInstance3D> _wallMeshes = new();
 	private readonly Dictionary<Thing, MeshInstance3D> _thingMeshes = new();
-	private ArrayMesh _thingMesh;
-	private StandardMaterial3D _thingMaterial;
+	private readonly Dictionary<int, (ArrayMesh Mesh, StandardMaterial3D Material)> _thingTypeMeshes = new();
+	private ArrayMesh _fallbackThingMesh;
+	private StandardMaterial3D _fallbackThingMaterial;
+	private IGameConfiguration _gameConfiguration = GameConfigurations.Get(GameConfigurationKind.Doom);
 
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
@@ -77,8 +80,8 @@ public partial class MapView : Node3D
 		_crosshair = new Crosshair { Visible = false };
 		GetNode<Node>("Overlay").AddChild(_crosshair);
 
-		_thingMesh = ThingMeshBuilder.Build();
-		_thingMaterial = ThingMeshBuilder.BuildMaterial();
+		_fallbackThingMesh = ThingMeshBuilder.BuildFallback();
+		_fallbackThingMaterial = ThingMeshBuilder.BuildFallbackMaterial();
 
 		_map = new MapData();
 		var sector = BuildSampleSector(_map);
@@ -96,6 +99,7 @@ public partial class MapView : Node3D
 		_overlay.Map = _map;
 		_overlay.Camera = _topDownCamera;
 		_overlay.UndoStack = _undoStack;
+		_overlay.GameConfiguration = _gameConfiguration;
 	}
 
 	public override void _Process(double delta)
@@ -178,7 +182,7 @@ public partial class MapView : Node3D
 	/// real loaded map is very unlikely to sit in the same 256x256 area
 	/// the sample room did.
 	/// </summary>
-	private void LoadMap(MapData newMap, TextureSet textures)
+	private void LoadMap(MapData newMap, TextureSet textures, IGameConfiguration gameConfiguration)
 	{
 		foreach (var (floor, ceiling) in _sectorMeshes.Values)
 		{
@@ -201,8 +205,10 @@ public partial class MapView : Node3D
 		}
 
 		_thingMeshes.Clear();
+		_thingTypeMeshes.Clear();
 
 		_textureCache = new TextureCache(textures);
+		_gameConfiguration = gameConfiguration;
 
 		// The old target may reference a Sector/WallSegment from the map
 		// being discarded - never carry that across a load.
@@ -228,6 +234,7 @@ public partial class MapView : Node3D
 		_undoStack = new UndoStack();
 		_overlay.Map = _map;
 		_overlay.UndoStack = _undoStack;
+		_overlay.GameConfiguration = _gameConfiguration;
 
 		FitTopDownCameraToMap(newMap);
 	}
@@ -271,10 +278,15 @@ public partial class MapView : Node3D
 	/// missing/unresolvable name, so it deliberately skips TextureCache
 	/// entirely (leaving Godot's own default material) instead of showing
 	/// the placeholder that's reserved for an actually-unresolvable name.
+	/// A sector with no closed boundary yet (e.g. mid-edit, before its
+	/// linedefs form a full loop) makes SectorMeshBuilder produce a mesh
+	/// with zero surfaces - nothing to put a material on, so this skips
+	/// rather than letting Godot throw on an out-of-bounds surface index.
 	/// </summary>
 	private void ApplyFlatMaterial(MeshInstance3D instance, string textureName)
 	{
 		if (textureName == "-") return;
+		if (instance.Mesh == null || instance.Mesh.GetSurfaceCount() == 0) return;
 		instance.SetSurfaceOverrideMaterial(0, _textureCache.GetFlatMaterial(textureName));
 	}
 
@@ -308,18 +320,54 @@ public partial class MapView : Node3D
 	private void CreateThingMeshInstance(Thing thing)
 	{
 		var containingSector = SectorHitTest.FindContaining(_map.Sectors, thing.Position);
-		var worldZ = (containingSector?.FloorHeight ?? 0) + thing.Height;
+		var (mesh, material, hangs) = ResolveThingMeshAndMaterial(thing.Type);
+
+		var floorHeight = containingSector?.FloorHeight ?? 0;
+		var worldZ = hangs
+			? (containingSector?.CeilingHeight ?? 0) - thing.Height
+			: floorHeight + thing.Height;
 
 		var instance = new MeshInstance3D
 		{
-			Mesh = _thingMesh,
+			Mesh = mesh,
 			Position = thing.Position.ToWorld((float)worldZ),
 			Layers = ThreeDOnlyRenderLayer,
 		};
-		instance.SetSurfaceOverrideMaterial(0, _thingMaterial);
+		instance.SetSurfaceOverrideMaterial(0, material);
 
 		AddChild(instance);
 		_thingMeshes[thing] = instance;
+	}
+
+	/// <summary>
+	/// Resolves a Thing type's real per-type mesh/material, built once per
+	/// distinct DoomEd number and cached (every instance of the same type
+	/// looks identical). Falls back to the generic placeholder when the
+	/// type is unrecognized or its real sprite isn't present in the
+	/// currently loaded WAD - see <see cref="ThingMeshBuilder"/>'s own
+	/// remarks for why that's an expected, common case, not a bug.
+	/// </summary>
+	private (ArrayMesh Mesh, StandardMaterial3D Material, bool Hangs) ResolveThingMeshAndMaterial(int doomEdNum)
+	{
+		var info = _gameConfiguration.GetThingType(doomEdNum);
+		if (info == null) return (_fallbackThingMesh, _fallbackThingMaterial, false);
+
+		if (_thingTypeMeshes.TryGetValue(doomEdNum, out var cached))
+		{
+			return (cached.Mesh, cached.Material, info.Hangs);
+		}
+
+		var sprite = _textureCache.TryGetSpriteEntry(info.SpriteName);
+		if (sprite == null) return (_fallbackThingMesh, _fallbackThingMaterial, info.Hangs);
+
+		// Sized from the sprite's own real pixel dimensions/offsets, not
+		// info.Radius/info.Height - those are gameplay collision values,
+		// not the sprite art's actual proportions (see ThingMeshBuilder's
+		// remarks); using them to size the quad stretched or squished any
+		// sprite whose aspect ratio didn't happen to match "2*radius : height".
+		var mesh = ThingMeshBuilder.BuildSprite(sprite.Value.Size.X, sprite.Value.Size.Y, sprite.Value.Offset.X, sprite.Value.Offset.Y);
+		_thingTypeMeshes[doomEdNum] = (mesh, sprite.Value.Material);
+		return (mesh, sprite.Value.Material, info.Hangs);
 	}
 
 	/// <summary>

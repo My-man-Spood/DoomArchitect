@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
@@ -12,17 +13,22 @@ using Godot;
 /// modern-editor maps and the original id Software WADs work - and
 /// reporting the result via <see cref="MapLoaded"/>, alongside a
 /// <see cref="TextureSet"/> resolved from that same WAD (textures are
-/// scoped to a single WAD for now - see the texture pipeline plan). A WAD
-/// with only one map loads it immediately; a WAD with several (like a
-/// real IWAD) pops up a small picker built entirely in code, no scene
-/// wiring needed. Deliberately unaware of <c>MapView</c> so this stays a
-/// plain "pick a file, hand back a MapData" widget, matching the rest of
-/// this project's separation between the map-editing surface and general
-/// UI.
+/// scoped to a single WAD for now - see the texture pipeline plan) and the
+/// <see cref="IGameConfiguration"/> the user confirmed for it. A WAD with
+/// only one map skips straight to the game-configuration prompt; a WAD
+/// with several (like a real IWAD) first pops a small map picker, built
+/// entirely in code, no scene wiring needed. The game-configuration prompt
+/// itself always appears regardless of map count - matching UDB's own
+/// explicit "Configurations" dialog rather than silently auto-picking -
+/// pre-selected with <see cref="GameConfigurationDetector"/>'s best guess
+/// but always requiring confirmation. Deliberately unaware of
+/// <c>MapView</c> so this stays a plain "pick a file, hand back a
+/// MapData" widget, matching the rest of this project's separation
+/// between the map-editing surface and general UI.
 /// </summary>
 public partial class OpenMapMenu : PanelContainer
 {
-	public event Action<MapData, TextureSet> MapLoaded;
+	public event Action<MapData, TextureSet, IGameConfiguration> MapLoaded;
 
 	private readonly record struct MapEntry(string Name, bool IsUdmf);
 
@@ -30,9 +36,15 @@ public partial class OpenMapMenu : PanelContainer
 	private AcceptDialog _errorDialog;
 	private AcceptDialog _mapSelectDialog;
 	private ItemList _mapSelectList;
+	private AcceptDialog _gameConfigDialog;
+	private OptionButton _gameConfigOption;
 
 	private WadFile _pendingWad;
 	private IReadOnlyList<MapEntry> _pendingMaps;
+	private string _pendingFileName;
+
+	private MapData _pendingMapData;
+	private TextureSet _pendingTextures;
 
 	public override void _Ready()
 	{
@@ -44,6 +56,7 @@ public partial class OpenMapMenu : PanelContainer
 		_fileDialog.FileSelected += OnFileSelected;
 
 		BuildMapSelectDialog();
+		BuildGameConfigDialog();
 	}
 
 	private void BuildMapSelectDialog()
@@ -52,13 +65,29 @@ public partial class OpenMapMenu : PanelContainer
 		_mapSelectList.ItemActivated += index =>
 		{
 			_mapSelectDialog.Hide();
-			LoadPendingMap((int)index);
+			PromptGameConfigurationForPendingMap((int)index);
 		};
 
 		_mapSelectDialog = new AcceptDialog { Title = "Select a map" };
 		_mapSelectDialog.AddChild(_mapSelectList);
 		_mapSelectDialog.Confirmed += OnMapSelectionConfirmed;
 		AddChild(_mapSelectDialog);
+	}
+
+	private void BuildGameConfigDialog()
+	{
+		var container = new VBoxContainer();
+		container.AddChild(new Label { Text = "Which game does this map belong to?" });
+
+		_gameConfigOption = new OptionButton();
+		_gameConfigOption.AddItem("Doom");
+		_gameConfigOption.AddItem("Doom2");
+		container.AddChild(_gameConfigOption);
+
+		_gameConfigDialog = new AcceptDialog { Title = "Game configuration" };
+		_gameConfigDialog.AddChild(container);
+		_gameConfigDialog.Confirmed += OnGameConfigurationConfirmed;
+		AddChild(_gameConfigDialog);
 	}
 
 	private void OnFileSelected(string path)
@@ -77,14 +106,16 @@ public partial class OpenMapMenu : PanelContainer
 				return;
 			}
 
+			_pendingWad = wad;
+			_pendingMaps = maps;
+			_pendingFileName = Path.GetFileName(path);
+
 			if (maps.Count == 1)
 			{
-				LoadMap(wad, maps[0]);
+				PromptGameConfigurationForPendingMap(0);
 				return;
 			}
 
-			_pendingWad = wad;
-			_pendingMaps = maps;
 			_mapSelectList.Clear();
 			foreach (var map in maps) _mapSelectList.AddItem(map.Name);
 			_mapSelectDialog.PopupCentered();
@@ -98,34 +129,53 @@ public partial class OpenMapMenu : PanelContainer
 	private void OnMapSelectionConfirmed()
 	{
 		var selected = _mapSelectList.GetSelectedItems();
-		if (selected.Length > 0) LoadPendingMap(selected[0]);
+		if (selected.Length > 0) PromptGameConfigurationForPendingMap(selected[0]);
 	}
 
-	private void LoadPendingMap(int index)
+	/// <summary>
+	/// Parses the chosen map now (rather than waiting for the game-
+	/// configuration prompt to be confirmed) so <see cref="GameConfigurationDetector"/>
+	/// can use its real Things as a signal, not just the map's name.
+	/// </summary>
+	private void PromptGameConfigurationForPendingMap(int index)
 	{
 		if (_pendingMaps == null || index < 0 || index >= _pendingMaps.Count) return;
-		LoadMap(_pendingWad, _pendingMaps[index]);
-	}
+		var map = _pendingMaps[index];
 
-	private void LoadMap(WadFile wad, MapEntry map)
-	{
 		try
 		{
 			if (map.IsUdmf)
 			{
-				var document = UdmfReader.Read(wad.ReadMapTextMap(map.Name));
-				MapLoaded?.Invoke(document.Map, TextureSet.Load(wad));
+				var document = UdmfReader.Read(_pendingWad.ReadMapTextMap(map.Name));
+				_pendingMapData = document.Map;
 			}
 			else
 			{
-				var (mapData, _) = ClassicMapReader.Read(wad, map.Name);
-				MapLoaded?.Invoke(mapData, TextureSet.Load(wad));
+				var (mapData, _) = ClassicMapReader.Read(_pendingWad, map.Name);
+				_pendingMapData = mapData;
 			}
+
+			_pendingTextures = TextureSet.Load(_pendingWad);
+
+			var suggestion = GameConfigurationDetector.Detect(_pendingMapData, map.Name, _pendingFileName);
+			_gameConfigOption.Selected = suggestion == GameConfigurationKind.Doom2 ? 1 : 0;
+			_gameConfigDialog.PopupCentered();
 		}
 		catch (Exception ex)
 		{
 			ShowError(ex.Message);
 		}
+	}
+
+	private void OnGameConfigurationConfirmed()
+	{
+		if (_pendingMapData == null || _pendingTextures == null) return;
+
+		var kind = _gameConfigOption.Selected == 1 ? GameConfigurationKind.Doom2 : GameConfigurationKind.Doom;
+		MapLoaded?.Invoke(_pendingMapData, _pendingTextures, GameConfigurations.Get(kind));
+
+		_pendingMapData = null;
+		_pendingTextures = null;
 	}
 
 	private void ShowError(string message)

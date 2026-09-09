@@ -19,6 +19,7 @@ public sealed class TextureCache
     private readonly TextureSet _textures;
     private readonly Dictionary<string, (PixelImage Pixels, StandardMaterial3D Material)> _wallCache = new();
     private readonly Dictionary<string, StandardMaterial3D> _flatCache = new();
+    private readonly Dictionary<string, (PixelImage Pixels, StandardMaterial3D Material)> _spriteCache = new();
 
     public TextureCache(TextureSet textures)
     {
@@ -43,6 +44,34 @@ public sealed class TextureCache
         return material;
     }
 
+    /// <summary>
+    /// The sprite material/size/offset for a Thing's resolved type, or null
+    /// if the sprite lump isn't present in the currently loaded WAD - an
+    /// expected, common miss (sprites usually live only in the IWAD; see
+    /// <see cref="TextureSet.TryGetSpriteTexture"/>'s own remarks), not a
+    /// load failure - callers fall back to the generic placeholder instead
+    /// of a "missing texture" checkerboard. <see cref="Size"/>/<see cref="Offset"/>
+    /// are the sprite's own real pixel dimensions/anchor - a thing type's
+    /// gameplay radius/height are collision values, not the sprite art's
+    /// actual proportions, and using them to size the billboard quad
+    /// stretches or squishes any sprite whose aspect ratio doesn't happen
+    /// to match "2*radius : height".
+    /// </summary>
+    public (StandardMaterial3D Material, Vector2I Size, Vector2I Offset)? TryGetSpriteEntry(string spriteName)
+    {
+        if (_spriteCache.TryGetValue(spriteName, out var cached))
+        {
+            return (cached.Material, new Vector2I(cached.Pixels.Width, cached.Pixels.Height), new Vector2I(cached.Pixels.OffsetX, cached.Pixels.OffsetY));
+        }
+
+        var pixels = _textures.TryGetSpriteTexture(spriteName);
+        if (pixels == null) return null;
+
+        var entry = (pixels, CreateSpriteMaterial(pixels));
+        _spriteCache[spriteName] = entry;
+        return (entry.Item2, new Vector2I(pixels.Width, pixels.Height), new Vector2I(pixels.OffsetX, pixels.OffsetY));
+    }
+
     private (PixelImage Pixels, StandardMaterial3D Material) GetWallEntry(string name)
     {
         if (_wallCache.TryGetValue(name, out var cached)) return cached;
@@ -51,6 +80,16 @@ public sealed class TextureCache
         var entry = (pixels, CreateMaterial(pixels));
         _wallCache[name] = entry;
         return entry;
+    }
+
+    /// <summary>Same base look as <see cref="CreateMaterial"/> (unshaded, nearest-filtered) plus alpha transparency and always facing the camera - a sprite is a see-through billboard, a wall/flat surface never is.</summary>
+    private static StandardMaterial3D CreateSpriteMaterial(PixelImage pixels)
+    {
+        var material = CreateMaterial(pixels);
+        material.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+        material.BillboardMode = BaseMaterial3D.BillboardModeEnum.FixedY;
+        material.CullMode = BaseMaterial3D.CullModeEnum.Disabled;
+        return material;
     }
 
     private static StandardMaterial3D CreateMaterial(PixelImage pixels)

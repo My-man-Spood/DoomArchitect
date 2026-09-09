@@ -78,6 +78,43 @@ public class DoomPictureReaderTests
         Assert.Null(image);
     }
 
+    [Fact]
+    public void TryRead_NonZeroOffsets_ArePopulatedOnThePixelImage()
+    {
+        var data = BuildMinimalPatchWithOffsets(offsetX: 11, offsetY: -22);
+
+        var image = DoomPictureReader.TryRead(data, Palette);
+
+        Assert.NotNull(image);
+        Assert.Equal(11, image!.OffsetX);
+        Assert.Equal(-22, image.OffsetY);
+    }
+
+    /// <summary>A 1x1 patch with a single empty column, just to exercise the header's offset fields.</summary>
+    private static byte[] BuildMinimalPatchWithOffsets(short offsetX, short offsetY)
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write((short)1); // width
+        writer.Write((short)1); // height
+        writer.Write(offsetX);
+        writer.Write(offsetY);
+
+        var offsetTablePosition = stream.Position;
+        writer.Write(0); // placeholder column offset
+
+        var columnOffset = (int)stream.Position;
+        writer.Write((byte)255); // empty column - immediate terminator
+
+        writer.Flush();
+        stream.Position = offsetTablePosition;
+        writer.Write(columnOffset);
+
+        writer.Flush();
+        return stream.ToArray();
+    }
+
     private static void AssertPixel(PixelImage image, int x, int y, (byte R, byte G, byte B) expected)
     {
         var index = (y * image.Width + x) * 4;

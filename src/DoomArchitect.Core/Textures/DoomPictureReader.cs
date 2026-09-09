@@ -35,8 +35,12 @@ public static class DoomPictureReader
 
         var width = reader.ReadInt16();
         var height = reader.ReadInt16();
-        reader.ReadInt16(); // offsetx - only meaningful for standalone sprites, unused for texture composition
-        reader.ReadInt16(); // offsety
+        // Only meaningful for standalone sprites (where they place the
+        // image relative to a thing's world position); composed wall
+        // textures/flats never read them at all, so PixelImage just
+        // defaults both to 0 there.
+        var offsetX = reader.ReadInt16();
+        var offsetY = reader.ReadInt16();
 
         if (width < 1 || height < 1) return null;
 
@@ -79,6 +83,6 @@ public static class DoomPictureReader
             }
         }
 
-        return new PixelImage(width, height, rgba);
+        return new PixelImage(width, height, rgba, offsetX, offsetY);
     }
 }
