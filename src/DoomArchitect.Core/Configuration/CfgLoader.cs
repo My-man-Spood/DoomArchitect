@@ -47,6 +47,30 @@ public sealed class CfgLoader
         return ToPublic(scope, key: string.Empty);
     }
 
+    /// <summary>
+    /// Resolves a self-contained <c>.cfg</c>-format string with no file
+    /// on disk and no <c>include()</c> support - for DoomArchitect's own
+    /// small settings/persistence files (<c>AppSettings</c>/<c>MapSettings</c>),
+    /// which are never authored with <c>include()</c> in mind. An
+    /// <c>include()</c> statement here throws rather than silently doing
+    /// nothing.
+    /// </summary>
+    public static CfgBlock Parse(string text)
+    {
+        var loader = new CfgLoader(new StandaloneCfgFileSource());
+        var scope = loader.Execute(CfgParser.Parse(text), currentPath: "<string>", new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+        return ToPublic(scope, key: string.Empty);
+    }
+
+    private sealed class StandaloneCfgFileSource : ICfgFileSource
+    {
+        public string ReadText(string path) =>
+            throw new InvalidOperationException("include() is not supported when parsing a standalone .cfg string.");
+
+        public string ResolveRelative(string basePath, string relativePath) =>
+            throw new InvalidOperationException("include() is not supported when parsing a standalone .cfg string.");
+    }
+
     private Scope LoadScope(string path, HashSet<string> inclusionChain)
     {
         if (_cache.TryGetValue(path, out var cached)) return cached;

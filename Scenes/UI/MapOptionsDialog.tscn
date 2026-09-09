@@ -1,0 +1,22 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/MapOptionsDialog.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ResourceListEditor.tscn" id="2"]
+
+[node name="MapOptionsDialog" type="AcceptDialog"]
+title = "Map Options"
+initial_position = 1
+script = ExtResource("1")
+
+[node name="Container" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="GameConfigLabel" type="Label" parent="Container"]
+layout_mode = 2
+text = "Which game does this map belong to?"
+
+[node name="GameConfigOption" type="OptionButton" parent="Container"]
+layout_mode = 2
+
+[node name="ResourceListEditor" parent="Container" instance=ExtResource("2")]
+layout_mode = 2

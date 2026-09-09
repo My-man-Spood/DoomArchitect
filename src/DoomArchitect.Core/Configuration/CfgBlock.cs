@@ -45,4 +45,28 @@ public sealed class CfgBlock
 
         return null;
     }
+
+    /// <summary>An empty scope, for building a fresh document from scratch (e.g. a brand new settings file).</summary>
+    public static CfgBlock Empty(string key = "") => new(key, Array.Empty<CfgAssignment>(), Array.Empty<CfgBlock>());
+
+    /// <summary>
+    /// A new block with <paramref name="key"/>'s assignment replaced (or
+    /// added) and every other assignment/block left exactly as-is - the
+    /// non-destructive "change one field" a settings file needs when it
+    /// must preserve fields this codebase doesn't model (see
+    /// <c>MapSettings</c>'s own remarks).
+    /// </summary>
+    public CfgBlock WithAssignment(string key, CfgValue value)
+    {
+        var assignments = Assignments.Where(a => a.Key != key).Append(new CfgAssignment(key, value)).ToList();
+        return new CfgBlock(Key, assignments, Blocks);
+    }
+
+    /// <summary>Same idea as <see cref="WithAssignment"/>, for a nested block instead of a scalar value.</summary>
+    public CfgBlock WithBlock(string key, CfgBlock child)
+    {
+        var retargeted = child.Key == key ? child : new CfgBlock(key, child.Assignments, child.Blocks);
+        var blocks = Blocks.Where(b => b.Key != key).Append(retargeted).ToList();
+        return new CfgBlock(Key, Assignments, blocks);
+    }
 }

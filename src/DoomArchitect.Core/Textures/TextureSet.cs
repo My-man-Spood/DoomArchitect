@@ -7,11 +7,12 @@ namespace DoomArchitect.Core.Textures;
 /// most calling code needs. Resolves PLAYPAL, PNAMES, and TEXTURE1/
 /// TEXTURE2 once at load time; individual wall textures and flats are
 /// decoded lazily on first request and cached for the lifetime of this
-/// instance. Resolution is scoped to a single WAD - there's no IWAD+PWAD
-/// layering yet (that belongs with a future game-configuration/
-/// multi-resource system), so a bare PWAD with no embedded PLAYPAL/
-/// TEXTURE1/patches will just show placeholders, the same as any other
-/// genuinely missing resource.
+/// instance. Backed by a <see cref="WadResourceSet"/> rather than a single
+/// raw <see cref="WadFile"/> - a PWAD with none of its own embedded
+/// resources (common for UDMF maps) needs an additional resource (its
+/// IWAD) layered underneath to resolve anything at all; <see cref="Load(WadFile,IModernImageDecoder)"/>
+/// keeps the single-WAD case working exactly as before by wrapping it in
+/// <see cref="WadResourceSet.Single"/>.
 ///
 /// Callers never pass the map-format sentinel <c>"-"</c> ("no texture")
 /// into <see cref="GetWallTexture"/>/<see cref="GetFlatTexture"/> - that
@@ -23,7 +24,7 @@ public sealed class TextureSet
 {
     private static readonly PixelImage Placeholder = CreatePlaceholder();
 
-    private readonly WadFile _wad;
+    private readonly WadResourceSet _resources;
     private readonly Playpal _palette;
     private readonly PatchImageResolver _patchResolver;
     private readonly Dictionary<string, CompositeTextureDefinition> _wallDefinitions;
@@ -34,10 +35,10 @@ public sealed class TextureSet
     private IReadOnlyList<WadLump>? _spriteRange;
 
     private TextureSet(
-        WadFile wad, Playpal palette, PatchImageResolver patchResolver,
+        WadResourceSet resources, Playpal palette, PatchImageResolver patchResolver,
         Dictionary<string, CompositeTextureDefinition> wallDefinitions, List<string> warnings)
     {
-        _wad = wad;
+        _resources = resources;
         _palette = palette;
         _patchResolver = patchResolver;
         _wallDefinitions = wallDefinitions;
@@ -46,11 +47,14 @@ public sealed class TextureSet
 
     public IReadOnlyList<string> Warnings => _warnings;
 
-    public static TextureSet Load(WadFile wad, IModernImageDecoder? modernDecoder = null)
+    public static TextureSet Load(WadFile wad, IModernImageDecoder? modernDecoder = null) =>
+        Load(WadResourceSet.Single(wad), modernDecoder);
+
+    public static TextureSet Load(WadResourceSet resources, IModernImageDecoder? modernDecoder = null)
     {
         var warnings = new List<string>();
 
-        var playpalLump = wad.FindLump("PLAYPAL");
+        var playpalLump = resources.FindLump("PLAYPAL");
         Playpal palette;
         if (playpalLump != null)
         {
@@ -64,12 +68,12 @@ public sealed class TextureSet
 
         var patchResolver = new PatchImageResolver(palette, modernDecoder);
 
-        var patchNamesLump = wad.FindLump("PNAMES");
+        var patchNamesLump = resources.FindLump("PNAMES");
         var patchNames = patchNamesLump != null ? PatchNames.Read(patchNamesLump.Data) : Array.Empty<string>();
 
         var wallDefinitions = new Dictionary<string, CompositeTextureDefinition>(StringComparer.OrdinalIgnoreCase);
 
-        var texture1Lump = wad.FindLump("TEXTURE1");
+        var texture1Lump = resources.FindLump("TEXTURE1");
         if (texture1Lump != null)
         {
             foreach (var definition in TextureDefinitionReader.Read(texture1Lump.Data, patchNames, isTexture1: true, warnings))
@@ -78,7 +82,7 @@ public sealed class TextureSet
             }
         }
 
-        var texture2Lump = wad.FindLump("TEXTURE2");
+        var texture2Lump = resources.FindLump("TEXTURE2");
         if (texture2Lump != null)
         {
             foreach (var definition in TextureDefinitionReader.Read(texture2Lump.Data, patchNames, isTexture1: false, warnings))
@@ -87,12 +91,12 @@ public sealed class TextureSet
             }
         }
 
-        return new TextureSet(wad, palette, patchResolver, wallDefinitions, warnings);
+        return new TextureSet(resources, palette, patchResolver, wallDefinitions, warnings);
     }
 
     /// <summary>Creates an empty texture set with no WAD-backed data - every lookup returns the placeholder.</summary>
     public static TextureSet CreateEmpty() =>
-        new(WadFile.Read(new MemoryStream(EmptyWadBytes())), Playpal.CreateFallback(),
+        new(WadResourceSet.Single(WadFile.Read(new MemoryStream(EmptyWadBytes()))), Playpal.CreateFallback(),
             new PatchImageResolver(Playpal.CreateFallback()),
             new Dictionary<string, CompositeTextureDefinition>(StringComparer.OrdinalIgnoreCase), new List<string>());
 
@@ -119,7 +123,7 @@ public sealed class TextureSet
     {
         if (_flatCache.TryGetValue(name, out var cached)) return cached;
 
-        var lump = _wad.FindLump(name);
+        var lump = _resources.FindLump(name);
         PixelImage result;
         if (lump == null)
         {
@@ -140,18 +144,18 @@ public sealed class TextureSet
     /// game-configuration thing-type entry stores the full, specific frame
     /// to show, not just a 4-character prefix, so there's no rotation-frame
     /// guessing to do here). Returns <c>null</c> rather than the
-    /// magenta/black placeholder on a miss: sprite/texture resolution is
-    /// scoped to a single loaded WAD (see this class's own remarks), and
-    /// sprites in particular usually live only in the IWAD - loading a
-    /// PWAD-only map without its parent IWAD is expected to hit this often,
-    /// not a load failure the placeholder is meant to signal. Callers
-    /// decide their own fallback (the generic Thing placeholder icon).
+    /// magenta/black placeholder on a miss: sprites in particular usually
+    /// live only in the IWAD - loading a PWAD-only map without also
+    /// layering its parent IWAD as a resource is expected to hit this
+    /// often, not a load failure the placeholder is meant to signal.
+    /// Callers decide their own fallback (the generic Thing placeholder
+    /// icon).
     /// </summary>
     public PixelImage? TryGetSpriteTexture(string spriteName)
     {
         if (_spriteCache.TryGetValue(spriteName, out var cached)) return cached;
 
-        _spriteRange ??= _wad.FindLumpsBetweenMarkers("S_START", "S_END");
+        _spriteRange ??= _resources.FindLumpsBetweenMarkers("S_START", "S_END");
         var lump = _spriteRange.FirstOrDefault(l => l.Name.Equals(spriteName, StringComparison.OrdinalIgnoreCase));
         if (lump == null) return null;
 
@@ -164,7 +168,7 @@ public sealed class TextureSet
 
     private PixelImage? ResolvePatchByName(string name)
     {
-        var lump = _wad.FindLump(name);
+        var lump = _resources.FindLump(name);
         if (lump == null) return null;
 
         if (_patchResolver.TryResolvePatch(lump.Data, out var image, out var warning)) return image;

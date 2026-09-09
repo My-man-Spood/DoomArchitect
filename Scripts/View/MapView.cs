@@ -55,13 +55,17 @@ public partial class MapView : Node3D
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
 		_perspectiveCamera = GetNode<Camera3D>("PerspectiveCamera");
 		_overlay = GetNode<MapOverlay>("Overlay/MapOverlay");
-		_modeToolbar = GetNode<ModeToolbar>("UI/MarginContainer/TopToolbar");
+		_modeToolbar = GetNode<ModeToolbar>("UI/TopBar/ToolbarMargin/TopToolbar");
 		_modeToolbar.Overlay = _overlay;
-		_gridToolbar = GetNode<GridToolbar>("UI/MarginContainer/TopToolbar/GridToolbar");
+		_gridToolbar = GetNode<GridToolbar>("UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar");
 		_gridToolbar.Overlay = _overlay;
 		_statusBar = GetNode<StatusBar>("UI/StatusBar");
 		_statusBar.Overlay = _overlay;
-		GetNode<OpenMapMenu>("UI/MarginContainer/TopToolbar/OpenMapGroup").MapLoaded += LoadMap;
+
+		var openMapMenu = GetNode<OpenMapMenu>("UI/OpenMapMenu");
+		openMapMenu.MapLoaded += LoadMap;
+		openMapMenu.MapResourcesChanged += RefreshResources;
+		GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar").Initialize(openMapMenu);
 
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.
@@ -184,6 +188,37 @@ public partial class MapView : Node3D
 	/// </summary>
 	private void LoadMap(MapData newMap, TextureSet textures, IGameConfiguration gameConfiguration)
 	{
+		_textureCache = new TextureCache(textures);
+		_gameConfiguration = gameConfiguration;
+		_map = newMap;
+
+		RebuildAllMeshes();
+
+		_undoStack = new UndoStack();
+		_overlay.UndoStack = _undoStack;
+
+		FitTopDownCameraToMap(newMap);
+	}
+
+	/// <summary>
+	/// A user revisited Map Options for the map that's already loaded
+	/// (e.g. finally pointed at the IWAD) rather than loading a different
+	/// one - rebuilds every mesh against the new textures/game
+	/// configuration exactly like <see cref="LoadMap"/> does, but
+	/// deliberately does *not* touch undo history or the camera, since the
+	/// map itself (<see cref="_map"/>) hasn't actually changed.
+	/// </summary>
+	public void RefreshResources(TextureSet textures, IGameConfiguration gameConfiguration)
+	{
+		_textureCache = new TextureCache(textures);
+		_gameConfiguration = gameConfiguration;
+
+		RebuildAllMeshes();
+	}
+
+	/// <summary>Tears down and rebuilds every sector/wall/thing mesh against the current <see cref="_map"/>/<see cref="_textureCache"/>/<see cref="_gameConfiguration"/> - the part <see cref="LoadMap"/> and <see cref="RefreshResources"/> share.</summary>
+	private void RebuildAllMeshes()
+	{
 		foreach (var (floor, ceiling) in _sectorMeshes.Values)
 		{
 			floor.QueueFree();
@@ -207,36 +242,28 @@ public partial class MapView : Node3D
 		_thingMeshes.Clear();
 		_thingTypeMeshes.Clear();
 
-		_textureCache = new TextureCache(textures);
-		_gameConfiguration = gameConfiguration;
-
-		// The old target may reference a Sector/WallSegment from the map
-		// being discarded - never carry that across a load.
+		// The old target may reference a Sector/WallSegment from meshes
+		// being discarded - never carry that across a rebuild.
 		_currentTarget = null;
 		_targetHighlight.HideHighlight();
 
-		_map = newMap;
-		foreach (var sector in newMap.Sectors)
+		foreach (var sector in _map.Sectors)
 		{
 			CreateSectorMeshInstances(sector);
 		}
 
-		foreach (var linedef in newMap.Linedefs)
+		foreach (var linedef in _map.Linedefs)
 		{
 			CreateWallMeshInstance(linedef);
 		}
 
-		foreach (var thing in newMap.Things)
+		foreach (var thing in _map.Things)
 		{
 			CreateThingMeshInstance(thing);
 		}
 
-		_undoStack = new UndoStack();
 		_overlay.Map = _map;
-		_overlay.UndoStack = _undoStack;
 		_overlay.GameConfiguration = _gameConfiguration;
-
-		FitTopDownCameraToMap(newMap);
 	}
 
 	private void FitTopDownCameraToMap(MapData map)

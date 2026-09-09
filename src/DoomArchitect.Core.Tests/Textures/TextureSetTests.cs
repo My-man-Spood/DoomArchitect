@@ -122,4 +122,29 @@ public class TextureSetTests
 
         Assert.Same(first, second);
     }
+
+    [Fact]
+    public void Load_WadResourceSet_ResolvesEverythingFromALowerPriorityResourceWad()
+    {
+        // The exact shape of the real bug this fixes: a "PWAD" with none
+        // of its own embedded resources, layered over an "IWAD" resource
+        // that has everything - palette, flat, and sprite should all
+        // resolve from the IWAD, not just fall back to placeholders.
+        var sprite = Patch(height: 1, new (byte, byte[])[] { (0, new byte[] { 0 }) });
+        var iwad = BuildWad(
+            ("PLAYPAL", Playpal((9, 9, 9))),
+            ("MYFLAT", Flat(64, 64, 5)),
+            ("S_START", Array.Empty<byte>()),
+            ("POSSA1", sprite),
+            ("S_END", Array.Empty<byte>()));
+        var pwad = BuildWad(("MAP01", Array.Empty<byte>()));
+
+        var resources = new DoomArchitect.Core.IO.WadResourceSet(new[] { iwad, pwad });
+        var set = TextureSet.Load(resources);
+
+        Assert.NotNull(set.TryGetSpriteTexture("POSSA1"));
+        Assert.Empty(set.Warnings);
+        set.GetFlatTexture("MYFLAT");
+        Assert.DoesNotContain(set.Warnings, w => w.Contains("MYFLAT"));
+    }
 }

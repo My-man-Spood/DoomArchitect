@@ -12,6 +12,7 @@
 [ext_resource type="Texture2D" uid="uid://31ak10wy5bcy" path="res://Assets/Icons/icon_grid.svg" id="9"]
 [ext_resource type="Script" path="res://Scripts/View/GridToolbar.cs" id="10"]
 [ext_resource type="Script" path="res://Scripts/View/OpenMapMenu.cs" id="11"]
+[ext_resource type="Script" path="res://Scripts/View/MainMenuBar.cs" id="12"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -55,39 +56,60 @@ script = ExtResource("3")
 [node name="UI" type="CanvasLayer" parent="." unique_id=713882288]
 layer = 10
 
-[node name="MarginContainer" type="MarginContainer" parent="UI" unique_id=928656779]
+[node name="TopBar" type="VBoxContainer" parent="UI" unique_id=928656779]
 anchors_preset = 10
 anchor_right = 1.0
-offset_bottom = 4.0
 grow_horizontal = 2
+theme_override_constants/separation = 0
+
+[node name="MenuBarPanel" type="PanelContainer" parent="UI/TopBar"]
+layout_mode = 2
+mouse_filter = 0
+theme = ExtResource("4_50glp")
+theme_type_variation = &"TopBarPanel"
+
+[node name="MenuBar" type="MenuBar" parent="UI/TopBar/MenuBarPanel"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme = ExtResource("4_50glp")
+script = ExtResource("12")
+
+[node name="File" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar"]
+
+[node name="Map" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar"]
+
+[node name="Preferences" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar"]
+
+[node name="ToolbarMargin" type="MarginContainer" parent="UI/TopBar"]
+layout_mode = 2
 theme_override_constants/margin_left = 5
 theme_override_constants/margin_top = 5
 theme_override_constants/margin_right = 5
 theme_override_constants/margin_bottom = 5
 
-[node name="TopToolbar" type="HBoxContainer" parent="UI/MarginContainer" unique_id=2143370880]
+[node name="TopToolbar" type="HBoxContainer" parent="UI/TopBar/ToolbarMargin" unique_id=2143370880]
 layout_mode = 2
 size_flags_horizontal = 3
 theme = ExtResource("4_50glp")
 theme_override_constants/separation = 8
 script = ExtResource("4")
 
-[node name="EditingModeButtonGroup" type="PanelContainer" parent="UI/MarginContainer/TopToolbar" unique_id=1523386420]
+[node name="EditingModeButtonGroup" type="PanelContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar" unique_id=1523386420]
 layout_mode = 2
 theme_type_variation = &"ButtonGroupPanel"
 
-[node name="MarginContainer" type="MarginContainer" parent="UI/MarginContainer/TopToolbar/EditingModeButtonGroup" unique_id=1095775874]
+[node name="MarginContainer" type="MarginContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup" unique_id=1095775874]
 layout_mode = 2
 theme_override_constants/margin_left = 2
 theme_override_constants/margin_top = 2
 theme_override_constants/margin_right = 2
 theme_override_constants/margin_bottom = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="UI/MarginContainer/TopToolbar/EditingModeButtonGroup/MarginContainer" unique_id=1427883489]
+[node name="HBoxContainer" type="HBoxContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer" unique_id=1427883489]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="VertexModeButton3" type="Button" parent="UI/MarginContainer/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=599206496]
+[node name="VertexModeButton3" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=599206496]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
@@ -98,7 +120,7 @@ button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("5")
 expand_icon = true
 
-[node name="LinedefModeButton2" type="Button" parent="UI/MarginContainer/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=1137142485]
+[node name="LinedefModeButton2" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=1137142485]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
@@ -108,7 +130,7 @@ button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("6")
 expand_icon = true
 
-[node name="SectorModeButton" type="Button" parent="UI/MarginContainer/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=1639743312]
+[node name="SectorModeButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer" unique_id=1639743312]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
@@ -118,23 +140,23 @@ button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("7")
 expand_icon = true
 
-[node name="GridToolbar" type="PanelContainer" parent="UI/MarginContainer/TopToolbar"]
+[node name="GridToolbar" type="PanelContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar"]
 layout_mode = 2
 theme_type_variation = &"ButtonGroupPanel"
 script = ExtResource("10")
 
-[node name="MarginContainer" type="MarginContainer" parent="UI/MarginContainer/TopToolbar/GridToolbar"]
+[node name="MarginContainer" type="MarginContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar"]
 layout_mode = 2
 theme_override_constants/margin_left = 2
 theme_override_constants/margin_top = 2
 theme_override_constants/margin_right = 2
 theme_override_constants/margin_bottom = 2
 
-[node name="HBoxContainer" type="HBoxContainer" parent="UI/MarginContainer/TopToolbar/GridToolbar/MarginContainer"]
+[node name="HBoxContainer" type="HBoxContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer"]
 layout_mode = 2
 theme_override_constants/separation = 10
 
-[node name="SnapToggleButton" type="Button" parent="UI/MarginContainer/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
+[node name="SnapToggleButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
@@ -143,14 +165,14 @@ toggle_mode = true
 icon = ExtResource("9")
 expand_icon = true
 
-[node name="DecreaseGridButton" type="Button" parent="UI/MarginContainer/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
+[node name="DecreaseGridButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
 tooltip_text = "Halve grid size (])"
 text = "-"
 
-[node name="GridSizeLabel" type="Label" parent="UI/MarginContainer/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
+[node name="GridSizeLabel" type="Label" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
 custom_minimum_size = Vector2(40, 28)
 layout_mode = 2
 tooltip_text = "Current grid size"
@@ -159,32 +181,18 @@ text = "32"
 horizontal_alignment = 1
 vertical_alignment = 1
 
-[node name="IncreaseGridButton" type="Button" parent="UI/MarginContainer/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
+[node name="IncreaseGridButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
 custom_minimum_size = Vector2(28, 28)
 layout_mode = 2
 focus_mode = 0
 tooltip_text = "Double grid size ([)"
 text = "+"
 
-[node name="OpenMapGroup" type="PanelContainer" parent="UI/MarginContainer/TopToolbar"]
-layout_mode = 2
-theme_type_variation = &"ButtonGroupPanel"
+[node name="OpenMapMenu" type="PanelContainer" parent="UI"]
+visible = false
 script = ExtResource("11")
 
-[node name="MarginContainer" type="MarginContainer" parent="UI/MarginContainer/TopToolbar/OpenMapGroup"]
-layout_mode = 2
-theme_override_constants/margin_left = 2
-theme_override_constants/margin_top = 2
-theme_override_constants/margin_right = 2
-theme_override_constants/margin_bottom = 2
-
-[node name="OpenButton" type="Button" parent="UI/MarginContainer/TopToolbar/OpenMapGroup/MarginContainer"]
-layout_mode = 2
-focus_mode = 0
-tooltip_text = "Open a WAD file and load its first UDMF map"
-text = "Open Map..."
-
-[node name="FileDialog" type="FileDialog" parent="UI/MarginContainer/TopToolbar/OpenMapGroup"]
+[node name="FileDialog" type="FileDialog" parent="UI/OpenMapMenu"]
 title = "Open Map WAD"
 initial_position = 1
 size = Vector2i(640, 480)
@@ -192,7 +200,7 @@ file_mode = 0
 access = 2
 filters = PackedStringArray("*.wad ; Doom WAD files")
 
-[node name="ErrorDialog" type="AcceptDialog" parent="UI/MarginContainer/TopToolbar/OpenMapGroup"]
+[node name="ErrorDialog" type="AcceptDialog" parent="UI/OpenMapMenu"]
 title = "Failed to Load Map"
 initial_position = 1
 
