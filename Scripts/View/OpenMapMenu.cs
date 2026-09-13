@@ -205,8 +205,8 @@ public partial class OpenMapMenu : PanelContainer
 
 		var kind = _mapOptionsDialog.GetGameConfiguration();
 		var resourcePaths = _mapOptionsDialog.GetResourcePaths();
-		var resourceWads = _mapOptionsDialog.GetResourceWads().Append(_pendingWad).ToList();
-		var textures = TextureSet.Load(new WadResourceSet(resourceWads));
+		var resourceContainers = _mapOptionsDialog.GetResourceContainers().Append<IResourceContainer>(_pendingWad).ToList();
+		var textures = TextureSet.Load(new ResourceSet(resourceContainers));
 		var gameConfiguration = GameConfigurations.Get(kind);
 
 		if (_isRevisitingCurrentMap)

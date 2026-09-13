@@ -24,7 +24,7 @@ public partial class MapOptionsDialog : AcceptDialog
 
 		_resourceListEditor = GetNode<ResourceListEditor>("Container/ResourceListEditor");
 		_resourceListEditor.HintText =
-			"Additional resources (e.g. the IWAD) - lower items override higher ones, this map's own file always wins.";
+			"Additional resources (e.g. the IWAD, or a PK3 like gzdoom.pk3) - lower items override higher ones, this map's own file always wins.";
 	}
 
 	public void SetGameConfiguration(GameConfigurationKind kind) =>
@@ -37,5 +37,5 @@ public partial class MapOptionsDialog : AcceptDialog
 
 	public IReadOnlyList<string> GetResourcePaths() => _resourceListEditor.GetResourcePaths();
 
-	public IReadOnlyList<WadFile> GetResourceWads() => _resourceListEditor.GetResourceWads();
+	public IReadOnlyList<IResourceContainer> GetResourceContainers() => _resourceListEditor.GetResourceContainers();
 }

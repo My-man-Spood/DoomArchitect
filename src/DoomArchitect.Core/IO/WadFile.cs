@@ -23,7 +23,7 @@ public sealed class WadLump
 /// are identified purely by their position relative to a map marker lump
 /// (e.g. "MAP01") - the format itself has no explicit grouping.
 /// </summary>
-public sealed class WadFile
+public sealed class WadFile : IResourceContainer
 {
     private WadFile(IReadOnlyList<WadLump> lumps)
     {
@@ -114,6 +114,23 @@ public sealed class WadFile
 
         return Array.Empty<WadLump>();
     }
+
+    /// <summary>
+    /// Maps a <see cref="ResourceNamespace"/> onto the real WAD marker pair
+    /// that bounds it (verified against UDB's own game-configuration data,
+    /// e.g. <c>Doom_misc.cfg</c>/<c>ZDoom_misc.cfg</c>) and delegates to
+    /// <see cref="FindLumpsBetweenMarkers"/>. <see cref="ResourceNamespace.Graphics"/>
+    /// has no WAD equivalent at all - it's a PK3-only convention - so it
+    /// always returns empty here.
+    /// </summary>
+    public IReadOnlyList<WadLump> FindNamespaceLumps(ResourceNamespace ns) => ns switch
+    {
+        ResourceNamespace.Patches => FindLumpsBetweenMarkers("P_START", "P_END"),
+        ResourceNamespace.Textures => FindLumpsBetweenMarkers("TX_START", "TX_END"),
+        ResourceNamespace.Flats => FindLumpsBetweenMarkers("F_START", "F_END"),
+        ResourceNamespace.Sprites => FindLumpsBetweenMarkers("S_START", "S_END"),
+        _ => Array.Empty<WadLump>(),
+    };
 
     /// <summary>
     /// Names of every map marker lump immediately followed by

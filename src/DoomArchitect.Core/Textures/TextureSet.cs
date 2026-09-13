@@ -7,12 +7,13 @@ namespace DoomArchitect.Core.Textures;
 /// most calling code needs. Resolves PLAYPAL, PNAMES, and TEXTURE1/
 /// TEXTURE2 once at load time; individual wall textures and flats are
 /// decoded lazily on first request and cached for the lifetime of this
-/// instance. Backed by a <see cref="WadResourceSet"/> rather than a single
-/// raw <see cref="WadFile"/> - a PWAD with none of its own embedded
-/// resources (common for UDMF maps) needs an additional resource (its
-/// IWAD) layered underneath to resolve anything at all; <see cref="Load(WadFile,IModernImageDecoder)"/>
-/// keeps the single-WAD case working exactly as before by wrapping it in
-/// <see cref="WadResourceSet.Single"/>.
+/// instance. Backed by a <see cref="ResourceSet"/> rather than a single
+/// raw <see cref="IResourceContainer"/> - a PWAD with none of its own
+/// embedded resources (common for UDMF maps) needs an additional resource
+/// (its IWAD, or nowadays a PK3 such as <c>gzdoom.pk3</c>) layered
+/// underneath to resolve anything at all; <see cref="Load(IResourceContainer,IModernImageDecoder)"/>
+/// keeps the single-resource case working exactly as before by wrapping it
+/// in <see cref="ResourceSet.Single"/>.
 ///
 /// Callers never pass the map-format sentinel <c>"-"</c> ("no texture")
 /// into <see cref="GetWallTexture"/>/<see cref="GetFlatTexture"/> - that
@@ -24,7 +25,7 @@ public sealed class TextureSet
 {
     private static readonly PixelImage Placeholder = CreatePlaceholder();
 
-    private readonly WadResourceSet _resources;
+    private readonly ResourceSet _resources;
     private readonly Playpal _palette;
     private readonly PatchImageResolver _patchResolver;
     private readonly Dictionary<string, CompositeTextureDefinition> _wallDefinitions;
@@ -35,7 +36,7 @@ public sealed class TextureSet
     private IReadOnlyList<WadLump>? _spriteRange;
 
     private TextureSet(
-        WadResourceSet resources, Playpal palette, PatchImageResolver patchResolver,
+        ResourceSet resources, Playpal palette, PatchImageResolver patchResolver,
         Dictionary<string, CompositeTextureDefinition> wallDefinitions, List<string> warnings)
     {
         _resources = resources;
@@ -47,10 +48,10 @@ public sealed class TextureSet
 
     public IReadOnlyList<string> Warnings => _warnings;
 
-    public static TextureSet Load(WadFile wad, IModernImageDecoder? modernDecoder = null) =>
-        Load(WadResourceSet.Single(wad), modernDecoder);
+    public static TextureSet Load(IResourceContainer resource, IModernImageDecoder? modernDecoder = null) =>
+        Load(ResourceSet.Single(resource), modernDecoder);
 
-    public static TextureSet Load(WadResourceSet resources, IModernImageDecoder? modernDecoder = null)
+    public static TextureSet Load(ResourceSet resources, IModernImageDecoder? modernDecoder = null)
     {
         var warnings = new List<string>();
 
@@ -96,7 +97,7 @@ public sealed class TextureSet
 
     /// <summary>Creates an empty texture set with no WAD-backed data - every lookup returns the placeholder.</summary>
     public static TextureSet CreateEmpty() =>
-        new(WadResourceSet.Single(WadFile.Read(new MemoryStream(EmptyWadBytes()))), Playpal.CreateFallback(),
+        new(ResourceSet.Single(WadFile.Read(new MemoryStream(EmptyWadBytes()))), Playpal.CreateFallback(),
             new PatchImageResolver(Playpal.CreateFallback()),
             new Dictionary<string, CompositeTextureDefinition>(StringComparer.OrdinalIgnoreCase), new List<string>());
 
@@ -155,7 +156,7 @@ public sealed class TextureSet
     {
         if (_spriteCache.TryGetValue(spriteName, out var cached)) return cached;
 
-        _spriteRange ??= _resources.FindLumpsBetweenMarkers("S_START", "S_END");
+        _spriteRange ??= _resources.FindNamespaceLumps(ResourceNamespace.Sprites);
         var lump = _spriteRange.FirstOrDefault(l => l.Name.Equals(spriteName, StringComparison.OrdinalIgnoreCase));
         if (lump == null) return null;
 

@@ -6,10 +6,11 @@ using DoomArchitect.Core.IO;
 using Godot;
 
 /// <summary>
-/// A reusable "ordered list of resource WADs" editor - an <see cref="ItemList"/>
+/// A reusable "ordered list of resources" editor - an <see cref="ItemList"/>
 /// plus Add.../Remove-selected buttons and a nested "add" <see cref="FileDialog"/>,
-/// wrapping the actual loaded <see cref="WadFile"/>s so callers never touch
-/// raw paths without also having the parsed WAD ready to use. The same
+/// wrapping the actual loaded <see cref="IResourceContainer"/>s (a WAD or a
+/// PK3 - see <see cref="ResourceContainerFactory"/>) so callers never touch
+/// raw paths without also having the parsed resource ready to use. The same
 /// widget is embedded in both <c>MapOptionsDialog</c> (a map's own
 /// resources) and <c>PreferencesDialog</c> (a game configuration's app-
 /// wide default resources) - mirrors UDB's own real <c>ResourceListEditor</c>
@@ -18,9 +19,9 @@ using Godot;
 /// </summary>
 public partial class ResourceListEditor : VBoxContainer
 {
-	private readonly record struct ResourceEntry(string Path, WadFile Wad);
+	private readonly record struct ResourceEntry(string Path, IResourceContainer Container);
 
-	[Export] public string HintText { get; set; } = "Additional resource WADs - lower items override higher ones.";
+	[Export] public string HintText { get; set; } = "Additional resource WADs/PK3s - lower items override higher ones.";
 
 	private Label _hintLabel;
 	private ItemList _list;
@@ -44,7 +45,7 @@ public partial class ResourceListEditor : VBoxContainer
 		_addFileDialog.FileSelected += OnFileSelected;
 	}
 
-	/// <summary>Replaces the whole list, loading each path as a <see cref="WadFile"/> - one that fails to load (e.g. moved on disk) is skipped and reported, not fatal to the rest.</summary>
+	/// <summary>Replaces the whole list, loading each path via <see cref="ResourceContainerFactory"/> (a WAD or a PK3) - one that fails to load (e.g. moved on disk) is skipped and reported, not fatal to the rest.</summary>
 	public void SetResourcePaths(IReadOnlyList<string> paths)
 	{
 		_resources.Clear();
@@ -54,7 +55,7 @@ public partial class ResourceListEditor : VBoxContainer
 		{
 			try
 			{
-				_resources.Add(new ResourceEntry(path, WadFile.Read(path)));
+				_resources.Add(new ResourceEntry(path, ResourceContainerFactory.Open(path)));
 			}
 			catch (Exception)
 			{
@@ -72,13 +73,13 @@ public partial class ResourceListEditor : VBoxContainer
 
 	public IReadOnlyList<string> GetResourcePaths() => _resources.Select(r => r.Path).ToList();
 
-	public IReadOnlyList<WadFile> GetResourceWads() => _resources.Select(r => r.Wad).ToList();
+	public IReadOnlyList<IResourceContainer> GetResourceContainers() => _resources.Select(r => r.Container).ToList();
 
 	private void OnFileSelected(string path)
 	{
 		try
 		{
-			_resources.Add(new ResourceEntry(path, WadFile.Read(path)));
+			_resources.Add(new ResourceEntry(path, ResourceContainerFactory.Open(path)));
 			Refresh();
 		}
 		catch (Exception ex)

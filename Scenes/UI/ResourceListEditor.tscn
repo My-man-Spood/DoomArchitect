@@ -26,13 +26,13 @@ layout_mode = 2
 text = "Remove selected"
 
 [node name="AddFileDialog" type="FileDialog" parent="."]
-title = "Add Resource WAD"
+title = "Add Resource"
 initial_position = 1
 size = Vector2i(640, 480)
 exclusive = false
 file_mode = 0
 access = 2
-filters = PackedStringArray("*.wad ; Doom WAD files")
+filters = PackedStringArray("*.wad ; Doom WAD files", "*.pk3 ; PK3 archives")
 
 [node name="ErrorDialog" type="AcceptDialog" parent="."]
 title = "Error"

@@ -124,7 +124,7 @@ public class TextureSetTests
     }
 
     [Fact]
-    public void Load_WadResourceSet_ResolvesEverythingFromALowerPriorityResourceWad()
+    public void Load_ResourceSet_ResolvesEverythingFromALowerPriorityResourceWad()
     {
         // The exact shape of the real bug this fixes: a "PWAD" with none
         // of its own embedded resources, layered over an "IWAD" resource
@@ -139,7 +139,7 @@ public class TextureSetTests
             ("S_END", Array.Empty<byte>()));
         var pwad = BuildWad(("MAP01", Array.Empty<byte>()));
 
-        var resources = new DoomArchitect.Core.IO.WadResourceSet(new[] { iwad, pwad });
+        var resources = new DoomArchitect.Core.IO.ResourceSet(new DoomArchitect.Core.IO.IResourceContainer[] { iwad, pwad });
         var set = TextureSet.Load(resources);
 
         Assert.NotNull(set.TryGetSpriteTexture("POSSA1"));
