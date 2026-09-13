@@ -1,0 +1,77 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/SectorEditDialog.cs" id="1"]
+
+[node name="SectorEditDialog" type="AcceptDialog"]
+title = "Edit Sector(s)"
+initial_position = 1
+script = ExtResource("1")
+
+[node name="Container" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="HintLabel" type="Label" parent="Container"]
+layout_mode = 2
+autowrap_mode = 2
+text = "Leave a field blank to keep each sector's own value. Use ++N/--N/*N//N to change relative to it (e.g. ++16 raises every selected sector by 16, each from its own height)."
+
+[node name="Grid" type="GridContainer" parent="Container"]
+layout_mode = 2
+columns = 2
+
+[node name="FloorHeightLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Floor Height"
+
+[node name="FloorHeightEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2
+custom_minimum_size = Vector2(160, 0)
+
+[node name="CeilingHeightLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Ceiling Height"
+
+[node name="CeilingHeightEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2
+
+[node name="FloorTextureLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Floor Texture"
+
+[node name="FloorTextureEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2
+
+[node name="CeilingTextureLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Ceiling Texture"
+
+[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2
+
+[node name="BrightnessLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Brightness"
+
+[node name="BrightnessEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2
+
+[node name="SpecialLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Special"
+
+[node name="SpecialRow" type="HBoxContainer" parent="Container/Grid"]
+layout_mode = 2
+
+[node name="SpecialEdit" type="LineEdit" parent="Container/Grid/SpecialRow"]
+layout_mode = 2
+custom_minimum_size = Vector2(80, 0)
+
+[node name="SpecialNameLabel" type="Label" parent="Container/Grid/SpecialRow"]
+layout_mode = 2
+
+[node name="TagLabel" type="Label" parent="Container/Grid"]
+layout_mode = 2
+text = "Tag"
+
+[node name="TagEdit" type="LineEdit" parent="Container/Grid"]
+layout_mode = 2

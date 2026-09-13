@@ -1,8 +1,11 @@
+using System.Collections.Generic;
+using System.Linq;
+using DoomArchitect.Core.Map;
 using Godot;
 
 /// <summary>
-/// The conventional top menu bar (File / Map / Preferences) - a native
-/// Godot 4.4+ <see cref="MenuBar"/>, whose children are the
+/// The conventional top menu bar (File / Edit / Map / Preferences) - a
+/// native Godot 4.4+ <see cref="MenuBar"/>, whose children are the
 /// <see cref="PopupMenu"/>s shown as its top-level entries (each child's
 /// node name is its label). <see cref="Initialize"/> is called by
 /// <c>MapView</c> once it has resolved <see cref="OpenMapMenu"/> itself,
@@ -14,6 +17,8 @@ public partial class MainMenuBar : MenuBar
 	private OpenMapMenu _openMapMenu;
 	private MapOverlay _overlay;
 	private PreferencesDialog _preferencesDialog;
+	private SectorEditDialog _sectorEditDialog;
+	private AcceptDialog _errorDialog;
 
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
 	{
@@ -26,6 +31,14 @@ public partial class MainMenuBar : MenuBar
 		{
 			if (id == 0) _openMapMenu.ShowOpenFileDialog();
 		};
+
+		var editMenu = GetNode<PopupMenu>("Edit");
+		editMenu.AddItem("Edit Selection...", 0);
+		editMenu.IdPressed += id =>
+		{
+			if (id == 0) OpenEditSelectionDialog();
+		};
+		_overlay.EditSectorsRequested += OpenSectorEditDialogFor;
 
 		var mapMenu = GetNode<PopupMenu>("Map");
 		mapMenu.AddItem("Map Options...", 0);
@@ -42,6 +55,60 @@ public partial class MainMenuBar : MenuBar
 		};
 
 		InitializeSelectionBoxMenu(preferencesMenu);
+	}
+
+	/// <summary>
+	/// Generic-sounding on purpose ("Edit Selection", not "Edit Sector") -
+	/// Linedef and Thing property dialogs slot into this same menu item
+	/// next, per <c>TODO.md</c>'s own ordering; only the Sectors-mode
+	/// branch exists so far.
+	/// </summary>
+	private void OpenEditSelectionDialog()
+	{
+		if (_overlay.Mode != EditMode.Sectors)
+		{
+			ShowError("Edit Selection currently only supports Sectors mode.");
+			return;
+		}
+
+		var selected = _overlay.Map?.GetSelectedSectors().ToList() ?? new List<Sector>();
+		if (selected.Count == 0)
+		{
+			ShowError("Select one or more sectors first.");
+			return;
+		}
+
+		OpenSectorEditDialogFor(selected);
+	}
+
+	private void OpenSectorEditDialogFor(IReadOnlyList<Sector> sectors)
+	{
+		if (sectors.Count == 0) return;
+
+		_sectorEditDialog ??= CreateSectorEditDialog();
+		_sectorEditDialog.SetSectors(sectors, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw());
+		_sectorEditDialog.PopupCentered();
+	}
+
+	private SectorEditDialog CreateSectorEditDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/SectorEditDialog.tscn").Instantiate<SectorEditDialog>();
+		AddChild(dialog);
+		return dialog;
+	}
+
+	private void ShowError(string message)
+	{
+		_errorDialog ??= CreateErrorDialog();
+		_errorDialog.DialogText = message;
+		_errorDialog.PopupCentered();
+	}
+
+	private AcceptDialog CreateErrorDialog()
+	{
+		var dialog = new AcceptDialog { Title = "Error" };
+		AddChild(dialog);
+		return dialog;
 	}
 
 	/// <summary>

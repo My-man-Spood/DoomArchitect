@@ -76,6 +76,8 @@ script = ExtResource("12")
 
 [node name="File" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar" unique_id=1577435051]
 
+[node name="Edit" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar"]
+
 [node name="Map" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar" unique_id=1789331863]
 
 [node name="Preferences" type="PopupMenu" parent="UI/TopBar/MenuBarPanel/MenuBar" unique_id=1882479314]

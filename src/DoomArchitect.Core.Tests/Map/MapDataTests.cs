@@ -34,6 +34,20 @@ public class MapDataTests
     }
 
     [Fact]
+    public void MarkDirty_Sector_SetsNeedsRebuildOnOnlyThatSector()
+    {
+        var map = new MapData();
+        var touched = map.CreateSector(floorHeight: 0, ceilingHeight: 128);
+        var untouched = map.CreateSector(floorHeight: 0, ceilingHeight: 128);
+        foreach (var sector in map.Sectors) map.ClearDirty(sector);
+
+        map.MarkDirty(touched);
+
+        Assert.True(touched.NeedsRebuild);
+        Assert.False(untouched.NeedsRebuild);
+    }
+
+    [Fact]
     public void MovingVertex_DirtiesBothSidesOfATwoSidedLinedef()
     {
         var map = new MapData();

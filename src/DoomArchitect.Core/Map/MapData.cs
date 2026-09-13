@@ -82,6 +82,16 @@ public sealed class MapData
 
     public void ClearDirty(Sector sector) => sector.NeedsRebuild = false;
 
+    /// <summary>
+    /// Flags a sector's mesh as stale without changing its geometry - for a
+    /// caller (e.g. a property dialog) that mutated <see cref="Sector.FloorHeight"/>/
+    /// <see cref="Sector.CeilingHeight"/>/<see cref="Sector.FloorTexture"/>/
+    /// <see cref="Sector.CeilingTexture"/>/<see cref="Sector.Brightness"/>
+    /// directly rather than through a method that already dirties it (like
+    /// <see cref="MoveVertex"/> does via <see cref="Linedef.MarkAdjacentSectorsDirty"/>).
+    /// </summary>
+    public void MarkDirty(Sector sector) => sector.NeedsRebuild = true;
+
     public void MoveThing(Thing thing, Vector2 newPosition)
     {
         thing.Position = newPosition;

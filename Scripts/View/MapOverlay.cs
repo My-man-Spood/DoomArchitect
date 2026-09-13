@@ -69,6 +69,17 @@ public partial class MapOverlay : Control
 	public UndoStack UndoStack { get; set; }
 	public IGameConfiguration GameConfiguration { get; set; }
 
+	/// <summary>
+	/// Raised on a double-click in Sectors mode - the trigger for opening a
+	/// properties dialog. Reuses the same select-only-if-unselected-else-
+	/// keep-group rule already verified and ported for right-button drag
+	/// this session (rather than re-verifying UDB's own double-click
+	/// handler independently - a reasonable default given this project's
+	/// established muscle-memory-consistency pattern, flagged as inferred
+	/// rather than confirmed if it ever feels off in practice).
+	/// </summary>
+	public event System.Action<IReadOnlyList<Sector>> EditSectorsRequested;
+
 	private EditMode _mode = EditMode.Vertices;
 
 	/// <summary>
@@ -430,6 +441,14 @@ public partial class MapOverlay : Control
 	{
 		switch (@event)
 		{
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true, DoubleClick: true } doubleClick:
+				var doubleClickTarget = FindSectorAt(doubleClick.Position);
+				if (doubleClickTarget != null)
+				{
+					if (!doubleClickTarget.IsSelected) Map.SelectOnly(doubleClickTarget);
+					EditSectorsRequested?.Invoke(Map.GetSelectedSectors().ToList());
+				}
+				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				BeginMarqueeOrClick(press.Position);
 				break;
