@@ -3,6 +3,7 @@ using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
 using DoomArchitect.Interop;
 using DoomArchitect.Rendering;
@@ -68,6 +69,11 @@ public partial class MapOverlay : Control
 	public Camera3D Camera { get; set; }
 	public UndoStack UndoStack { get; set; }
 	public IGameConfiguration GameConfiguration { get; set; }
+	public TextureSet TextureSet { get; set; }
+	public TextureIconCache TextureIconCache { get; set; }
+
+	/// <summary>Every currently loaded resource, named for display - the texture browser's per-resource tree.</summary>
+	public IReadOnlyList<NamedResource> NamedResources { get; set; } = System.Array.Empty<NamedResource>();
 
 	/// <summary>
 	/// Raised on a double-click in Sectors mode - the trigger for opening a

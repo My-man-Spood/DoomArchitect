@@ -1277,16 +1277,64 @@ file just tracks what's built and what's next.
       3D visual mode is untouched - UDB's own visual-mode camera movement
       is a fully separate WASD/mouselook system with no relation to this
       action at all, matching this project's existing `FreeFlyCamera`.
-- [ ] Property editing UI (sector/linedef/thing dialogs) - the foundation
-      above (selection + `Fields`/`UniFields`/`UniValue` + generic
-      `SetFieldCommand`) unblocks this; not yet started. Per prior
-      research into UDB's real dialogs: plan as (roughly) three separate
-      pieces given the format/game-dependent complexity - Sector
-      (simplest, a good first proof of the foundation), Linedef+Sidedef
-      combined (UDB itself embeds sidedef editing inside the linedef
-      dialog - no standalone sidedef dialog exists there either - and
-      this is the largest of the three, needing dynamic per-action
-      argument-editing UI), and Thing.
+- [x] Property editing UI, Sector (v1) - `SectorEditDialog`, ported from
+      UDB's real `SectorEditFormUDMF` (both field scope and on-screen
+      layout: Properties tab grouped/ordered exactly like UDB's real
+      `groupfloorceiling`/`groupeffect`/`groupaction` group boxes, plus a
+      real tab strip mirroring UDB's 5 remaining tabs as placeholders).
+      Floor/ceiling height+texture, brightness, gravity, special, tag -
+      real-time apply while open (heights/textures/brightness) with one
+      combined undo step and full revert on cancel; special/tag/gravity
+      apply only on OK, matching UDB's own real split. Numeric fields got
+      UDB's real blank/absolute/`++N`/`--N`/`*N`/`/N` multi-select grammar
+      (`Core.Editing.NumericFieldExpression`) plus real spinner buttons
+      (`StepperLineEdit`, porting UDB's actual `ButtonsNumericTextbox`
+      step values - 8/16/1 for heights and brightness, 0.1/1/0.01 for
+      gravity). Linedef+Sidedef (largest of the three - dynamic per-action
+      argument-editing UI) and Thing dialogs are still not started.
+- [x] Texture picker (v1) - `TextureBrowserDialog`, ported from UDB's real
+      `TextureBrowserForm`: a per-resource tree ("All" plus one node per
+      loaded WAD/PK3, matching UDB's real `ResourceTextureSet` tree
+      shape) alongside a live-filtered icon gallery; single-click selects,
+      double-click/Enter confirms and closes, exactly like UDB. Wired into
+      `SectorEditDialog`'s Floor/Ceiling Texture fields via "Browse..."
+      buttons. Surfaced and fixed a real gap while building this: wall
+      textures only ever came from classic `TEXTURE1`/`TEXTURE2` lumps -
+      `TextureSet` now also resolves a plain image sitting in a PK3's
+      `textures/` folder as a real wall texture (and symmetrically, a
+      PNG-format flat in a PK3's `flats/` folder), matching UDB's actual
+      `PK3StructuredReader.LoadTextures` precedence (classic lumps win,
+      folder images only fill gaps) - this is the dominant convention for
+      modern PK3 content, so this was blocking real use, not theoretical.
+      Icons come from a new ambient `TextureIconCache` that starts warming
+      the moment a map loads (main-thread, budgeted per frame - never
+      blocks, never redone per-feature) rather than decoding on demand
+      when the picker happens to open, specifically so a later hover-
+      preview feature for lines/sectors can also read from it instantly
+      with zero decode logic of its own.
+      **Deliberately not built**: UDB's `MatchingTextureSet` category tree
+      (separate entry below); PK3 internal folder sub-trees within one
+      resource node; "used textures at the top" grouping, width/height
+      filter spinners, the All/Textures/Flats/type-mixing combo, "classic
+      view" toggle; real background-thread decoding (main-thread frame-
+      budgeting instead, to avoid new locking around `TextureSet`'s
+      non-thread-safe internal caches); `roottextures`/`rootflats`/the
+      text-based `TEXTURES` lump DSL (already-deferred game-config
+      options, unrelated to this fix).
+- [ ] Texture browser category tree (UDB's real `MatchingTextureSet`) -
+      UDB's texture/flat browser has a second tree branch alongside
+      per-resource grouping: named categories ("Wood", "Metal", "Base",
+      etc.) defined in the game configuration's `.cfg` data via
+      pattern-matching rules against texture names, entirely independent
+      of which WAD/PK3 a texture actually came from. Surfaced while
+      building the texture picker's per-resource tree (v1) - deliberately
+      deferred there since it needs real new schema, not just wiring:
+      `Core.Configuration`/`IGameConfiguration` has zero concept of
+      texture categories today (confirmed - no `MatchingTextureSet`-
+      equivalent data structure, no `.cfg` parsing for it), so this needs
+      its own design pass for the pattern-matching rule format and how a
+      category set gets defined/loaded before the browser's tree can grow
+      a second branch for it.
 - [ ] Full-bright toggle + real sector/wall brightness editing (Ctrl+Scroll,
       matching UDB's own `togglebrightness`/`raisebrightness8`/
       `lowerbrightness8` default keybinds) - the feature that originally

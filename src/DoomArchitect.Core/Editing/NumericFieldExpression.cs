@@ -39,4 +39,18 @@ public static class NumericFieldExpression
 
     public static long? ResolveInteger(string text, long original) =>
         Resolve(text, original) is { } result ? (long)Math.Round(result) : null;
+
+    /// <summary>
+    /// Whether <paramref name="text"/> is currently a relative expression
+    /// (<c>++</c>/<c>--</c>/<c>*</c>/<c>/</c>-prefixed) rather than blank or
+    /// an absolute number - matches UDB's real <c>NumericTextbox.CheckIsRelative</c>,
+    /// used there (and here) to disable a field's spin-button nudging while
+    /// it holds a relative expression, since nudging one further has no
+    /// well-defined meaning.
+    /// </summary>
+    public static bool IsRelativeExpression(string text)
+    {
+        text = text.Trim();
+        return text.StartsWith("++") || text.StartsWith("--") || text.StartsWith("*") || text.StartsWith("/");
+    }
 }

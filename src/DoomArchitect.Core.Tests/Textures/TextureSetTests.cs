@@ -1,6 +1,9 @@
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Tests.IO;
 using DoomArchitect.Core.Textures;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Formats.Png;
+using SixLabors.ImageSharp.PixelFormats;
 using static DoomArchitect.Core.Tests.Textures.TextureLumpTestBuilder;
 
 namespace DoomArchitect.Core.Tests.Textures;
@@ -9,6 +12,15 @@ public class TextureSetTests
 {
     private static WadFile BuildWad(params (string Name, byte[] Data)[] lumps) =>
         WadFile.Read(new MemoryStream(WadTestBuilder.Build(lumps)));
+
+    private static byte[] PngBytes()
+    {
+        using var image = new Image<Rgba32>(1, 1);
+        image[0, 0] = new Rgba32(1, 2, 3, 255);
+        using var stream = new MemoryStream();
+        image.Save(stream, new PngEncoder());
+        return stream.ToArray();
+    }
 
     [Fact]
     public void GetFlatTexture_UnknownName_ReturnsPlaceholderAndWarns()
@@ -146,5 +158,117 @@ public class TextureSetTests
         Assert.Empty(set.Warnings);
         set.GetFlatTexture("MYFLAT");
         Assert.DoesNotContain(set.Warnings, w => w.Contains("MYFLAT"));
+    }
+
+    [Fact]
+    public void GetWallTextureNames_ReturnsEveryDefinedWallTexture()
+    {
+        var entries = new[] { new TextureEntryDef("MYWALL", 1, 8, new[] { new TexturePatchDef(0, 0, 0) }) };
+        var wad = BuildWad(("TEXTURE2", TextureDefinitions(entries)));
+        var set = TextureSet.Load(wad);
+
+        Assert.Equal(new[] { "MYWALL" }, set.GetWallTextureNames());
+    }
+
+    [Fact]
+    public void GetWallTexture_NameOnlyInPk3TexturesFolder_DecodesViaModernImageFallback()
+    {
+        var pk3 = Pk3TestBuilder.Build(("textures/MODERNWALL.png", PngBytes()));
+        var set = TextureSet.Load(pk3);
+
+        var image = set.GetWallTexture("MODERNWALL");
+
+        Assert.Equal(1, image.Width);
+        Assert.Contains("MODERNWALL", set.GetWallTextureNames());
+        Assert.DoesNotContain(set.Warnings, w => w.Contains("MODERNWALL"));
+    }
+
+    [Fact]
+    public void GetWallTexture_NameInBothTexture1AndFolderImage_Texture1DefinitionWins()
+    {
+        var patch = Patch(height: 8, new (byte, byte[])[] { (0, new byte[] { 0, 0, 0, 0, 0, 0, 0, 0 }) });
+        var entries = new[] { new TextureEntryDef("SAMENAME", 1, 8, new[] { new TexturePatchDef(0, 0, 0) }) };
+        var wad = BuildWad(
+            ("PLAYPAL", Playpal((9, 9, 9))),
+            ("PNAMES", PatchNames("MYPATCH")),
+            ("TEXTURE2", TextureDefinitions(entries)),
+            ("MYPATCH", patch));
+        var pk3 = Pk3TestBuilder.Build(("textures/SAMENAME.png", PngBytes()));
+        var set = TextureSet.Load(new ResourceSet(new IResourceContainer[] { pk3, wad }));
+
+        var image = set.GetWallTexture("SAMENAME");
+
+        // The composited TEXTURE1/2 definition is 1x8 (per GetWallTexture_KnownComposite_BuildsFromPatches);
+        // the folder PNG is 1x1 - confirms the classic definition resolved, not the folder image.
+        Assert.Equal(8, image.Height);
+    }
+
+    [Fact]
+    public void GetWallTextureNames_ForOneResource_ScopedToThatResourceOwnFolderImagesPlusClassicNamesIfItIsTheSource()
+    {
+        var entries = new[] { new TextureEntryDef("CLASSIC1", 1, 8, new[] { new TexturePatchDef(0, 0, 0) }) };
+        var wad = BuildWad(("TEXTURE2", TextureDefinitions(entries)));
+        var pk3 = Pk3TestBuilder.Build(("textures/PK3WALL.png", PngBytes()));
+        var resources = new ResourceSet(new IResourceContainer[] { pk3, wad });
+        var set = TextureSet.Load(resources);
+
+        Assert.Equal(new[] { "CLASSIC1" }, set.GetWallTextureNames(wad));
+        Assert.Equal(new[] { "PK3WALL" }, set.GetWallTextureNames(pk3));
+    }
+
+    [Fact]
+    public void WallTextureSource_ReturnsTheContainerThatDefinesTexture1()
+    {
+        var entries = new[] { new TextureEntryDef("MYWALL", 1, 8, Array.Empty<TexturePatchDef>()) };
+        var wadWithTexture1 = BuildWad(("TEXTURE1", TextureDefinitions(entries)));
+        var wadWithout = BuildWad(("SOMETHINGELSE", Array.Empty<byte>()));
+        var resources = new ResourceSet(new IResourceContainer[] { wadWithout, wadWithTexture1 });
+        var set = TextureSet.Load(resources);
+
+        Assert.Same(wadWithTexture1, set.WallTextureSource);
+    }
+
+    [Fact]
+    public void WallTextureSource_NullWhenNeitherTexture1NorTexture2Defined()
+    {
+        var wad = BuildWad(("SOMETHINGELSE", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        Assert.Null(set.WallTextureSource);
+    }
+
+    [Fact]
+    public void GetFlatTexture_PngFormatFlatFromPk3_DecodesViaModernImageFallback()
+    {
+        var pk3 = Pk3TestBuilder.Build(("flats/MODERNFLAT.png", PngBytes()));
+        var set = TextureSet.Load(pk3);
+
+        var image = set.GetFlatTexture("MODERNFLAT");
+
+        Assert.Equal(1, image.Width);
+        Assert.DoesNotContain(set.Warnings, w => w.Contains("MODERNFLAT"));
+    }
+
+    [Fact]
+    public void GetFlatNames_MergesAcrossLayeredResources_Deduplicated()
+    {
+        var lower = Pk3TestBuilder.Build(("flats/SHARED.png", PngBytes()), ("flats/ONLYLOWER.png", PngBytes()));
+        var higher = Pk3TestBuilder.Build(("flats/SHARED.png", PngBytes()), ("flats/ONLYHIGHER.png", PngBytes()));
+        var set = TextureSet.Load(new ResourceSet(new IResourceContainer[] { lower, higher }));
+
+        var names = set.GetFlatNames();
+
+        Assert.Equal(new[] { "SHARED", "ONLYLOWER", "ONLYHIGHER" }.OrderBy(n => n), names.OrderBy(n => n));
+    }
+
+    [Fact]
+    public void GetFlatNames_ForOneResource_ScopedToThatResourceOnly()
+    {
+        var wad = Pk3TestBuilder.Build(("flats/WADFLAT.png", PngBytes()));
+        var pk3 = Pk3TestBuilder.Build(("flats/PK3FLAT.png", PngBytes()));
+        var set = TextureSet.Load(new ResourceSet(new IResourceContainer[] { wad, pk3 }));
+
+        Assert.Equal(new[] { "WADFLAT" }, set.GetFlatNames(wad));
+        Assert.Equal(new[] { "PK3FLAT" }, set.GetFlatNames(pk3));
     }
 }

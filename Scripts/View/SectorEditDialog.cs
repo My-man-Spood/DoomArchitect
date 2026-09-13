@@ -5,15 +5,35 @@ using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Editing;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
+using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Sector properties, ported from UDB's real <c>SectorEditFormUDMF</c> -
-/// v1 scope is its "Properties" tab's core fields only (floor/ceiling
-/// height+texture, brightness, special, tag); see <c>TODO.md</c> for what's
-/// deliberately deferred (Colors/Surfaces-extended/Slopes/Comment/Custom
-/// tabs, the texture browser, richer tag range-assignment modes).
+/// Sector properties, ported from UDB's real sector dialogs - both field
+/// scope and on-screen layout. The tab strip mirrors the real UDMF dialog's
+/// 5 remaining tabs (Properties/Colors/Slopes-Portals/Comment/Custom,
+/// <c>SectorEditFormUDMF</c>) - only Properties is live, the rest are
+/// placeholders so the dialog's overall shape is recognizable even before
+/// they're built. There's no separate Surfaces tab - with only floor/
+/// ceiling texture names built so far (no offsets/scale/rotation/etc.
+/// yet), a whole tab for two fields wasn't worth it; they're folded into
+/// Properties' "Floor and Ceiling" section instead, which - not
+/// coincidentally - is exactly how the older classic-format
+/// <c>SectorEditForm</c> lays them out too (heights and texture previews
+/// side by side in one "Floor and ceiling" group box). Effects and
+/// Identification sections still come from the real UDMF dialog's
+/// <c>groupeffect</c>/<c>groupaction</c> group boxes (verified against
+/// <c>SectorEditFormUDMF.Designer.cs</c>'s actual control positions, not
+/// guessed) - Flags and Sector Damage's group boxes are omitted entirely
+/// rather than shown empty, since neither has any backing data yet (no
+/// game-config schema for sector flags/damage types). A bold section-
+/// header <see cref="Label"/> stands in for UDB's actual drawn GroupBox
+/// border - a deliberate, flagged rendering simplification, not a fidelity
+/// gap in what's editable. See <c>TODO.md</c> for what's deliberately
+/// deferred - including the texture browser/preview this dialog's texture
+/// fields still just take as plain typed names for now.
 ///
 /// Height/texture/brightness fields apply live to the selected sectors as
 /// you type (matching UDB's own real-time-apply-while-open feel) and
@@ -34,58 +54,112 @@ using Godot;
 /// </summary>
 public partial class SectorEditDialog : AcceptDialog
 {
-	private sealed record Snapshot(double FloorHeight, double CeilingHeight, string FloorTexture, string CeilingTexture, int Brightness, long Special, long Tag);
+	private sealed record Snapshot(double FloorHeight, double CeilingHeight, string FloorTexture, string CeilingTexture, int Brightness, long Special, long Tag, double Gravity);
 
-	private LineEdit _floorHeightEdit;
-	private LineEdit _ceilingHeightEdit;
+	private TabContainer _tabs;
+	private StepperLineEdit _floorHeightEdit;
+	private StepperLineEdit _ceilingHeightEdit;
 	private LineEdit _floorTextureEdit;
 	private LineEdit _ceilingTextureEdit;
-	private LineEdit _brightnessEdit;
+	private Button _floorTextureBrowseButton;
+	private Button _ceilingTextureBrowseButton;
+	private StepperLineEdit _brightnessEdit;
+	private StepperLineEdit _gravityEdit;
 	private LineEdit _specialEdit;
 	private Label _specialNameLabel;
 	private LineEdit _tagEdit;
+
+	private TextureBrowserDialog _textureBrowserDialog;
 
 	private IReadOnlyList<Sector> _sectors = Array.Empty<Sector>();
 	private Dictionary<Sector, Snapshot> _snapshots = new();
 	private MapData _map;
 	private IGameConfiguration _gameConfiguration;
+	private TextureSet _textureSet;
+	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
+	private TextureIconCache _textureIconCache;
 	private UndoStack _undoStack;
 	private Action _onLiveChange;
 	private bool _suppressLiveApply;
 
 	public override void _Ready()
 	{
-		_floorHeightEdit = GetNode<LineEdit>("Container/Grid/FloorHeightEdit");
-		_ceilingHeightEdit = GetNode<LineEdit>("Container/Grid/CeilingHeightEdit");
-		_floorTextureEdit = GetNode<LineEdit>("Container/Grid/FloorTextureEdit");
-		_ceilingTextureEdit = GetNode<LineEdit>("Container/Grid/CeilingTextureEdit");
-		_brightnessEdit = GetNode<LineEdit>("Container/Grid/BrightnessEdit");
-		_specialEdit = GetNode<LineEdit>("Container/Grid/SpecialRow/SpecialEdit");
-		_specialNameLabel = GetNode<Label>("Container/Grid/SpecialRow/SpecialNameLabel");
-		_tagEdit = GetNode<LineEdit>("Container/Grid/TagEdit");
+		_tabs = GetNode<TabContainer>("Container/Tabs");
+		_tabs.SetTabTitle(2, "Slopes / Portals");
+
+		_floorHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/FloorCeilingRow/HeightsGrid/FloorHeightEdit");
+		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/FloorCeilingRow/HeightsGrid/CeilingHeightEdit");
+		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow/FloorTextureEdit");
+		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow/CeilingTextureEdit");
+		_floorTextureBrowseButton = GetNode<Button>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow/FloorTextureBrowseButton");
+		_ceilingTextureBrowseButton = GetNode<Button>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow/CeilingTextureBrowseButton");
+		_specialEdit = GetNode<LineEdit>("Container/Tabs/Properties/EffectsGrid/SpecialRow/SpecialEdit");
+		_specialNameLabel = GetNode<Label>("Container/Tabs/Properties/EffectsGrid/SpecialRow/SpecialNameLabel");
+		_brightnessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/EffectsGrid/BrightnessEdit");
+		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/EffectsGrid/GravityEdit");
+		_tagEdit = GetNode<LineEdit>("Container/Tabs/Properties/IdentificationGrid/TagEdit");
 
 		_floorHeightEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.FloorHeight, (s, v) => s.FloorHeight = v);
 		_ceilingHeightEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.CeilingHeight, (s, v) => s.CeilingHeight = v);
 		_brightnessEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.Brightness, (s, v) => s.Brightness = (int)Math.Round(v));
 		_floorTextureEdit.TextChanged += text => ApplyRealTimeTexture(text, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
 		_ceilingTextureEdit.TextChanged += text => ApplyRealTimeTexture(text, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
+		_floorTextureBrowseButton.Pressed += () => BrowseTexture(_floorTextureEdit, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
+		_ceilingTextureBrowseButton.Pressed += () => BrowseTexture(_ceilingTextureEdit, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
 		_specialEdit.TextChanged += _ => UpdateSpecialNameLabel();
 
 		Confirmed += OnConfirmed;
 		Canceled += OnCanceled;
+
+		CallDeferred(nameof(EnsureTabBarFitsWithoutScrolling));
 	}
 
-	public void SetSectors(IReadOnlyList<Sector> sectors, MapData map, IGameConfiguration gameConfiguration, UndoStack undoStack, Action onLiveChange)
+	/// <summary>
+	/// <see cref="TabContainer"/>'s own minimum-size computation
+	/// deliberately excludes its tab bar's width - tabs are allowed to
+	/// scroll independently of whatever the current page needs, so
+	/// <c>wrap_controls</c> alone can never guarantee all 6 real UDB tab
+	/// headers are visible without scroll arrows. Measured here from the
+	/// tab bar's actual live theme font/size rather than a guessed pixel
+	/// number, so it stays correct across different themes, font sizes, and
+	/// content scale settings instead of only happening to work on one
+	/// machine. Deferred one frame so the tab bar's theme is fully resolved
+	/// before measuring it.
+	/// </summary>
+	private void EnsureTabBarFitsWithoutScrolling()
+	{
+		const int perTabPadding = 28; // rough tab stylebox content margin, either side combined
+
+		var tabBar = _tabs.GetTabBar();
+		var font = tabBar.GetThemeFont("font");
+		var fontSize = tabBar.GetThemeFontSize("font_size");
+
+		var totalWidth = 0f;
+		for (var i = 0; i < _tabs.GetTabCount(); i++)
+		{
+			totalWidth += font.GetStringSize(_tabs.GetTabTitle(i), HorizontalAlignment.Left, -1, fontSize).X + perTabPadding;
+		}
+
+		var required = (int)Math.Ceiling(totalWidth) + 16; // + Container's own left/right offsets
+		if (required > MinSize.X) MinSize = new Vector2I(required, MinSize.Y);
+	}
+
+	public void SetSectors(
+		IReadOnlyList<Sector> sectors, MapData map, IGameConfiguration gameConfiguration, UndoStack undoStack, Action onLiveChange,
+		TextureSet textureSet, IReadOnlyList<NamedResource> namedResources, TextureIconCache textureIconCache)
 	{
 		_sectors = sectors;
 		_map = map;
 		_gameConfiguration = gameConfiguration;
 		_undoStack = undoStack;
 		_onLiveChange = onLiveChange;
+		_textureSet = textureSet;
+		_namedResources = namedResources;
+		_textureIconCache = textureIconCache;
 
 		_snapshots = sectors.ToDictionary(s => s, s => new Snapshot(
 			s.FloorHeight, s.CeilingHeight, s.FloorTexture, s.CeilingTexture, s.Brightness,
-			s.Fields.GetInteger("special", 0), s.Fields.GetInteger("id", 0)));
+			s.Fields.GetInteger("special", 0), s.Fields.GetInteger("id", 0), s.Fields.GetFloat("gravity", 1.0)));
 
 		_suppressLiveApply = true;
 		_floorHeightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorHeight));
@@ -95,6 +169,7 @@ public partial class SectorEditDialog : AcceptDialog
 		_brightnessEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Brightness));
 		_specialEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Special));
 		_tagEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Tag));
+		_gravityEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.Gravity));
 		_suppressLiveApply = false;
 
 		UpdateSpecialNameLabel();
@@ -138,6 +213,32 @@ public partial class SectorEditDialog : AcceptDialog
 		_onLiveChange?.Invoke();
 	}
 
+	/// <summary>
+	/// Opens the shared texture browser in Flats mode (both fields here are
+	/// flats, never wall textures). Setting <see cref="LineEdit.Text"/>
+	/// directly doesn't raise <c>TextChanged</c> (a plain Godot behavior
+	/// already relied on elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s
+	/// own silent setter) - so the callback also calls
+	/// <see cref="ApplyRealTimeTexture"/> itself, exactly reproducing what
+	/// typing the name by hand would have done.
+	/// </summary>
+	private void BrowseTexture(LineEdit edit, Func<Snapshot, string> original, Action<Sector, string> setter)
+	{
+		_textureBrowserDialog ??= CreateTextureBrowserDialog();
+		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: true, edit.Text, name =>
+		{
+			edit.Text = name;
+			ApplyRealTimeTexture(name, original, setter);
+		});
+	}
+
+	private TextureBrowserDialog CreateTextureBrowserDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/TextureBrowserDialog.tscn").Instantiate<TextureBrowserDialog>();
+		AddChild(dialog);
+		return dialog;
+	}
+
 	private void UpdateSpecialNameLabel()
 	{
 		var text = _specialEdit.Text.Trim();
@@ -167,13 +268,14 @@ public partial class SectorEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// Special/tag are resolved here, for the first time, against each
-	/// sector's original bag value - deliberately never live-applied to
-	/// <c>Fields</c> while the dialog was open, because
+	/// Special/tag/gravity are resolved here, for the first time, against
+	/// each sector's original <c>Fields</c> value - deliberately never
+	/// live-applied while the dialog was open, because
 	/// <see cref="SetFieldCommand"/> captures its "old" value from
 	/// <c>Fields</c> at construction time; if these had already been
 	/// mutated live, building the command here would capture the
-	/// already-new value as "old" and corrupt undo. Height/texture/
+	/// already-new value as "old" and corrupt undo (gravity also has no
+	/// visual effect worth live-previewing anyway). Height/texture/
 	/// brightness were already live-applied, so their commands are built
 	/// from a straight snapshot-vs-current-live-value comparison instead.
 	/// </summary>
@@ -201,6 +303,12 @@ public partial class SectorEditDialog : AcceptDialog
 			if (newTag != snapshot.Tag)
 			{
 				commands.Add(new SetFieldCommand(sector.Fields, "id", newTag == 0 ? null : new UniValue(UniversalType.Integer, newTag)));
+			}
+
+			var newGravity = NumericFieldExpression.Resolve(_gravityEdit.Text, snapshot.Gravity) ?? snapshot.Gravity;
+			if (newGravity != snapshot.Gravity)
+			{
+				commands.Add(new SetFieldCommand(sector.Fields, "gravity", newGravity == 1.0 ? null : new UniValue(UniversalType.Float, newGravity)));
 			}
 		}
 

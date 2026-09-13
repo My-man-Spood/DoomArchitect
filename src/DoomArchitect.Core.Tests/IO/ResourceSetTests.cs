@@ -74,4 +74,42 @@ public class ResourceSetTests
 
         Assert.Equal(new byte[] { 1, 2, 3 }, lump!.Data);
     }
+
+    [Fact]
+    public void Containers_ReturnsEveryContainerHighestPriorityFirst()
+    {
+        var lower = BuildWad();
+        var higher = BuildWad();
+        var resources = new ResourceSet(new IResourceContainer[] { lower, higher });
+
+        Assert.Equal(new IResourceContainer[] { higher, lower }, resources.Containers);
+    }
+
+    [Fact]
+    public void FindLumpSource_ReturnsTheHighestPriorityContainerDefiningTheLump()
+    {
+        var lower = BuildWad(("MYLUMP", Array.Empty<byte>()));
+        var higher = BuildWad(("MYLUMP", Array.Empty<byte>()));
+        var resources = new ResourceSet(new IResourceContainer[] { lower, higher });
+
+        Assert.Same(higher, resources.FindLumpSource("MYLUMP"));
+    }
+
+    [Fact]
+    public void FindLumpSource_OnlyInLowerPriorityContainer_StillFindsIt()
+    {
+        var lower = BuildWad(("ONLYHERE", Array.Empty<byte>()));
+        var higher = BuildWad(("SOMETHINGELSE", Array.Empty<byte>()));
+        var resources = new ResourceSet(new IResourceContainer[] { lower, higher });
+
+        Assert.Same(lower, resources.FindLumpSource("ONLYHERE"));
+    }
+
+    [Fact]
+    public void FindLumpSource_InNoContainer_ReturnsNull()
+    {
+        var resources = new ResourceSet(new IResourceContainer[] { BuildWad(), BuildWad() });
+
+        Assert.Null(resources.FindLumpSource("NOPE"));
+    }
 }

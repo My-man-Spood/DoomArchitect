@@ -64,4 +64,24 @@ public class NumericFieldExpressionTests
     {
         Assert.Equal(43L, NumericFieldExpression.ResolveInteger("*1.02", 42));
     }
+
+    [Theory]
+    [InlineData("++16")]
+    [InlineData("--16")]
+    [InlineData("*2")]
+    [InlineData("/2")]
+    public void IsRelativeExpression_RelativePrefixes_ReturnsTrue(string text)
+    {
+        Assert.True(NumericFieldExpression.IsRelativeExpression(text));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("128")]
+    [InlineData("-50")]
+    [InlineData("+50")]
+    public void IsRelativeExpression_BlankOrAbsolute_ReturnsFalse(string text)
+    {
+        Assert.False(NumericFieldExpression.IsRelativeExpression(text));
+    }
 }

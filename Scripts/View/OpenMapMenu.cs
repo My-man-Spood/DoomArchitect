@@ -36,8 +36,8 @@ using Godot;
 /// </summary>
 public partial class OpenMapMenu : PanelContainer
 {
-	public event Action<MapData, TextureSet, IGameConfiguration> MapLoaded;
-	public event Action<TextureSet, IGameConfiguration> MapResourcesChanged;
+	public event Action<MapData, TextureSet, IGameConfiguration, IReadOnlyList<NamedResource>> MapLoaded;
+	public event Action<TextureSet, IGameConfiguration, IReadOnlyList<NamedResource>> MapResourcesChanged;
 
 	private readonly record struct MapEntry(string Name, bool IsUdmf);
 
@@ -209,13 +209,19 @@ public partial class OpenMapMenu : PanelContainer
 		var textures = TextureSet.Load(new ResourceSet(resourceContainers));
 		var gameConfiguration = GameConfigurations.Get(kind);
 
+		// Paired up in the same order the containers were appended above -
+		// the map's own file (no saved path entry of its own) always last.
+		var namedResources = resourcePaths.Append(_pendingWadPath)
+			.Zip(resourceContainers, (path, container) => new NamedResource(Path.GetFileName(path), container))
+			.ToList();
+
 		if (_isRevisitingCurrentMap)
 		{
-			MapResourcesChanged?.Invoke(textures, gameConfiguration);
+			MapResourcesChanged?.Invoke(textures, gameConfiguration, namedResources);
 		}
 		else
 		{
-			MapLoaded?.Invoke(_pendingMapData, textures, gameConfiguration);
+			MapLoaded?.Invoke(_pendingMapData, textures, gameConfiguration, namedResources);
 			_currentWad = _pendingWad;
 			_currentWadPath = _pendingWadPath;
 			_currentMapName = _pendingMapName;

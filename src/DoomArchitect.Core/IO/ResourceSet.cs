@@ -26,6 +26,13 @@ public sealed class ResourceSet
 
     public static ResourceSet Single(IResourceContainer resource) => new(new[] { resource });
 
+    /// <summary>Every container in priority order, highest first - lets a caller (e.g. a texture browser's per-resource tree) enumerate the actual resources this set is layering, not just query merged results.</summary>
+    public IReadOnlyList<IResourceContainer> Containers => _byPriorityDescending;
+
+    /// <summary>The single highest-priority container that would satisfy <see cref="FindLump"/> for <paramref name="name"/> - lets a caller answer "which one resource actually won this lump" (e.g. TEXTURE1/PNAMES's real winner-take-all precedence) without duplicating <see cref="FindLump"/>'s own search.</summary>
+    public IResourceContainer? FindLumpSource(string name) =>
+        _byPriorityDescending.FirstOrDefault(r => r.FindLump(name) != null);
+
     public WadLump? FindLump(string name)
     {
         foreach (var resource in _byPriorityDescending)

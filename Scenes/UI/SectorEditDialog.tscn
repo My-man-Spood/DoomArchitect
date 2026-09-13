@@ -1,77 +1,196 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://dre2sabkmafd8"]
 
-[ext_resource type="Script" path="res://Scripts/View/SectorEditDialog.cs" id="1"]
+[ext_resource type="Script" uid="uid://c5oq5kgwov0mj" path="res://Scripts/View/SectorEditDialog.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
 
-[node name="SectorEditDialog" type="AcceptDialog"]
+[node name="SectorEditDialog" type="AcceptDialog" unique_id=846633471]
+oversampling_override = 1.0
 title = "Edit Sector(s)"
-initial_position = 1
+initial_position = 2
+min_size = Vector2i(560, 340)
+wrap_controls = true
 script = ExtResource("1")
 
-[node name="Container" type="VBoxContainer" parent="."]
-layout_mode = 2
+[node name="Container" type="VBoxContainer" parent="." unique_id=1201231602]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -49.0
+grow_horizontal = 2
+grow_vertical = 2
 
-[node name="HintLabel" type="Label" parent="Container"]
+[node name="HintLabel" type="Label" parent="Container" unique_id=209702777]
+custom_minimum_size = Vector2(420, 0)
 layout_mode = 2
-autowrap_mode = 2
 text = "Leave a field blank to keep each sector's own value. Use ++N/--N/*N//N to change relative to it (e.g. ++16 raises every selected sector by 16, each from its own height)."
+autowrap_mode = 2
 
-[node name="Grid" type="GridContainer" parent="Container"]
+[node name="Tabs" type="TabContainer" parent="Container" unique_id=2119286992]
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+
+[node name="Properties" type="VBoxContainer" parent="Container/Tabs" unique_id=120534000]
+layout_mode = 2
+metadata/_tab_index = 0
+
+[node name="FloorCeilingHeader" type="Label" parent="Container/Tabs/Properties" unique_id=1058437680]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Floor and Ceiling"
+
+[node name="FloorCeilingRow" type="HBoxContainer" parent="Container/Tabs/Properties" unique_id=303167262]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="HeightsGrid" type="GridContainer" parent="Container/Tabs/Properties/FloorCeilingRow" unique_id=907474321]
 layout_mode = 2
 columns = 2
 
-[node name="FloorHeightLabel" type="Label" parent="Container/Grid"]
-layout_mode = 2
-text = "Floor Height"
-
-[node name="FloorHeightEdit" type="LineEdit" parent="Container/Grid"]
-layout_mode = 2
-custom_minimum_size = Vector2(160, 0)
-
-[node name="CeilingHeightLabel" type="Label" parent="Container/Grid"]
+[node name="CeilingHeightLabel" type="Label" parent="Container/Tabs/Properties/FloorCeilingRow/HeightsGrid" unique_id=1360206440]
 layout_mode = 2
 text = "Ceiling Height"
 
-[node name="CeilingHeightEdit" type="LineEdit" parent="Container/Grid"]
+[node name="CeilingHeightEdit" parent="Container/Tabs/Properties/FloorCeilingRow/HeightsGrid" instance=ExtResource("2")]
 layout_mode = 2
+Step = 8.0
+StepBig = 16.0
+StepSmall = 1.0
 
-[node name="FloorTextureLabel" type="Label" parent="Container/Grid"]
+[node name="FloorHeightLabel" type="Label" parent="Container/Tabs/Properties/FloorCeilingRow/HeightsGrid" unique_id=907474320]
 layout_mode = 2
-text = "Floor Texture"
+text = "Floor Height"
 
-[node name="FloorTextureEdit" type="LineEdit" parent="Container/Grid"]
+[node name="FloorHeightEdit" parent="Container/Tabs/Properties/FloorCeilingRow/HeightsGrid" instance=ExtResource("2")]
 layout_mode = 2
+Step = 8.0
+StepBig = 16.0
+StepSmall = 1.0
 
-[node name="CeilingTextureLabel" type="Label" parent="Container/Grid"]
+[node name="TexturesGrid" type="GridContainer" parent="Container/Tabs/Properties/FloorCeilingRow" unique_id=907474322]
+layout_mode = 2
+columns = 2
+
+[node name="CeilingTextureLabel" type="Label" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid" unique_id=1216730656]
 layout_mode = 2
 text = "Ceiling Texture"
 
-[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Grid"]
+[node name="CeilingTextureRow" type="HBoxContainer" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid"]
 layout_mode = 2
 
-[node name="BrightnessLabel" type="Label" parent="Container/Grid"]
-layout_mode = 2
-text = "Brightness"
-
-[node name="BrightnessEdit" type="LineEdit" parent="Container/Grid"]
+[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow" unique_id=1930930328]
+custom_minimum_size = Vector2(140, 0)
 layout_mode = 2
 
-[node name="SpecialLabel" type="Label" parent="Container/Grid"]
+[node name="CeilingTextureBrowseButton" type="Button" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow"]
+layout_mode = 2
+text = "Browse..."
+
+[node name="FloorTextureLabel" type="Label" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid" unique_id=1262567011]
+layout_mode = 2
+text = "Floor Texture"
+
+[node name="FloorTextureRow" type="HBoxContainer" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid"]
+layout_mode = 2
+
+[node name="FloorTextureEdit" type="LineEdit" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow" unique_id=889526709]
+layout_mode = 2
+
+[node name="FloorTextureBrowseButton" type="Button" parent="Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow"]
+layout_mode = 2
+text = "Browse..."
+
+[node name="EffectsHeader" type="Label" parent="Container/Tabs/Properties" unique_id=1825585843]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Effects"
+
+[node name="EffectsGrid" type="GridContainer" parent="Container/Tabs/Properties" unique_id=1070082281]
+layout_mode = 2
+columns = 2
+
+[node name="SpecialLabel" type="Label" parent="Container/Tabs/Properties/EffectsGrid" unique_id=900667877]
 layout_mode = 2
 text = "Special"
 
-[node name="SpecialRow" type="HBoxContainer" parent="Container/Grid"]
+[node name="SpecialRow" type="HBoxContainer" parent="Container/Tabs/Properties/EffectsGrid" unique_id=989339582]
 layout_mode = 2
 
-[node name="SpecialEdit" type="LineEdit" parent="Container/Grid/SpecialRow"]
-layout_mode = 2
+[node name="SpecialEdit" type="LineEdit" parent="Container/Tabs/Properties/EffectsGrid/SpecialRow" unique_id=1379334841]
 custom_minimum_size = Vector2(80, 0)
-
-[node name="SpecialNameLabel" type="Label" parent="Container/Grid/SpecialRow"]
 layout_mode = 2
 
-[node name="TagLabel" type="Label" parent="Container/Grid"]
+[node name="SpecialNameLabel" type="Label" parent="Container/Tabs/Properties/EffectsGrid/SpecialRow" unique_id=1632401015]
+layout_mode = 2
+
+[node name="BrightnessLabel" type="Label" parent="Container/Tabs/Properties/EffectsGrid" unique_id=1849633452]
+layout_mode = 2
+text = "Brightness"
+
+[node name="BrightnessEdit" parent="Container/Tabs/Properties/EffectsGrid" instance=ExtResource("2")]
+layout_mode = 2
+Step = 8.0
+StepBig = 16.0
+StepSmall = 1.0
+
+[node name="GravityLabel" type="Label" parent="Container/Tabs/Properties/EffectsGrid" unique_id=1484178576]
+layout_mode = 2
+text = "Gravity"
+
+[node name="GravityEdit" parent="Container/Tabs/Properties/EffectsGrid" instance=ExtResource("2")]
+layout_mode = 2
+Step = 0.1
+StepBig = 1.0
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="IdentificationHeader" type="Label" parent="Container/Tabs/Properties" unique_id=780678160]
+layout_mode = 2
+theme_override_font_sizes/font_size = 15
+text = "Identification"
+
+[node name="IdentificationGrid" type="GridContainer" parent="Container/Tabs/Properties" unique_id=389928141]
+layout_mode = 2
+columns = 2
+
+[node name="TagLabel" type="Label" parent="Container/Tabs/Properties/IdentificationGrid" unique_id=1558507959]
 layout_mode = 2
 text = "Tag"
 
-[node name="TagEdit" type="LineEdit" parent="Container/Grid"]
+[node name="TagEdit" type="LineEdit" parent="Container/Tabs/Properties/IdentificationGrid" unique_id=87224972]
 layout_mode = 2
+
+[node name="Colors" type="CenterContainer" parent="Container/Tabs" unique_id=696473346]
+layout_mode = 2
+metadata/_tab_index = 1
+
+[node name="Label" type="Label" parent="Container/Tabs/Colors" unique_id=1832831645]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"
+
+[node name="SlopesPortals" type="CenterContainer" parent="Container/Tabs" unique_id=1896356578]
+layout_mode = 2
+metadata/_tab_index = 2
+
+[node name="Label" type="Label" parent="Container/Tabs/SlopesPortals" unique_id=643214817]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"
+
+[node name="Comment" type="CenterContainer" parent="Container/Tabs" unique_id=91693792]
+layout_mode = 2
+metadata/_tab_index = 3
+
+[node name="Label" type="Label" parent="Container/Tabs/Comment" unique_id=639033906]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"
+
+[node name="Custom" type="CenterContainer" parent="Container/Tabs" unique_id=1753872745]
+layout_mode = 2
+metadata/_tab_index = 4
+
+[node name="Label" type="Label" parent="Container/Tabs/Custom" unique_id=1738332260]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"

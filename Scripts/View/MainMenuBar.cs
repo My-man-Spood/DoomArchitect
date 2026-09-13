@@ -86,7 +86,9 @@ public partial class MainMenuBar : MenuBar
 		if (sectors.Count == 0) return;
 
 		_sectorEditDialog ??= CreateSectorEditDialog();
-		_sectorEditDialog.SetSectors(sectors, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw());
+		_sectorEditDialog.SetSectors(
+			sectors, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
+			_overlay.TextureSet, _overlay.NamedResources, _overlay.TextureIconCache);
 		_sectorEditDialog.PopupCentered();
 	}
 

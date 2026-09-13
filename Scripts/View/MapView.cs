@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
@@ -37,6 +38,10 @@ public partial class MapView : Node3D
 	private StatusBar _statusBar;
 	private MapData _map;
 	private TextureCache _textureCache;
+	private TextureSet _textureSet;
+	private readonly TextureIconCache _textureIconCache = new();
+	private const int TextureIconDecodeBudgetPerFrame = 8;
+	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
 	private UndoStack _undoStack = new();
 	private bool _in3D;
 
@@ -82,7 +87,9 @@ public partial class MapView : Node3D
 
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.
-		_textureCache = new TextureCache(TextureSet.CreateEmpty());
+		_textureSet = TextureSet.CreateEmpty();
+		_textureCache = new TextureCache(_textureSet);
+		_textureIconCache.SeedAll(_textureSet);
 
 		// Reads _textureCache/_map fresh on every call rather than a
 		// captured value, so this keeps working correctly across LoadMap
@@ -117,10 +124,15 @@ public partial class MapView : Node3D
 		_overlay.Camera = _topDownCamera;
 		_overlay.UndoStack = _undoStack;
 		_overlay.GameConfiguration = _gameConfiguration;
+		_overlay.TextureSet = _textureSet;
+		_overlay.TextureIconCache = _textureIconCache;
+		_overlay.NamedResources = _namedResources;
 	}
 
 	public override void _Process(double delta)
 	{
+		_textureIconCache.ProcessBudget(TextureIconDecodeBudgetPerFrame);
+
 		foreach (var sector in _map.GetDirtySectors())
 		{
 			var mesh = SectorMeshBuilder.Build(sector);
@@ -231,9 +243,12 @@ public partial class MapView : Node3D
 	/// real loaded map is very unlikely to sit in the same 256x256 area
 	/// the sample room did.
 	/// </summary>
-	private void LoadMap(MapData newMap, TextureSet textures, IGameConfiguration gameConfiguration)
+	private void LoadMap(MapData newMap, TextureSet textures, IGameConfiguration gameConfiguration, IReadOnlyList<NamedResource> namedResources)
 	{
 		_textureCache = new TextureCache(textures);
+		_textureSet = textures;
+		_textureIconCache.SeedAll(textures);
+		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
 		_map = newMap;
 
@@ -253,9 +268,12 @@ public partial class MapView : Node3D
 	/// deliberately does *not* touch undo history or the camera, since the
 	/// map itself (<see cref="_map"/>) hasn't actually changed.
 	/// </summary>
-	public void RefreshResources(TextureSet textures, IGameConfiguration gameConfiguration)
+	public void RefreshResources(TextureSet textures, IGameConfiguration gameConfiguration, IReadOnlyList<NamedResource> namedResources)
 	{
 		_textureCache = new TextureCache(textures);
+		_textureSet = textures;
+		_textureIconCache.SeedAll(textures);
+		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
 
 		RebuildAllMeshes();
@@ -313,6 +331,9 @@ public partial class MapView : Node3D
 
 		_overlay.Map = _map;
 		_overlay.GameConfiguration = _gameConfiguration;
+		_overlay.TextureSet = _textureSet;
+		_overlay.TextureIconCache = _textureIconCache;
+		_overlay.NamedResources = _namedResources;
 	}
 
 	private void FitTopDownCameraToMap(MapData map)
