@@ -37,7 +37,6 @@ public partial class TextureBrowserDialog : AcceptDialog
 	private bool _flats;
 	private Action<string> _onSelected;
 	private List<string> _displayedNames = new();
-	private ImageTexture _placeholderIcon;
 
 	public override void _Ready()
 	{
@@ -51,8 +50,6 @@ public partial class TextureBrowserDialog : AcceptDialog
 		_gallery.ItemActivated += index => ConfirmSelection(_displayedNames[(int)index]);
 
 		Confirmed += OnConfirmed;
-
-		_placeholderIcon = CreatePlaceholderIcon();
 	}
 
 	public void Browse(TextureSet textures, IReadOnlyList<NamedResource> resources, TextureIconCache icons, bool flats, string currentName, Action<string> onSelected)
@@ -140,7 +137,7 @@ public partial class TextureBrowserDialog : AcceptDialog
 	}
 
 	private ImageTexture GetIcon(string name) =>
-		(_flats ? _icons.GetFlatIcon(name) : _icons.GetWallIcon(name)) ?? _placeholderIcon;
+		(_flats ? _icons.GetFlatIcon(name) : _icons.GetWallIcon(name)) ?? PlaceholderIcon.Instance;
 
 	/// <summary>Re-checks every currently displayed name each frame and swaps in the real icon once the ambient <see cref="TextureIconCache"/> finishes it - this dialog never triggers decoding, only observes it.</summary>
 	public override void _Process(double delta)
@@ -155,12 +152,5 @@ public partial class TextureBrowserDialog : AcceptDialog
 				_gallery.SetItemIcon(i, icon);
 			}
 		}
-	}
-
-	private static ImageTexture CreatePlaceholderIcon()
-	{
-		var image = Image.CreateEmpty(16, 16, false, Image.Format.Rgba8);
-		image.Fill(new Color(0.3f, 0.3f, 0.3f));
-		return ImageTexture.CreateFromImage(image);
 	}
 }

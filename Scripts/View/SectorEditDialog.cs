@@ -31,9 +31,12 @@ using Godot;
 /// game-config schema for sector flags/damage types). A bold section-
 /// header <see cref="Label"/> stands in for UDB's actual drawn GroupBox
 /// border - a deliberate, flagged rendering simplification, not a fidelity
-/// gap in what's editable. See <c>TODO.md</c> for what's deliberately
-/// deferred - including the texture browser/preview this dialog's texture
-/// fields still just take as plain typed names for now.
+/// gap in what's editable. Floor/Ceiling Texture each pair a plain
+/// <see cref="LineEdit"/> with an inline clickable thumbnail
+/// (<see cref="TextureButton"/>) that opens <see cref="TextureBrowserDialog"/> -
+/// matching UDB's real <c>ImageSelectorControl</c> (typing a name and
+/// clicking the preview both work, and the preview updates live either
+/// way). See <c>TODO.md</c> for what's deliberately deferred.
 ///
 /// Height/texture/brightness fields apply live to the selected sectors as
 /// you type (matching UDB's own real-time-apply-while-open feel) and
@@ -59,10 +62,11 @@ public partial class SectorEditDialog : AcceptDialog
 	private TabContainer _tabs;
 	private StepperLineEdit _floorHeightEdit;
 	private StepperLineEdit _ceilingHeightEdit;
+	private Label _sectorHeightValue;
 	private LineEdit _floorTextureEdit;
 	private LineEdit _ceilingTextureEdit;
-	private Button _floorTextureBrowseButton;
-	private Button _ceilingTextureBrowseButton;
+	private TextureButton _floorTexturePreview;
+	private TextureButton _ceilingTexturePreview;
 	private StepperLineEdit _brightnessEdit;
 	private StepperLineEdit _gravityEdit;
 	private LineEdit _specialEdit;
@@ -87,31 +91,66 @@ public partial class SectorEditDialog : AcceptDialog
 		_tabs = GetNode<TabContainer>("Container/Tabs");
 		_tabs.SetTabTitle(2, "Slopes / Portals");
 
-		_floorHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/FloorCeilingRow/HeightsGrid/FloorHeightEdit");
-		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/FloorCeilingRow/HeightsGrid/CeilingHeightEdit");
-		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow/FloorTextureEdit");
-		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow/CeilingTextureEdit");
-		_floorTextureBrowseButton = GetNode<Button>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/FloorTextureRow/FloorTextureBrowseButton");
-		_ceilingTextureBrowseButton = GetNode<Button>("Container/Tabs/Properties/FloorCeilingRow/TexturesGrid/CeilingTextureRow/CeilingTextureBrowseButton");
-		_specialEdit = GetNode<LineEdit>("Container/Tabs/Properties/EffectsGrid/SpecialRow/SpecialEdit");
-		_specialNameLabel = GetNode<Label>("Container/Tabs/Properties/EffectsGrid/SpecialRow/SpecialNameLabel");
-		_brightnessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/EffectsGrid/BrightnessEdit");
-		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/EffectsGrid/GravityEdit");
-		_tagEdit = GetNode<LineEdit>("Container/Tabs/Properties/IdentificationGrid/TagEdit");
+		_floorHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/FloorHeightEdit");
+		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/CeilingHeightEdit");
+		_sectorHeightValue = GetNode<Label>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/SectorHeightValue");
+		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTextureEdit");
+		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTextureEdit");
+		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTexturePreview");
+		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTexturePreview");
+		_floorTexturePreview.Resized += () => KeepSquare(_floorTexturePreview);
+		_ceilingTexturePreview.Resized += () => KeepSquare(_ceilingTexturePreview);
+		WireHoverHighlight(_floorTexturePreview);
+		WireHoverHighlight(_ceilingTexturePreview);
+		_specialEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow/SpecialEdit");
+		_specialNameLabel = GetNode<Label>("Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow/SpecialNameLabel");
+		_brightnessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/BrightnessEdit");
+		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/GravityEdit");
+		_tagEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/IdentificationGrid/TagEdit");
 
-		_floorHeightEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.FloorHeight, (s, v) => s.FloorHeight = v);
-		_ceilingHeightEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.CeilingHeight, (s, v) => s.CeilingHeight = v);
+		_floorHeightEdit.TextChanged += text =>
+		{
+			ApplyRealTimeNumber(text, s => s.FloorHeight, (s, v) => s.FloorHeight = v);
+			UpdateSectorHeight();
+		};
+		_ceilingHeightEdit.TextChanged += text =>
+		{
+			ApplyRealTimeNumber(text, s => s.CeilingHeight, (s, v) => s.CeilingHeight = v);
+			UpdateSectorHeight();
+		};
 		_brightnessEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.Brightness, (s, v) => s.Brightness = (int)Math.Round(v));
-		_floorTextureEdit.TextChanged += text => ApplyRealTimeTexture(text, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
-		_ceilingTextureEdit.TextChanged += text => ApplyRealTimeTexture(text, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
-		_floorTextureBrowseButton.Pressed += () => BrowseTexture(_floorTextureEdit, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
-		_ceilingTextureBrowseButton.Pressed += () => BrowseTexture(_ceilingTextureEdit, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
+		_floorTextureEdit.TextChanged += text =>
+		{
+			ApplyRealTimeTexture(text, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
+			UpdateTexturePreview(_floorTexturePreview, text);
+		};
+		_ceilingTextureEdit.TextChanged += text =>
+		{
+			ApplyRealTimeTexture(text, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
+			UpdateTexturePreview(_ceilingTexturePreview, text);
+		};
+		_floorTexturePreview.Pressed += () => BrowseTexture(_floorTextureEdit, _floorTexturePreview, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
+		_ceilingTexturePreview.Pressed += () => BrowseTexture(_ceilingTextureEdit, _ceilingTexturePreview, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
 		_specialEdit.TextChanged += _ => UpdateSpecialNameLabel();
 
 		Confirmed += OnConfirmed;
 		Canceled += OnCanceled;
 
 		CallDeferred(nameof(EnsureTabBarFitsWithoutScrolling));
+	}
+
+	/// <summary>
+	/// Re-checks both texture fields' currently displayed names every frame
+	/// and swaps in the real icon once the ambient <see cref="TextureIconCache"/>
+	/// finishes decoding it - this dialog never triggers decoding itself,
+	/// same as <see cref="TextureBrowserDialog"/>'s own per-frame re-poll.
+	/// </summary>
+	public override void _Process(double delta)
+	{
+		if (!Visible) return;
+
+		UpdateTexturePreview(_floorTexturePreview, _floorTextureEdit.Text);
+		UpdateTexturePreview(_ceilingTexturePreview, _ceilingTextureEdit.Text);
 	}
 
 	/// <summary>
@@ -173,7 +212,21 @@ public partial class SectorEditDialog : AcceptDialog
 		_suppressLiveApply = false;
 
 		UpdateSpecialNameLabel();
+		UpdateTexturePreview(_floorTexturePreview, _floorTextureEdit.Text);
+		UpdateTexturePreview(_ceilingTexturePreview, _ceilingTextureEdit.Text);
+		UpdateSectorHeight();
 	}
+
+	/// <summary>
+	/// UDB's real read-only "Sector Height" field (<c>sectorheightlabel</c>/
+	/// <c>sectorheight</c> in <c>groupfloorceiling</c>) - ceiling minus
+	/// floor, recomputed from each selected sector's own current live
+	/// values (already kept in sync by <see cref="ApplyRealTimeNumber"/>
+	/// as you type), shown shared-or-blank exactly like every other field
+	/// here. Never itself editable or applied anywhere - purely derived.
+	/// </summary>
+	private void UpdateSectorHeight() =>
+		_sectorHeightValue.Text = SharedOrBlank(_sectors.Select(s => s.CeilingHeight - s.FloorHeight));
 
 	/// <summary>
 	/// Resolves <paramref name="text"/> against each sector's own
@@ -215,20 +268,24 @@ public partial class SectorEditDialog : AcceptDialog
 
 	/// <summary>
 	/// Opens the shared texture browser in Flats mode (both fields here are
-	/// flats, never wall textures). Setting <see cref="LineEdit.Text"/>
-	/// directly doesn't raise <c>TextChanged</c> (a plain Godot behavior
-	/// already relied on elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s
-	/// own silent setter) - so the callback also calls
-	/// <see cref="ApplyRealTimeTexture"/> itself, exactly reproducing what
-	/// typing the name by hand would have done.
+	/// flats, never wall textures) - the click target is the thumbnail
+	/// itself, matching UDB's real <c>ImageSelectorControl</c> (its inline
+	/// preview image is what you click to browse, not a separate button).
+	/// Setting <see cref="LineEdit.Text"/> directly doesn't raise
+	/// <c>TextChanged</c> (a plain Godot behavior already relied on
+	/// elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s own silent
+	/// setter) - so the callback also calls <see cref="ApplyRealTimeTexture"/>
+	/// and <see cref="UpdateTexturePreview"/> itself, exactly reproducing
+	/// what typing the name by hand would have done.
 	/// </summary>
-	private void BrowseTexture(LineEdit edit, Func<Snapshot, string> original, Action<Sector, string> setter)
+	private void BrowseTexture(LineEdit edit, TextureButton preview, Func<Snapshot, string> original, Action<Sector, string> setter)
 	{
 		_textureBrowserDialog ??= CreateTextureBrowserDialog();
 		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: true, edit.Text, name =>
 		{
 			edit.Text = name;
 			ApplyRealTimeTexture(name, original, setter);
+			UpdateTexturePreview(preview, name);
 		});
 	}
 
@@ -237,6 +294,51 @@ public partial class SectorEditDialog : AcceptDialog
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/TextureBrowserDialog.tscn").Instantiate<TextureBrowserDialog>();
 		AddChild(dialog);
 		return dialog;
+	}
+
+	/// <summary>
+	/// Blank/mixed text shows the shared <see cref="PlaceholderIcon"/>.
+	/// Otherwise uses <see cref="TextureIconCache.GetOrDecodeFlatIcon"/> -
+	/// deliberately the eager variant, not just a read of whatever the
+	/// ambient warm cache already has: this dialog only ever needs at most
+	/// two images at once, cheap enough to decode on the spot, unlike the
+	/// picker's full gallery. This also covers a name the ambient cache's
+	/// own namespace-scanned seeding might never have enumerated at all
+	/// (see that method's remarks) - exactly the case of an existing
+	/// sector's own already-set texture never showing a thumbnail
+	/// otherwise.
+	/// </summary>
+	private void UpdateTexturePreview(TextureButton preview, string text)
+	{
+		var trimmed = text.Trim();
+		preview.TextureNormal = trimmed.Length == 0 ? PlaceholderIcon.Instance : _textureIconCache?.GetOrDecodeFlatIcon(trimmed) ?? PlaceholderIcon.Instance;
+	}
+
+	/// <summary>
+	/// Godot's container layout has no built-in "stay square while filling
+	/// available width" - <c>size_flags_horizontal = Fill|Expand</c> (set
+	/// in the scene) makes the button claim its column's full width, but
+	/// nothing makes its height follow along. Reacting to <see cref="Control.Resized"/>
+	/// and pinning <see cref="Control.CustomMinimumSize"/>'s height to
+	/// match the current width keeps it square at whatever size the
+	/// surrounding layout actually gives it - stable rather than
+	/// oscillating, since changing a preview's height here never changes
+	/// its own or any sibling's width in this vertical stack.
+	/// </summary>
+	private static void KeepSquare(TextureButton preview)
+	{
+		var width = preview.Size.X;
+		if (width > 0 && !Mathf.IsEqualApprox(preview.CustomMinimumSize.Y, width))
+		{
+			preview.CustomMinimumSize = new Vector2(preview.CustomMinimumSize.X, width);
+		}
+	}
+
+	/// <summary>A pointing-hand cursor (set in the scene, <c>MouseDefaultCursorShape</c>) plus a slight brighten on hover - both together signal "clickable" without needing a custom hover texture, which a decoded texture preview doesn't have one of.</summary>
+	private static void WireHoverHighlight(TextureButton preview)
+	{
+		preview.MouseEntered += () => preview.Modulate = new Color(1.3f, 1.3f, 1.3f);
+		preview.MouseExited += () => preview.Modulate = Colors.White;
 	}
 
 	private void UpdateSpecialNameLabel()
