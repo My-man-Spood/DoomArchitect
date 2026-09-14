@@ -39,15 +39,31 @@ using Godot;
 /// project has no parser for yet; the additional-tags field
 /// (<c>moreids</c>) is likewise a plain space-separated text field rather
 /// than UDB's real add/remove-chip list - all three deliberate, flagged v1
-/// simplifications, not fidelity gaps in what's actually editable. A bold
-/// section-header <see cref="Label"/> stands in for UDB's actual drawn
-/// GroupBox border - a deliberate, flagged rendering simplification, not a
-/// fidelity gap in what's editable. Floor/Ceiling Texture each pair a plain
-/// <see cref="LineEdit"/> with an inline clickable thumbnail
-/// (<see cref="TextureButton"/>) that opens <see cref="TextureBrowserDialog"/> -
-/// matching UDB's real <c>ImageSelectorControl</c> (typing a name and
-/// clicking the preview both work, and the preview updates live either
-/// way). See <c>TODO.md</c> for what's deliberately deferred.
+/// simplifications, not fidelity gaps in what's actually editable. Every
+/// section header is a real <see cref="GroupBox"/> (a titled, bordered
+/// section box), not a bare <see cref="Label"/>. Floor/Ceiling Texture
+/// each pair a plain <see cref="LineEdit"/> with an inline clickable
+/// thumbnail (<see cref="TextureButton"/>) that opens
+/// <see cref="TextureBrowserDialog"/> - matching UDB's real
+/// <c>ImageSelectorControl</c> (typing a name and clicking the preview
+/// both work, and the preview updates live either way). The Surfaces tab
+/// mirrors UDB's real per-surface layout (two group boxes, "Ceiling" then
+/// "Floor" - verified against <c>SectorEditFormUDMF.Designer.cs</c>, not
+/// assumed to be Properties-adjacent) with the real UDMF texture offset
+/// (<c>x/ypanningfloor</c>/<c>ceiling</c>), scale (<c>x/yscalefloor</c>/
+/// <c>ceiling</c>), rotation (<c>rotationfloor</c>/<c>ceiling</c>), and
+/// per-surface light override (<c>lightfloor</c>/<c>ceiling</c> +
+/// <c>lightfloorabsolute</c>/<c>lightceilingabsolute</c>) fields added
+/// alongside the texture name - all OK-only, since this project's mesh
+/// builders don't apply any of them yet (no visual effect to preview,
+/// unlike Floor/Ceiling Height/Texture/Brightness). UDB's real rotation
+/// dial widget, "use linedef angles" checkbox, render-style dropdown,
+/// terrain dropdown, and reflectivity field are deliberately not built -
+/// the dial/checkbox because a plain typed rotation field covers the same
+/// data with no exotic custom widget, the rest because they need real
+/// infrastructure (a render-style enum, terrain game-config schema) this
+/// project doesn't have yet. See <c>TODO.md</c> for what else is
+/// deliberately deferred.
 ///
 /// Height/texture/brightness/height-offset fields apply live to the
 /// selected sectors as you type (matching UDB's own real-time-apply-while-
@@ -75,6 +91,10 @@ public partial class SectorEditDialog : AcceptDialog
 		long Special, double Gravity,
 		string DamageType, long DamageAmount, long DamageInterval, long Leakiness,
 		string SoundSequence, long FogDensity,
+		double FloorOffsetX, double FloorOffsetY, double CeilingOffsetX, double CeilingOffsetY,
+		double FloorScaleX, double FloorScaleY, double CeilingScaleX, double CeilingScaleY,
+		double FloorRotation, double CeilingRotation,
+		long FloorLight, long CeilingLight, bool FloorLightAbsolute, bool CeilingLightAbsolute,
 		IReadOnlyDictionary<string, bool> Flags);
 
 	private TabContainer _tabs;
@@ -88,6 +108,20 @@ public partial class SectorEditDialog : AcceptDialog
 	private LineEdit _ceilingTextureEdit;
 	private TextureButton _floorTexturePreview;
 	private TextureButton _ceilingTexturePreview;
+	private StepperLineEdit _floorOffsetXEdit;
+	private StepperLineEdit _floorOffsetYEdit;
+	private StepperLineEdit _ceilingOffsetXEdit;
+	private StepperLineEdit _ceilingOffsetYEdit;
+	private StepperLineEdit _floorScaleXEdit;
+	private StepperLineEdit _floorScaleYEdit;
+	private StepperLineEdit _ceilingScaleXEdit;
+	private StepperLineEdit _ceilingScaleYEdit;
+	private StepperLineEdit _floorRotationEdit;
+	private StepperLineEdit _ceilingRotationEdit;
+	private StepperLineEdit _floorLightEdit;
+	private StepperLineEdit _ceilingLightEdit;
+	private CheckBox _floorLightAbsoluteCheck;
+	private CheckBox _ceilingLightAbsoluteCheck;
 	private LineEdit _damageTypeEdit;
 	private StepperLineEdit _damageAmountEdit;
 	private StepperLineEdit _damageIntervalEdit;
@@ -106,6 +140,8 @@ public partial class SectorEditDialog : AcceptDialog
 
 	private readonly Dictionary<string, CheckBox> _flagCheckBoxes = new();
 	private readonly HashSet<string> _touchedFlags = new();
+	private bool _floorLightAbsoluteTouched;
+	private bool _ceilingLightAbsoluteTouched;
 
 	private IReadOnlyList<Sector> _sectors = Array.Empty<Sector>();
 	private Dictionary<Sector, Snapshot> _snapshots = new();
@@ -129,14 +165,28 @@ public partial class SectorEditDialog : AcceptDialog
 		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/CeilingHeightRow/CeilingHeightEdit");
 		_heightOffsetEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/HeightOffsetRow/HeightOffsetEdit");
 		_sectorHeightValue = GetNode<Label>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/SectorHeightRow/SectorHeightValue");
-		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTextureEdit");
-		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTextureEdit");
-		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTexturePreview");
-		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTexturePreview");
+		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow/FloorTextureEdit");
+		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow/CeilingTextureEdit");
+		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow/FloorTexturePreview");
+		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow/CeilingTexturePreview");
 		_floorTexturePreview.Resized += () => KeepSquare(_floorTexturePreview);
 		_ceilingTexturePreview.Resized += () => KeepSquare(_ceilingTexturePreview);
 		WireHoverHighlight(_floorTexturePreview);
 		WireHoverHighlight(_ceilingTexturePreview);
+		_floorOffsetXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow/FloorOffsetXEdit");
+		_floorOffsetYEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow/FloorOffsetYEdit");
+		_ceilingOffsetXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow/CeilingOffsetXEdit");
+		_ceilingOffsetYEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow/CeilingOffsetYEdit");
+		_floorScaleXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow/FloorScaleXEdit");
+		_floorScaleYEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow/FloorScaleYEdit");
+		_ceilingScaleXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow/CeilingScaleXEdit");
+		_ceilingScaleYEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow/CeilingScaleYEdit");
+		_floorRotationEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/RotationRow/FloorRotationEdit");
+		_ceilingRotationEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/RotationRow/CeilingRotationEdit");
+		_floorLightEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/LightRow/FloorLightEdit");
+		_ceilingLightEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/LightRow/CeilingLightEdit");
+		_floorLightAbsoluteCheck = GetNode<CheckBox>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/LightRow/FloorLightAbsoluteCheck");
+		_ceilingLightAbsoluteCheck = GetNode<CheckBox>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/LightRow/CeilingLightAbsoluteCheck");
 		_damageTypeEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageTypeRow/DamageTypeEdit");
 		_damageAmountEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageAmountRow/DamageAmountEdit");
 		_damageIntervalEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageIntervalRow/DamageIntervalEdit");
@@ -168,6 +218,8 @@ public partial class SectorEditDialog : AcceptDialog
 		_ceilingTexturePreview.Pressed += () => BrowseTexture(_ceilingTextureEdit, _ceilingTexturePreview, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
 		_specialEdit.TextChanged += _ => UpdateSpecialNameLabel();
 		_specialBrowseButton.Pressed += BrowseSpecial;
+		_floorLightAbsoluteCheck.Toggled += _ => _floorLightAbsoluteTouched = true;
+		_ceilingLightAbsoluteCheck.Toggled += _ => _ceilingLightAbsoluteTouched = true;
 
 		Confirmed += OnConfirmed;
 		Canceled += OnCanceled;
@@ -238,6 +290,13 @@ public partial class SectorEditDialog : AcceptDialog
 			s.Fields.GetInteger("special", 0), s.Fields.GetFloat("gravity", 1.0),
 			s.Fields.GetString("damagetype", ""), s.Fields.GetInteger("damageamount", 0), s.Fields.GetInteger("damageinterval", 32), s.Fields.GetInteger("leakiness", 0),
 			s.Fields.GetString("soundsequence", ""), s.Fields.GetInteger("fogdensity", 0),
+			s.Fields.GetFloat("xpanningfloor", 0.0), s.Fields.GetFloat("ypanningfloor", 0.0),
+			s.Fields.GetFloat("xpanningceiling", 0.0), s.Fields.GetFloat("ypanningceiling", 0.0),
+			s.Fields.GetFloat("xscalefloor", 1.0), s.Fields.GetFloat("yscalefloor", 1.0),
+			s.Fields.GetFloat("xscaleceiling", 1.0), s.Fields.GetFloat("yscaleceiling", 1.0),
+			s.Fields.GetFloat("rotationfloor", 0.0), s.Fields.GetFloat("rotationceiling", 0.0),
+			s.Fields.GetInteger("lightfloor", 0), s.Fields.GetInteger("lightceiling", 0),
+			s.Fields.GetBool("lightfloorabsolute", false), s.Fields.GetBool("lightceilingabsolute", false),
 			flagKeys.ToDictionary(f => f.Key, f => s.Fields.GetBool(f.Key, false))));
 		_tagsEditor.SetSectors(sectors, map);
 
@@ -256,7 +315,24 @@ public partial class SectorEditDialog : AcceptDialog
 		_gravityEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.Gravity));
 		_soundSequenceEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.SoundSequence));
 		_fogDensityEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.FogDensity));
+		_floorOffsetXEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorOffsetX));
+		_floorOffsetYEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorOffsetY));
+		_ceilingOffsetXEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingOffsetX));
+		_ceilingOffsetYEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingOffsetY));
+		_floorScaleXEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorScaleX));
+		_floorScaleYEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorScaleY));
+		_ceilingScaleXEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingScaleX));
+		_ceilingScaleYEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingScaleY));
+		_floorRotationEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorRotation));
+		_ceilingRotationEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingRotation));
+		_floorLightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.FloorLight));
+		_ceilingLightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.CeilingLight));
 		_suppressLiveApply = false;
+
+		_floorLightAbsoluteCheck.ButtonPressed = _snapshots.Values.All(s => s.FloorLightAbsolute);
+		_ceilingLightAbsoluteCheck.ButtonPressed = _snapshots.Values.All(s => s.CeilingLightAbsolute);
+		_floorLightAbsoluteTouched = false;
+		_ceilingLightAbsoluteTouched = false;
 
 		RebuildFlagsCheckboxes(flagKeys);
 		UpdateSpecialNameLabel();
@@ -600,6 +676,29 @@ public partial class SectorEditDialog : AcceptDialog
 			AddIfChangedStringField(commands, sector, "soundsequence", snapshot.SoundSequence, _soundSequenceEdit.Text);
 			AddIfChangedIntegerField(commands, sector, "fogdensity", snapshot.FogDensity, _fogDensityEdit.Text, defaultValue: 0);
 
+			AddIfChangedFloatField(commands, sector, "xpanningfloor", snapshot.FloorOffsetX, _floorOffsetXEdit.Text, defaultValue: 0.0);
+			AddIfChangedFloatField(commands, sector, "ypanningfloor", snapshot.FloorOffsetY, _floorOffsetYEdit.Text, defaultValue: 0.0);
+			AddIfChangedFloatField(commands, sector, "xpanningceiling", snapshot.CeilingOffsetX, _ceilingOffsetXEdit.Text, defaultValue: 0.0);
+			AddIfChangedFloatField(commands, sector, "ypanningceiling", snapshot.CeilingOffsetY, _ceilingOffsetYEdit.Text, defaultValue: 0.0);
+			AddIfChangedFloatField(commands, sector, "xscalefloor", snapshot.FloorScaleX, _floorScaleXEdit.Text, defaultValue: 1.0);
+			AddIfChangedFloatField(commands, sector, "yscalefloor", snapshot.FloorScaleY, _floorScaleYEdit.Text, defaultValue: 1.0);
+			AddIfChangedFloatField(commands, sector, "xscaleceiling", snapshot.CeilingScaleX, _ceilingScaleXEdit.Text, defaultValue: 1.0);
+			AddIfChangedFloatField(commands, sector, "yscaleceiling", snapshot.CeilingScaleY, _ceilingScaleYEdit.Text, defaultValue: 1.0);
+			AddIfChangedFloatField(commands, sector, "rotationfloor", snapshot.FloorRotation, _floorRotationEdit.Text, defaultValue: 0.0);
+			AddIfChangedFloatField(commands, sector, "rotationceiling", snapshot.CeilingRotation, _ceilingRotationEdit.Text, defaultValue: 0.0);
+			AddIfChangedIntegerField(commands, sector, "lightfloor", snapshot.FloorLight, _floorLightEdit.Text, defaultValue: 0);
+			AddIfChangedIntegerField(commands, sector, "lightceiling", snapshot.CeilingLight, _ceilingLightEdit.Text, defaultValue: 0);
+
+			if (_floorLightAbsoluteTouched && _floorLightAbsoluteCheck.ButtonPressed != snapshot.FloorLightAbsolute)
+			{
+				commands.Add(new SetFieldCommand(sector.Fields, "lightfloorabsolute", _floorLightAbsoluteCheck.ButtonPressed ? new UniValue(UniversalType.Boolean, true) : null));
+			}
+
+			if (_ceilingLightAbsoluteTouched && _ceilingLightAbsoluteCheck.ButtonPressed != snapshot.CeilingLightAbsolute)
+			{
+				commands.Add(new SetFieldCommand(sector.Fields, "lightceilingabsolute", _ceilingLightAbsoluteCheck.ButtonPressed ? new UniValue(UniversalType.Boolean, true) : null));
+			}
+
 			foreach (var key in _touchedFlags)
 			{
 				var newFlagValue = _flagCheckBoxes[key].ButtonPressed;
@@ -637,6 +736,14 @@ public partial class SectorEditDialog : AcceptDialog
 		if (newValue == originalValue) return;
 
 		commands.Add(new SetFieldCommand(sector.Fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Integer, newValue)));
+	}
+
+	private static void AddIfChangedFloatField(List<ICommand> commands, Sector sector, string key, double originalValue, string fieldText, double defaultValue)
+	{
+		var newValue = NumericFieldExpression.Resolve(fieldText, originalValue) ?? originalValue;
+		if (newValue == originalValue) return;
+
+		commands.Add(new SetFieldCommand(sector.Fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Float, newValue)));
 	}
 
 	private static string SharedOrBlank(IEnumerable<double> values)

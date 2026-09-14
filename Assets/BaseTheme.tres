@@ -1,5 +1,10 @@
 [gd_resource type="Theme" format=3 uid="uid://cj2ixmf56srbg"]
 
+[ext_resource type="Texture2D" path="res://Assets/Icons/checkbox_unchecked.svg" id="checkbox_unchecked"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/checkbox_checked.svg" id="checkbox_checked"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/checkbox_unchecked_disabled.svg" id="checkbox_unchecked_disabled"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/checkbox_checked_disabled.svg" id="checkbox_checked_disabled"]
+
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8vi0c"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
 border_width_left = 1
@@ -60,6 +65,8 @@ corner_radius_top_right = 3
 corner_radius_bottom_right = 3
 corner_radius_bottom_left = 3
 
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_checkbox"]
+
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_menubar"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_menubar_hover"]
@@ -84,6 +91,15 @@ Button/colors/icon_pressed_color = Color(0.85, 0.55, 0.3, 1)
 Button/constants/icon_max_width = 20
 ButtonGroupPanel/base_type = &"PanelContainer"
 ButtonGroupPanel/styles/panel = SubResource("StyleBoxFlat_8vi0c")
+CheckBox/icons/checked = ExtResource("checkbox_checked")
+CheckBox/icons/checked_disabled = ExtResource("checkbox_checked_disabled")
+CheckBox/icons/unchecked = ExtResource("checkbox_unchecked")
+CheckBox/icons/unchecked_disabled = ExtResource("checkbox_unchecked_disabled")
+CheckBox/styles/disabled = SubResource("StyleBoxEmpty_checkbox")
+CheckBox/styles/hover = SubResource("StyleBoxEmpty_checkbox")
+CheckBox/styles/hover_pressed = SubResource("StyleBoxEmpty_checkbox")
+CheckBox/styles/normal = SubResource("StyleBoxEmpty_checkbox")
+CheckBox/styles/pressed = SubResource("StyleBoxEmpty_checkbox")
 LineEdit/styles/focus = SubResource("StyleBoxFlat_lineedit_focus")
 LineEdit/styles/normal = SubResource("StyleBoxFlat_lineedit_normal")
 LineEdit/styles/read_only = SubResource("StyleBoxFlat_lineedit_readonly")

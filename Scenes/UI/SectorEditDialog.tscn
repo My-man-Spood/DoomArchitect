@@ -4,12 +4,6 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/GroupBox.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/SectorTagsEditor.tscn" id="4"]
-[ext_resource type="Texture2D" uid="uid://dp3gxx4owp7xg" path="res://Assets/Icons/checkbox_unchecked.svg" id="5"]
-[ext_resource type="Texture2D" uid="uid://bdg1wch3fp2be" path="res://Assets/Icons/checkbox_checked.svg" id="6"]
-[ext_resource type="Texture2D" uid="uid://bb328j3s8kdj3" path="res://Assets/Icons/checkbox_unchecked_disabled.svg" id="7"]
-[ext_resource type="Texture2D" uid="uid://ya7yhdk6ewjw" path="res://Assets/Icons/checkbox_checked_disabled.svg" id="8"]
-
-[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_flagcheckbox"]
 
 [node name="SectorEditDialog" type="AcceptDialog" unique_id=846633471]
 oversampling_override = 1.0
@@ -62,15 +56,6 @@ theme_override_constants/v_separation = 0
 visible = false
 layout_mode = 2
 mouse_default_cursor_shape = 2
-theme_override_styles/normal = SubResource("StyleBoxEmpty_flagcheckbox")
-theme_override_styles/pressed = SubResource("StyleBoxEmpty_flagcheckbox")
-theme_override_styles/hover = SubResource("StyleBoxEmpty_flagcheckbox")
-theme_override_styles/hover_pressed = SubResource("StyleBoxEmpty_flagcheckbox")
-theme_override_styles/disabled = SubResource("StyleBoxEmpty_flagcheckbox")
-theme_override_icons/checked = ExtResource("6")
-theme_override_icons/unchecked = ExtResource("5")
-theme_override_icons/checked_disabled = ExtResource("8")
-theme_override_icons/unchecked_disabled = ExtResource("7")
 text = "Flag"
 
 [node name="HBoxContainer" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer" unique_id=2037670061]
@@ -305,63 +290,261 @@ metadata/_tab_index = 1
 [node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces" unique_id=956209798]
 layout_mode = 2
 
-[node name="TexturesBox" parent="Container/Tabs/Surfaces/VBoxContainer" unique_id=1613791584 instance=ExtResource("3")]
-Title = "Floor and Ceiling Textures"
-
-[node name="TitleLabel" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox" index="0"]
-text = "Floor and Ceiling Textures"
-
-[node name="TexturesRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content" index="0" unique_id=1038488413]
+[node name="SurfacesRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer"]
 layout_mode = 2
 theme_override_constants/separation = 24
 
-[node name="FloorTexturePanel" type="PanelContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow" unique_id=1616215972]
-layout_mode = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel" unique_id=912502339]
-layout_mode = 2
-
-[node name="FloorTextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=945715216]
-layout_mode = 2
-text = "Floor Texture"
-horizontal_alignment = 1
-
-[node name="FloorTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=971385360]
-texture_filter = 1
-custom_minimum_size = Vector2(48, 48)
+[node name="CeilingBox" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow" instance=ExtResource("3")]
 layout_mode = 2
 size_flags_horizontal = 3
+Title = "Ceiling"
+
+[node name="TextureRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content" index="0"]
+layout_mode = 2
+
+[node name="TextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Texture"
+
+[node name="CeilingTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow" unique_id=245520334]
+texture_filter = 1
+custom_minimum_size = Vector2(40, 40)
+layout_mode = 2
 mouse_default_cursor_shape = 2
 ignore_texture_size = true
 stretch_mode = 0
 
-[node name="FloorTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=224339767]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-
-[node name="CeilingTexturePanel" type="PanelContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow" unique_id=1830247245]
-layout_mode = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel" unique_id=305465156]
-layout_mode = 2
-
-[node name="CeilingTextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=201914285]
-layout_mode = 2
-text = "Ceiling Texture"
-horizontal_alignment = 1
-
-[node name="CeilingTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=245520334]
-texture_filter = 1
-custom_minimum_size = Vector2(48, 48)
+[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow" unique_id=203473088]
 layout_mode = 2
 size_flags_horizontal = 3
+
+[node name="OffsetRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content" index="1"]
+layout_mode = 2
+
+[node name="OffsetLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Offset"
+
+[node name="XLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "X"
+
+[node name="CeilingOffsetXEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 32.0
+AllowDecimal = true
+
+[node name="YLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="CeilingOffsetYEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 32.0
+AllowDecimal = true
+
+[node name="ScaleRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content" index="2"]
+layout_mode = 2
+
+[node name="ScaleLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Scale"
+
+[node name="XLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "X"
+
+[node name="CeilingScaleXEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepBig = 1.0
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="YLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="CeilingScaleYEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepBig = 1.0
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="RotationRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content" index="3"]
+layout_mode = 2
+
+[node name="RotationLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/RotationRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Rotation"
+
+[node name="CeilingRotationEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/RotationRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 15.0
+StepSmall = 0.1
+AllowDecimal = true
+
+[node name="LightRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content" index="4"]
+layout_mode = 2
+
+[node name="LightLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/LightRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Light"
+
+[node name="CeilingLightEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/LightRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 16.0
+
+[node name="CeilingLightAbsoluteCheck" type="CheckBox" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/LightRow"]
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Absolute"
+
+[node name="FloorBox" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow" instance=ExtResource("3")]
+layout_mode = 2
+size_flags_horizontal = 3
+Title = "Floor"
+
+[node name="TextureRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content" index="0"]
+layout_mode = 2
+
+[node name="TextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Texture"
+
+[node name="FloorTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow" unique_id=971385360]
+texture_filter = 1
+custom_minimum_size = Vector2(40, 40)
+layout_mode = 2
 mouse_default_cursor_shape = 2
 ignore_texture_size = true
 stretch_mode = 0
 
-[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=203473088]
-custom_minimum_size = Vector2(140, 0)
+[node name="FloorTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow" unique_id=224339767]
 layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="OffsetRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content" index="1"]
+layout_mode = 2
+
+[node name="OffsetLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Offset"
+
+[node name="XLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "X"
+
+[node name="FloorOffsetXEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 32.0
+AllowDecimal = true
+
+[node name="YLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="FloorOffsetYEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 32.0
+AllowDecimal = true
+
+[node name="ScaleRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content" index="2"]
+layout_mode = 2
+
+[node name="ScaleLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Scale"
+
+[node name="XLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "X"
+
+[node name="FloorScaleXEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepBig = 1.0
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="YLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="FloorScaleYEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepBig = 1.0
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="RotationRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content" index="3"]
+layout_mode = 2
+
+[node name="RotationLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/RotationRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Rotation"
+
+[node name="FloorRotationEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/RotationRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 15.0
+StepSmall = 0.1
+AllowDecimal = true
+
+[node name="LightRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content" index="4"]
+layout_mode = 2
+
+[node name="LightLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/LightRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Light"
+
+[node name="FloorLightEdit" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/LightRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 1.0
+StepBig = 16.0
+
+[node name="FloorLightAbsoluteCheck" type="CheckBox" parent="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/LightRow"]
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Absolute"
 
 [node name="Colors" type="CenterContainer" parent="Container/Tabs" unique_id=696473346]
 visible = false
@@ -405,4 +588,5 @@ text = "Not yet implemented - see TODO.md"
 [editable path="Container/Tabs/Properties/VboxContainer/EffectsBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor"]
-[editable path="Container/Tabs/Surfaces/VBoxContainer/TexturesBox"]
+[editable path="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox"]
+[editable path="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox"]
