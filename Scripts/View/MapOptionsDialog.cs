@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
@@ -13,14 +14,18 @@ using Godot;
 /// </summary>
 public partial class MapOptionsDialog : AcceptDialog
 {
+	private static readonly GameConfigurationKind[] Kinds =
+	{
+		GameConfigurationKind.Doom, GameConfigurationKind.Doom2, GameConfigurationKind.GZDoomDoom2UDMF,
+	};
+
 	private OptionButton _gameConfigOption;
 	private ResourceListEditor _resourceListEditor;
 
 	public override void _Ready()
 	{
 		_gameConfigOption = GetNode<OptionButton>("Container/GameConfigOption");
-		_gameConfigOption.AddItem("Doom");
-		_gameConfigOption.AddItem("Doom2");
+		foreach (var kind in Kinds) _gameConfigOption.AddItem(kind.ToString());
 
 		_resourceListEditor = GetNode<ResourceListEditor>("Container/ResourceListEditor");
 		_resourceListEditor.HintText =
@@ -28,10 +33,9 @@ public partial class MapOptionsDialog : AcceptDialog
 	}
 
 	public void SetGameConfiguration(GameConfigurationKind kind) =>
-		_gameConfigOption.Selected = kind == GameConfigurationKind.Doom2 ? 1 : 0;
+		_gameConfigOption.Selected = Array.IndexOf(Kinds, kind);
 
-	public GameConfigurationKind GetGameConfiguration() =>
-		_gameConfigOption.Selected == 1 ? GameConfigurationKind.Doom2 : GameConfigurationKind.Doom;
+	public GameConfigurationKind GetGameConfiguration() => Kinds[_gameConfigOption.Selected];
 
 	public void SetResourcePaths(IReadOnlyList<string> paths) => _resourceListEditor.SetResourcePaths(paths);
 

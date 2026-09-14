@@ -22,6 +22,9 @@ public sealed record LinedefActionInfo(int Number, string Title, string Category
 
 public sealed record SectorSpecialInfo(int Number, string Title);
 
+/// <summary>One real per-sector UDMF boolean field (e.g. <c>silent</c>, <c>nofallingdamage</c>) - <see cref="Key"/> is the literal UDMF field name, read/written on a sector's <c>Fields</c> bag exactly like any other named field.</summary>
+public sealed record SectorFlagInfo(string Key, string Title);
+
 /// <summary>
 /// Looks up what a DoomEd number/linedef special/sector type actually
 /// means. An interface rather than a concrete class for two reasons: this
@@ -41,10 +44,20 @@ public interface IGameConfiguration
     LinedefActionInfo? GetLinedefAction(int special);
 
     SectorSpecialInfo? GetSectorSpecial(int type);
+
+    /// <summary>Every known sector special, sorted by number - matches UDB's real <c>SortedSectorEffects</c> ordering; the "browse specials" dialog's own data source.</summary>
+    IReadOnlyList<SectorSpecialInfo> GetSectorSpecials();
+
+    /// <summary>Every real per-sector UDMF boolean field this configuration defines - empty for a non-UDMF-namespace configuration (vanilla Doom/Doom2 have no such concept at all).</summary>
+    IReadOnlyList<SectorFlagInfo> GetSectorFlags();
+
+    /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones the way UDB's real damage-type combo does.</summary>
+    IReadOnlyList<string> GetDamageTypes();
 }
 
 public enum GameConfigurationKind
 {
     Doom,
     Doom2,
+    GZDoomDoom2UDMF,
 }

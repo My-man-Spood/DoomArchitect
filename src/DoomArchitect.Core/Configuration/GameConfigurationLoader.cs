@@ -19,7 +19,9 @@ public static class GameConfigurationLoader
         return new ParsedGameConfiguration(
             LoadThingTypes(document.FindBlock("thingtypes")),
             LoadLinedefActions(document.FindBlock("linedeftypes")),
-            LoadSectorSpecials(document.FindBlock("sectortypes")));
+            LoadSectorSpecials(document.FindBlock("sectortypes")),
+            LoadSectorFlags(document.FindBlock("sectorflags")),
+            LoadDamageTypes(document));
     }
 
     private static Dictionary<int, ThingTypeInfo> LoadThingTypes(CfgBlock? thingTypes)
@@ -85,20 +87,49 @@ public static class GameConfigurationLoader
         return result;
     }
 
+    /// <summary><c>sectorflags</c> is a flat <c>fieldname = "title"</c> dictionary, same shape as <c>sectortypes</c> but with string keys (the literal UDMF field name) instead of parsed numbers.</summary>
+    private static Dictionary<string, SectorFlagInfo> LoadSectorFlags(CfgBlock? sectorFlags)
+    {
+        var result = new Dictionary<string, SectorFlagInfo>();
+        if (sectorFlags == null) return result;
+
+        foreach (var assignment in sectorFlags.Assignments)
+        {
+            result[assignment.Key] = new SectorFlagInfo(assignment.Key, assignment.Value.AsString());
+        }
+
+        return result;
+    }
+
+    /// <summary>A plain space-separated scalar setting at the document root (<c>damagetypes = "Fire Slime ...";</c>), not a block - matches how UDB's own real cfg stores this list.</summary>
+    private static List<string> LoadDamageTypes(CfgBlock document)
+    {
+        var value = document.Find("damagetypes")?.AsString();
+        if (string.IsNullOrWhiteSpace(value)) return new List<string>();
+
+        return value.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList();
+    }
+
     private sealed class ParsedGameConfiguration : IGameConfiguration
     {
         private readonly Dictionary<int, ThingTypeInfo> _thingTypes;
         private readonly Dictionary<int, LinedefActionInfo> _linedefActions;
         private readonly Dictionary<int, SectorSpecialInfo> _sectorSpecials;
+        private readonly Dictionary<string, SectorFlagInfo> _sectorFlags;
+        private readonly List<string> _damageTypes;
 
         public ParsedGameConfiguration(
             Dictionary<int, ThingTypeInfo> thingTypes,
             Dictionary<int, LinedefActionInfo> linedefActions,
-            Dictionary<int, SectorSpecialInfo> sectorSpecials)
+            Dictionary<int, SectorSpecialInfo> sectorSpecials,
+            Dictionary<string, SectorFlagInfo> sectorFlags,
+            List<string> damageTypes)
         {
             _thingTypes = thingTypes;
             _linedefActions = linedefActions;
             _sectorSpecials = sectorSpecials;
+            _sectorFlags = sectorFlags;
+            _damageTypes = damageTypes;
         }
 
         public ThingTypeInfo? GetThingType(int doomEdNum) => _thingTypes.GetValueOrDefault(doomEdNum);
@@ -106,5 +137,11 @@ public static class GameConfigurationLoader
         public LinedefActionInfo? GetLinedefAction(int special) => _linedefActions.GetValueOrDefault(special);
 
         public SectorSpecialInfo? GetSectorSpecial(int type) => _sectorSpecials.GetValueOrDefault(type);
+
+        public IReadOnlyList<SectorSpecialInfo> GetSectorSpecials() => _sectorSpecials.Values.OrderBy(s => s.Number).ToList();
+
+        public IReadOnlyList<SectorFlagInfo> GetSectorFlags() => _sectorFlags.Values.ToList();
+
+        public IReadOnlyList<string> GetDamageTypes() => _damageTypes;
     }
 }

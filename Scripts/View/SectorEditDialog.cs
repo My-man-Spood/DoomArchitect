@@ -13,41 +13,54 @@ using Godot;
 /// <summary>
 /// Sector properties, ported from UDB's real sector dialogs - both field
 /// scope and on-screen layout. The tab strip mirrors the real UDMF dialog's
-/// 5 remaining tabs (Properties/Colors/Slopes-Portals/Comment/Custom,
-/// <c>SectorEditFormUDMF</c>) - only Properties is live, the rest are
-/// placeholders so the dialog's overall shape is recognizable even before
-/// they're built. There's no separate Surfaces tab - with only floor/
-/// ceiling texture names built so far (no offsets/scale/rotation/etc.
-/// yet), a whole tab for two fields wasn't worth it; they're folded into
-/// Properties' "Floor and Ceiling" section instead, which - not
-/// coincidentally - is exactly how the older classic-format
-/// <c>SectorEditForm</c> lays them out too (heights and texture previews
-/// side by side in one "Floor and ceiling" group box). Effects and
+/// 6 tabs (Properties/Surfaces/Colors/Slopes-Portals/Comment/Custom,
+/// <c>SectorEditFormUDMF</c>) - only Properties and Surfaces are live, the
+/// rest are placeholders so the dialog's overall shape is recognizable even
+/// before they're built. Floor/Ceiling Texture live on their own Surfaces
+/// tab, not folded into Properties - an earlier version of this dialog did
+/// fold them into Properties' Heights section, modeled after the older
+/// classic-format <c>SectorEditForm</c>'s single combined "Floor and
+/// ceiling" group box, but that's not how the real UDMF dialog
+/// (<c>SectorEditFormUDMF</c>) actually lays it out - corrected once this
+/// was checked against the real thing directly, not the classic-format
+/// screenshot this had been mistakenly modeled on. Heights (Floor/Ceiling
+/// Height, Height Offset, read-only Sector Height), Effects, and
 /// Identification sections still come from the real UDMF dialog's
-/// <c>groupeffect</c>/<c>groupaction</c> group boxes (verified against
-/// <c>SectorEditFormUDMF.Designer.cs</c>'s actual control positions, not
-/// guessed) - Flags and Sector Damage's group boxes are omitted entirely
-/// rather than shown empty, since neither has any backing data yet (no
-/// game-config schema for sector flags/damage types). A bold section-
-/// header <see cref="Label"/> stands in for UDB's actual drawn GroupBox
-/// border - a deliberate, flagged rendering simplification, not a fidelity
-/// gap in what's editable. Floor/Ceiling Texture each pair a plain
+/// <c>groupfloorceiling</c>/<c>groupeffect</c>/<c>groupaction</c> group
+/// boxes (verified against <c>SectorEditFormUDMF.Designer.cs</c>'s actual
+/// control positions, not guessed). Flags is rebuilt per game configuration
+/// from
+/// <see cref="IGameConfiguration.GetSectorFlags"/> (see
+/// <see cref="RebuildFlagsCheckboxes"/>) rather than authored statically in
+/// the scene, since the flag set itself differs by configuration. Damage
+/// Type and Sound Sequence are plain free-text fields rather than UDB's
+/// real combo boxes - both of UDB's real backing lists come from parsing
+/// the map's own DECORATE actors/SNDSEQ lumps respectively, which this
+/// project has no parser for yet; the additional-tags field
+/// (<c>moreids</c>) is likewise a plain space-separated text field rather
+/// than UDB's real add/remove-chip list - all three deliberate, flagged v1
+/// simplifications, not fidelity gaps in what's actually editable. A bold
+/// section-header <see cref="Label"/> stands in for UDB's actual drawn
+/// GroupBox border - a deliberate, flagged rendering simplification, not a
+/// fidelity gap in what's editable. Floor/Ceiling Texture each pair a plain
 /// <see cref="LineEdit"/> with an inline clickable thumbnail
 /// (<see cref="TextureButton"/>) that opens <see cref="TextureBrowserDialog"/> -
 /// matching UDB's real <c>ImageSelectorControl</c> (typing a name and
 /// clicking the preview both work, and the preview updates live either
 /// way). See <c>TODO.md</c> for what's deliberately deferred.
 ///
-/// Height/texture/brightness fields apply live to the selected sectors as
-/// you type (matching UDB's own real-time-apply-while-open feel) and
-/// revert completely on Cancel, since nothing is pushed to
+/// Height/texture/brightness/height-offset fields apply live to the
+/// selected sectors as you type (matching UDB's own real-time-apply-while-
+/// open feel) and revert completely on Cancel, since nothing is pushed to
 /// <see cref="UndoStack"/> until <see cref="Confirmed"/> fires - exactly
 /// one combined undo step for the whole dialog session, same as UDB's own
-/// single <c>CreateUndo</c> block. Special/tag are deliberately *not*
-/// applied live (matching UDB's own real split too) - see
-/// <see cref="OnConfirmed"/>'s remarks for why that split is also required
-/// by <see cref="SetFieldCommand"/>'s construction-time snapshot, not just
-/// a fidelity choice.
+/// single <c>CreateUndo</c> block. Everything else (Special/Tag/Gravity,
+/// and now Flags/Sector damage/Sound Sequence/Fog Density/additional tags)
+/// is deliberately *not* applied live (matching UDB's own real split too,
+/// and it's the same split: gameplay-only fields with nothing to preview
+/// in the 2D/3D view) - see <see cref="OnConfirmed"/>'s remarks for why
+/// that split is also required by <see cref="SetFieldCommand"/>'s
+/// construction-time snapshot, not just a fidelity choice.
 ///
 /// Multi-select "mixed value" handling matches UDB's real
 /// <c>NumericTextbox</c> grammar (see <see cref="NumericFieldExpression"/>):
@@ -57,23 +70,42 @@ using Godot;
 /// </summary>
 public partial class SectorEditDialog : AcceptDialog
 {
-	private sealed record Snapshot(double FloorHeight, double CeilingHeight, string FloorTexture, string CeilingTexture, int Brightness, long Special, long Tag, double Gravity);
+	private sealed record Snapshot(
+		double FloorHeight, double CeilingHeight, string FloorTexture, string CeilingTexture, int Brightness,
+		long Special, double Gravity,
+		string DamageType, long DamageAmount, long DamageInterval, long Leakiness,
+		string SoundSequence, long FogDensity,
+		IReadOnlyDictionary<string, bool> Flags);
 
 	private TabContainer _tabs;
+	private Container _flagsContainer;
+	private CheckBox _flagCheckBoxTemplate;
 	private StepperLineEdit _floorHeightEdit;
 	private StepperLineEdit _ceilingHeightEdit;
+	private StepperLineEdit _heightOffsetEdit;
 	private Label _sectorHeightValue;
 	private LineEdit _floorTextureEdit;
 	private LineEdit _ceilingTextureEdit;
 	private TextureButton _floorTexturePreview;
 	private TextureButton _ceilingTexturePreview;
+	private LineEdit _damageTypeEdit;
+	private StepperLineEdit _damageAmountEdit;
+	private StepperLineEdit _damageIntervalEdit;
+	private StepperLineEdit _leakinessEdit;
 	private StepperLineEdit _brightnessEdit;
 	private StepperLineEdit _gravityEdit;
+	private LineEdit _soundSequenceEdit;
+	private StepperLineEdit _fogDensityEdit;
 	private LineEdit _specialEdit;
 	private Label _specialNameLabel;
-	private LineEdit _tagEdit;
+	private Button _specialBrowseButton;
+	private SectorTagsEditor _tagsEditor;
 
 	private TextureBrowserDialog _textureBrowserDialog;
+	private SectorSpecialBrowserDialog _sectorSpecialBrowserDialog;
+
+	private readonly Dictionary<string, CheckBox> _flagCheckBoxes = new();
+	private readonly HashSet<string> _touchedFlags = new();
 
 	private IReadOnlyList<Sector> _sectors = Array.Empty<Sector>();
 	private Dictionary<Sector, Snapshot> _snapshots = new();
@@ -89,35 +121,38 @@ public partial class SectorEditDialog : AcceptDialog
 	public override void _Ready()
 	{
 		_tabs = GetNode<TabContainer>("Container/Tabs");
-		_tabs.SetTabTitle(2, "Slopes / Portals");
+		_tabs.SetTabTitle(3, "Slopes / Portals");
 
-		_floorHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/FloorHeightEdit");
-		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/CeilingHeightEdit");
-		_sectorHeightValue = GetNode<Label>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid/SectorHeightValue");
-		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTextureEdit");
-		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTextureEdit");
-		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTexturePreview");
-		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTexturePreview");
+		_flagsContainer = GetNode<Container>("Container/Tabs/Properties/VboxContainer/FlagsBox/Content/FlagsContainer");
+		_flagCheckBoxTemplate = GetNode<CheckBox>("Container/Tabs/Properties/VboxContainer/FlagCheckBoxTemplate");
+		_floorHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/FloorHeightRow/FloorHeightEdit");
+		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/CeilingHeightRow/CeilingHeightEdit");
+		_heightOffsetEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/HeightOffsetRow/HeightOffsetEdit");
+		_sectorHeightValue = GetNode<Label>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/SectorHeightRow/SectorHeightValue");
+		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTextureEdit");
+		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTextureEdit");
+		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer/FloorTexturePreview");
+		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer/CeilingTexturePreview");
 		_floorTexturePreview.Resized += () => KeepSquare(_floorTexturePreview);
 		_ceilingTexturePreview.Resized += () => KeepSquare(_ceilingTexturePreview);
 		WireHoverHighlight(_floorTexturePreview);
 		WireHoverHighlight(_ceilingTexturePreview);
-		_specialEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow/SpecialEdit");
-		_specialNameLabel = GetNode<Label>("Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow/SpecialNameLabel");
-		_brightnessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/BrightnessEdit");
-		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsGrid/GravityEdit");
-		_tagEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/IdentificationGrid/TagEdit");
+		_damageTypeEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageTypeRow/DamageTypeEdit");
+		_damageAmountEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageAmountRow/DamageAmountEdit");
+		_damageIntervalEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageIntervalRow/DamageIntervalEdit");
+		_leakinessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/LeakinessRow/LeakinessEdit");
+		_specialEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow/SpecialEdit");
+		_specialNameLabel = GetNode<Label>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow/SpecialNameLabel");
+		_specialBrowseButton = GetNode<Button>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow/SpecialBrowseButton");
+		_brightnessEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/BrightnessRow/BrightnessEdit");
+		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/GravityRow/GravityEdit");
+		_soundSequenceEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SoundSequenceRow/SoundSequenceEdit");
+		_fogDensityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/FogDensityRow/FogDensityEdit");
+		_tagsEditor = GetNode<SectorTagsEditor>("Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor");
 
-		_floorHeightEdit.TextChanged += text =>
-		{
-			ApplyRealTimeNumber(text, s => s.FloorHeight, (s, v) => s.FloorHeight = v);
-			UpdateSectorHeight();
-		};
-		_ceilingHeightEdit.TextChanged += text =>
-		{
-			ApplyRealTimeNumber(text, s => s.CeilingHeight, (s, v) => s.CeilingHeight = v);
-			UpdateSectorHeight();
-		};
+		_floorHeightEdit.TextChanged += _ => RecomputeHeights();
+		_ceilingHeightEdit.TextChanged += _ => RecomputeHeights();
+		_heightOffsetEdit.TextChanged += _ => RecomputeHeights();
 		_brightnessEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.Brightness, (s, v) => s.Brightness = (int)Math.Round(v));
 		_floorTextureEdit.TextChanged += text =>
 		{
@@ -132,6 +167,7 @@ public partial class SectorEditDialog : AcceptDialog
 		_floorTexturePreview.Pressed += () => BrowseTexture(_floorTextureEdit, _floorTexturePreview, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
 		_ceilingTexturePreview.Pressed += () => BrowseTexture(_ceilingTextureEdit, _ceilingTexturePreview, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
 		_specialEdit.TextChanged += _ => UpdateSpecialNameLabel();
+		_specialBrowseButton.Pressed += BrowseSpecial;
 
 		Confirmed += OnConfirmed;
 		Canceled += OnCanceled;
@@ -196,25 +232,99 @@ public partial class SectorEditDialog : AcceptDialog
 		_namedResources = namedResources;
 		_textureIconCache = textureIconCache;
 
+		var flagKeys = gameConfiguration.GetSectorFlags();
 		_snapshots = sectors.ToDictionary(s => s, s => new Snapshot(
 			s.FloorHeight, s.CeilingHeight, s.FloorTexture, s.CeilingTexture, s.Brightness,
-			s.Fields.GetInteger("special", 0), s.Fields.GetInteger("id", 0), s.Fields.GetFloat("gravity", 1.0)));
+			s.Fields.GetInteger("special", 0), s.Fields.GetFloat("gravity", 1.0),
+			s.Fields.GetString("damagetype", ""), s.Fields.GetInteger("damageamount", 0), s.Fields.GetInteger("damageinterval", 32), s.Fields.GetInteger("leakiness", 0),
+			s.Fields.GetString("soundsequence", ""), s.Fields.GetInteger("fogdensity", 0),
+			flagKeys.ToDictionary(f => f.Key, f => s.Fields.GetBool(f.Key, false))));
+		_tagsEditor.SetSectors(sectors, map);
 
 		_suppressLiveApply = true;
 		_floorHeightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorHeight));
 		_ceilingHeightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingHeight));
+		_heightOffsetEdit.Text = "0"; // always transient/UI-only - never reflects a stored value, see this class's own remarks
 		_floorTextureEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorTexture));
 		_ceilingTextureEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingTexture));
+		_damageTypeEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.DamageType));
+		_damageAmountEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.DamageAmount));
+		_damageIntervalEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.DamageInterval));
+		_leakinessEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Leakiness));
 		_brightnessEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Brightness));
 		_specialEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Special));
-		_tagEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.Tag));
 		_gravityEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.Gravity));
+		_soundSequenceEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.SoundSequence));
+		_fogDensityEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.FogDensity));
 		_suppressLiveApply = false;
 
+		RebuildFlagsCheckboxes(flagKeys);
 		UpdateSpecialNameLabel();
 		UpdateTexturePreview(_floorTexturePreview, _floorTextureEdit.Text);
 		UpdateTexturePreview(_ceilingTexturePreview, _ceilingTextureEdit.Text);
 		UpdateSectorHeight();
+	}
+
+	/// <summary>
+	/// The tallest a single column of flag checkboxes is allowed to get
+	/// before <see cref="_flagsContainer"/> (a <c>VFlowContainer</c>) starts
+	/// a second column - chosen generously enough that every flag set this
+	/// project currently ships (11, for GZDoom's Doom2 UDMF configuration)
+	/// fits in one column with room to spare, matching UDB's own real
+	/// dialog. It only matters at all for a hypothetical future
+	/// configuration with meaningfully more flags than that - this is the
+	/// one knob that decides when such a set would start spilling into a
+	/// second column instead of growing the dialog taller indefinitely.
+	/// </summary>
+	private const float MaxFlagsColumnHeight = 320f;
+
+	/// <summary>
+	/// Rebuilt from scratch every time the dialog opens, since the flag set
+	/// itself comes from the current <see cref="IGameConfiguration"/> and
+	/// can differ between game configurations - unlike every other field in
+	/// this dialog, it can't be authored once in the scene as a fixed set of
+	/// nodes. Each checkbox is a <see cref="Node.Duplicate"/> of
+	/// <see cref="_flagCheckBoxTemplate"/> (a real scene node, kept hidden
+	/// with <c>visible = false</c>, sitting right next to
+	/// <see cref="_flagsContainer"/>) rather than a bare <c>new CheckBox()</c> -
+	/// that template is the actual node to select in the Godot editor to
+	/// restyle every flag checkbox at once (font, theme, spacing), even
+	/// though none of its clones exist until this method runs. A checkbox's
+	/// displayed state when the selection disagrees is purely cosmetic
+	/// (shows checked only if every selected sector already has it set) -
+	/// it's never read back unless the user actually toggles that specific
+	/// checkbox (see <see cref="_touchedFlags"/> and <see cref="OnConfirmed"/>),
+	/// matching UDB's real tri-state semantics without needing an
+	/// indeterminate checkbox state.
+	///
+	/// <see cref="_flagsContainer"/>'s <see cref="Control.CustomMinimumSize"/>
+	/// is set here (not once in the scene) to exactly fit however many
+	/// flags this game configuration actually has, capped at
+	/// <see cref="MaxFlagsColumnHeight"/> - a plain <c>VFlowContainer</c>
+	/// with no height constraint would just report one tall column as its
+	/// own minimum size and never wrap, so this cap is what actually makes
+	/// "spill into a second column" possible at all once a flag set
+	/// outgrows it.
+	/// </summary>
+	private void RebuildFlagsCheckboxes(IReadOnlyList<SectorFlagInfo> flags)
+	{
+		foreach (var child in _flagsContainer.GetChildren()) child.QueueFree();
+		_flagCheckBoxes.Clear();
+		_touchedFlags.Clear();
+
+		foreach (var flag in flags)
+		{
+			var checkBox = (CheckBox)_flagCheckBoxTemplate.Duplicate();
+			checkBox.Visible = true;
+			checkBox.Text = flag.Title;
+			checkBox.ButtonPressed = _snapshots.Values.All(s => s.Flags[flag.Key]);
+			checkBox.Toggled += _ => _touchedFlags.Add(flag.Key);
+			_flagsContainer.AddChild(checkBox);
+			_flagCheckBoxes[flag.Key] = checkBox;
+		}
+
+		var rowHeight = _flagCheckBoxTemplate.GetMinimumSize().Y;
+		_flagsContainer.CustomMinimumSize = new Vector2(0, Mathf.Min(rowHeight * flags.Count, MaxFlagsColumnHeight));
 	}
 
 	/// <summary>
@@ -227,6 +337,58 @@ public partial class SectorEditDialog : AcceptDialog
 	/// </summary>
 	private void UpdateSectorHeight() =>
 		_sectorHeightValue.Text = SharedOrBlank(_sectors.Select(s => s.CeilingHeight - s.FloorHeight));
+
+	/// <summary>
+	/// Floor Height, Ceiling Height, and Height Offset are resolved
+	/// together rather than by three independent handlers, since Height
+	/// Offset only ever nudges the other two - it's never itself a stored
+	/// sector value (confirmed against UDB's real dialog: the field always
+	/// shows "0" and is never written anywhere). Both height fields resolve
+	/// against each sector's own original snapshot value (never the
+	/// sector's current live value), exactly as before, so re-editing any
+	/// of the three fields stays idempotent instead of compounding. The
+	/// offset itself is resolved by <see cref="ResolveHeightOffset"/>
+	/// against that sector's own resolved (not original) height, matching
+	/// UDB's real tooltip-documented <c>++</c>/<c>--</c> behavior.
+	/// </summary>
+	private void RecomputeHeights()
+	{
+		if (_suppressLiveApply) return;
+
+		foreach (var sector in _sectors)
+		{
+			var snapshot = _snapshots[sector];
+			var newFloor = NumericFieldExpression.Resolve(_floorHeightEdit.Text, snapshot.FloorHeight) ?? snapshot.FloorHeight;
+			var newCeiling = NumericFieldExpression.Resolve(_ceilingHeightEdit.Text, snapshot.CeilingHeight) ?? snapshot.CeilingHeight;
+			var offset = ResolveHeightOffset(_heightOffsetEdit.Text, newCeiling - newFloor);
+
+			sector.FloorHeight = newFloor + offset;
+			sector.CeilingHeight = newCeiling + offset;
+			_map.MarkDirty(sector);
+		}
+
+		UpdateSectorHeight();
+		_onLiveChange?.Invoke();
+	}
+
+	/// <summary>
+	/// Blank means no offset. A bare <c>++</c>/<c>--</c> (no trailing
+	/// number) means "by this sector's own current height" - a literal
+	/// case <see cref="NumericFieldExpression"/> doesn't cover on its own,
+	/// since there's no "original value" for a field that's always "0" -
+	/// so it's special-cased here instead. Anything else falls back to
+	/// <see cref="NumericFieldExpression"/> resolved against zero (a plain
+	/// number is an absolute delta; <c>++N</c>/<c>--N</c>/<c>*N</c>/<c>/N</c>
+	/// against zero degrade to sensible results - doubling zero is still
+	/// zero, adding N to zero is just N).
+	/// </summary>
+	private static double ResolveHeightOffset(string text, double sectorOwnHeight)
+	{
+		var trimmed = text.Trim();
+		if (trimmed == "++") return sectorOwnHeight;
+		if (trimmed == "--") return -sectorOwnHeight;
+		return NumericFieldExpression.Resolve(trimmed, 0) ?? 0;
+	}
 
 	/// <summary>
 	/// Resolves <paramref name="text"/> against each sector's own
@@ -292,6 +454,30 @@ public partial class SectorEditDialog : AcceptDialog
 	private TextureBrowserDialog CreateTextureBrowserDialog()
 	{
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/TextureBrowserDialog.tscn").Instantiate<TextureBrowserDialog>();
+		AddChild(dialog);
+		return dialog;
+	}
+
+	/// <summary>
+	/// Special is deliberately never live-applied to the sector (see this
+	/// class's own doc comment and <see cref="OnConfirmed"/>'s remarks) -
+	/// so picking one from the browser only needs to update the text field
+	/// and its name label, exactly as if the number had been typed by
+	/// hand. No sector mutation happens here at all.
+	/// </summary>
+	private void BrowseSpecial()
+	{
+		_sectorSpecialBrowserDialog ??= CreateSectorSpecialBrowserDialog();
+		_sectorSpecialBrowserDialog.Browse(_gameConfiguration, _specialEdit.Text, number =>
+		{
+			_specialEdit.Text = number;
+			UpdateSpecialNameLabel();
+		});
+	}
+
+	private SectorSpecialBrowserDialog CreateSectorSpecialBrowserDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/SectorSpecialBrowserDialog.tscn").Instantiate<SectorSpecialBrowserDialog>();
 		AddChild(dialog);
 		return dialog;
 	}
@@ -401,18 +587,30 @@ public partial class SectorEditDialog : AcceptDialog
 				commands.Add(new SetFieldCommand(sector.Fields, "special", newSpecial == 0 ? null : new UniValue(UniversalType.Integer, newSpecial)));
 			}
 
-			var newTag = NumericFieldExpression.ResolveInteger(_tagEdit.Text, snapshot.Tag) ?? snapshot.Tag;
-			if (newTag != snapshot.Tag)
-			{
-				commands.Add(new SetFieldCommand(sector.Fields, "id", newTag == 0 ? null : new UniValue(UniversalType.Integer, newTag)));
-			}
-
 			var newGravity = NumericFieldExpression.Resolve(_gravityEdit.Text, snapshot.Gravity) ?? snapshot.Gravity;
 			if (newGravity != snapshot.Gravity)
 			{
 				commands.Add(new SetFieldCommand(sector.Fields, "gravity", newGravity == 1.0 ? null : new UniValue(UniversalType.Float, newGravity)));
 			}
+
+			AddIfChangedStringField(commands, sector, "damagetype", snapshot.DamageType, _damageTypeEdit.Text);
+			AddIfChangedIntegerField(commands, sector, "damageamount", snapshot.DamageAmount, _damageAmountEdit.Text, defaultValue: 0);
+			AddIfChangedIntegerField(commands, sector, "damageinterval", snapshot.DamageInterval, _damageIntervalEdit.Text, defaultValue: 32);
+			AddIfChangedIntegerField(commands, sector, "leakiness", snapshot.Leakiness, _leakinessEdit.Text, defaultValue: 0);
+			AddIfChangedStringField(commands, sector, "soundsequence", snapshot.SoundSequence, _soundSequenceEdit.Text);
+			AddIfChangedIntegerField(commands, sector, "fogdensity", snapshot.FogDensity, _fogDensityEdit.Text, defaultValue: 0);
+
+			foreach (var key in _touchedFlags)
+			{
+				var newFlagValue = _flagCheckBoxes[key].ButtonPressed;
+				if (newFlagValue != snapshot.Flags[key])
+				{
+					commands.Add(new SetFieldCommand(sector.Fields, key, newFlagValue ? new UniValue(UniversalType.Boolean, true) : null));
+				}
+			}
 		}
+
+		commands.AddRange(_tagsEditor.BuildCommands());
 
 		if (commands.Count > 0) _undoStack.Record(new CommandGroup(commands));
 	}
@@ -421,6 +619,24 @@ public partial class SectorEditDialog : AcceptDialog
 	{
 		if (EqualityComparer<T>.Default.Equals(oldValue, newValue)) return;
 		commands.Add(new SetPropertyCommand<Sector, T>(sector, setter, oldValue, newValue, s => _map.MarkDirty(s)));
+	}
+
+	/// <summary>Blank text means "keep this sector's own original" (the same multi-select convention every other field here follows), never "clear it to empty."</summary>
+	private static void AddIfChangedStringField(List<ICommand> commands, Sector sector, string key, string originalValue, string fieldText)
+	{
+		var trimmed = fieldText.Trim();
+		var newValue = trimmed.Length == 0 ? originalValue : trimmed;
+		if (newValue == originalValue) return;
+
+		commands.Add(new SetFieldCommand(sector.Fields, key, newValue.Length == 0 ? null : new UniValue(UniversalType.String, newValue)));
+	}
+
+	private static void AddIfChangedIntegerField(List<ICommand> commands, Sector sector, string key, long originalValue, string fieldText, long defaultValue)
+	{
+		var newValue = NumericFieldExpression.ResolveInteger(fieldText, originalValue) ?? originalValue;
+		if (newValue == originalValue) return;
+
+		commands.Add(new SetFieldCommand(sector.Fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Integer, newValue)));
 	}
 
 	private static string SharedOrBlank(IEnumerable<double> values)

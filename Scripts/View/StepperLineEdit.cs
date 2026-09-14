@@ -66,6 +66,28 @@ public partial class StepperLineEdit : HBoxContainer
 		};
 		_upButton.Pressed += () => Nudge(+1);
 		_downButton.Pressed += () => Nudge(-1);
+
+		_lineEdit.Resized += MatchSpinnerHeightToLineEdit;
+	}
+
+	/// <summary>
+	/// Keeps the two spin buttons' combined height matching the
+	/// <see cref="LineEdit"/> beside them exactly, whatever that happens to
+	/// be - safe to do now that both buttons' own theme styles carry zero
+	/// content margin (see <c>StepperLineEdit.tscn</c>'s
+	/// <c>StyleBoxFlat_spinner_*</c> resources), so this is the only thing
+	/// left influencing their size; reacting to the field's own
+	/// <see cref="Control.Resized"/> means a theme/font change elsewhere
+	/// keeps this correct automatically instead of a hand-tuned pixel
+	/// guess drifting out of sync - the same pattern
+	/// <c>SectorEditDialog.KeepSquare</c> already uses for texture preview
+	/// thumbnails.
+	/// </summary>
+	private void MatchSpinnerHeightToLineEdit()
+	{
+		var halfHeight = _lineEdit.Size.Y / 2f;
+		_upButton.CustomMinimumSize = new Vector2(_upButton.CustomMinimumSize.X, halfHeight);
+		_downButton.CustomMinimumSize = new Vector2(_downButton.CustomMinimumSize.X, halfHeight);
 	}
 
 	/// <summary>

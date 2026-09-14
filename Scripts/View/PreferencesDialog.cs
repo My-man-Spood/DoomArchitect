@@ -15,7 +15,7 @@ using Godot;
 /// </summary>
 public partial class PreferencesDialog : AcceptDialog
 {
-	private static readonly GameConfigurationKind[] Kinds = { GameConfigurationKind.Doom, GameConfigurationKind.Doom2 };
+	private static readonly GameConfigurationKind[] Kinds = { GameConfigurationKind.Doom, GameConfigurationKind.Doom2, GameConfigurationKind.GZDoomDoom2UDMF };
 
 	private ItemList _configList;
 	private ResourceListEditor _resourceListEditor;

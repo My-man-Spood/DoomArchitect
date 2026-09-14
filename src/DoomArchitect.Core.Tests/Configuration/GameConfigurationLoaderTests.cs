@@ -221,6 +221,18 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
+    public void Doom_GetSectorSpecials_ReturnsAllSixteenVanillaEntriesSortedByNumber()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        var specials = doom.GetSectorSpecials();
+
+        Assert.Equal(16, specials.Count);
+        Assert.Equal(specials.OrderBy(s => s.Number).Select(s => s.Number), specials.Select(s => s.Number));
+        Assert.Contains(specials, s => s.Number == 9 && s.Title == "Secret area");
+    }
+
+    [Fact]
     public void Doom2_LinedefTypesAndSectorTypes_AreSharedWithDoom()
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
@@ -228,5 +240,73 @@ public class GameConfigurationLoaderTests
 
         Assert.Equal(doom.GetSectorSpecial(9)!.Title, doom2.GetSectorSpecial(9)!.Title);
         Assert.Equal(doom.GetLinedefAction(1)!.Category, doom2.GetLinedefAction(1)!.Category);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_GetSectorFlags_ReturnsAllElevenRealUdmfFlags()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var flags = gzdoom.GetSectorFlags();
+
+        Assert.Equal(11, flags.Count);
+        Assert.Contains(flags, f => f.Key == "silent");
+        Assert.Contains(flags, f => f.Key == "hurtmonsters"); // GZDoom-specific, not baseline UDMF
+        Assert.Contains(flags, f => f.Key == "harminair"); // GZDoom-specific, not baseline UDMF
+    }
+
+    [Fact]
+    public void Doom_GetSectorFlags_ReturnsNoneSinceVanillaConfigsDoNotDefineAny()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        Assert.Empty(doom.GetSectorFlags());
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_GetDamageTypes_ReturnsAllTwentyRealGZDoomDamageTypes()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var damageTypes = gzdoom.GetDamageTypes();
+
+        Assert.Equal(20, damageTypes.Count);
+        Assert.Contains("Fire", damageTypes);
+        Assert.Contains("InstantDeath", damageTypes);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_GetSectorSpecials_ReturnsTheLargerRealUdmfListNotVanillas()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var specials = gzdoom.GetSectorSpecials();
+
+        Assert.Equal(94, specials.Count);
+        Assert.Contains(specials, s => s.Number == 244);
+        Assert.DoesNotContain(specials, s => s.Number == 10); // vanilla-only "Door close and stay" special, replaced wholesale
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_ThingTypes_AreReusedFromDoom2()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+        var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
+
+        var archvile = gzdoom.GetThingType(64);
+
+        Assert.NotNull(archvile);
+        Assert.Equal(doom2.GetThingType(64)!.Title, archvile!.Title);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_LinedefTypes_AreReusedFromVanillaCommon()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var action = gzdoom.GetLinedefAction(1);
+
+        Assert.NotNull(action);
+        Assert.Equal("doors", action!.Category);
     }
 }

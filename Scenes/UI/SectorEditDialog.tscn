@@ -2,12 +2,20 @@
 
 [ext_resource type="Script" uid="uid://c5oq5kgwov0mj" path="res://Scripts/View/SectorEditDialog.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/GroupBox.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/SectorTagsEditor.tscn" id="4"]
+[ext_resource type="Texture2D" uid="uid://dp3gxx4owp7xg" path="res://Assets/Icons/checkbox_unchecked.svg" id="5"]
+[ext_resource type="Texture2D" uid="uid://bdg1wch3fp2be" path="res://Assets/Icons/checkbox_checked.svg" id="6"]
+[ext_resource type="Texture2D" uid="uid://bb328j3s8kdj3" path="res://Assets/Icons/checkbox_unchecked_disabled.svg" id="7"]
+[ext_resource type="Texture2D" uid="uid://ya7yhdk6ewjw" path="res://Assets/Icons/checkbox_checked_disabled.svg" id="8"]
+
+[sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_flagcheckbox"]
 
 [node name="SectorEditDialog" type="AcceptDialog" unique_id=846633471]
 oversampling_override = 1.0
 title = "Edit Sector(s)"
 initial_position = 2
-size = Vector2i(773, 560)
+size = Vector2i(773, 941)
 visible = true
 min_size = Vector2i(560, 340)
 script = ExtResource("1")
@@ -22,12 +30,6 @@ offset_right = -8.0
 offset_bottom = -49.0
 grow_horizontal = 2
 grow_vertical = 2
-
-[node name="HintLabel" type="Label" parent="Container" unique_id=209702777]
-custom_minimum_size = Vector2(420, 0)
-layout_mode = 2
-text = "Leave a field blank to keep each sector's own value. Use ++N/--N/*N//N to change relative to it (e.g. ++16 raises every selected sector by 16, each from its own height)."
-autowrap_mode = 2
 
 [node name="Tabs" type="TabContainer" parent="Container" unique_id=2119286992]
 layout_mode = 2
@@ -45,162 +47,326 @@ metadata/_tab_index = 0
 [node name="VboxContainer" type="VBoxContainer" parent="Container/Tabs/Properties" unique_id=120534000]
 layout_mode = 2
 
-[node name="FloorCeilingHeader" type="Label" parent="Container/Tabs/Properties/VboxContainer" unique_id=1058437680]
-layout_mode = 2
-theme_override_font_sizes/font_size = 15
-text = "Floor and Ceiling"
+[node name="FlagsBox" parent="Container/Tabs/Properties/VboxContainer" unique_id=2081038805 instance=ExtResource("3")]
+Title = "Flags"
 
-[node name="FloorCeilingRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer" unique_id=303167262]
-layout_mode = 2
-theme_override_constants/separation = 24
-alignment = 1
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/FlagsBox" index="0"]
+text = "Flags"
 
-[node name="HeightsGrid" type="GridContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow" unique_id=907474321]
+[node name="FlagsContainer" type="VFlowContainer" parent="Container/Tabs/Properties/VboxContainer/FlagsBox/Content" index="0" unique_id=556557851]
 layout_mode = 2
-columns = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 0
 
-[node name="CeilingHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=1360206440]
+[node name="FlagCheckBoxTemplate" type="CheckBox" parent="Container/Tabs/Properties/VboxContainer" unique_id=283329234]
+visible = false
+layout_mode = 2
+mouse_default_cursor_shape = 2
+theme_override_styles/normal = SubResource("StyleBoxEmpty_flagcheckbox")
+theme_override_styles/pressed = SubResource("StyleBoxEmpty_flagcheckbox")
+theme_override_styles/hover = SubResource("StyleBoxEmpty_flagcheckbox")
+theme_override_styles/hover_pressed = SubResource("StyleBoxEmpty_flagcheckbox")
+theme_override_styles/disabled = SubResource("StyleBoxEmpty_flagcheckbox")
+theme_override_icons/checked = ExtResource("6")
+theme_override_icons/unchecked = ExtResource("5")
+theme_override_icons/checked_disabled = ExtResource("8")
+theme_override_icons/unchecked_disabled = ExtResource("7")
+text = "Flag"
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer" unique_id=2037670061]
+layout_mode = 2
+
+[node name="HeightsBox" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer" unique_id=1051549965 instance=ExtResource("3")]
+Title = "Heights"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox" index="0"]
+text = "Heights"
+
+[node name="CeilingHeightRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content" index="0" unique_id=627624461]
+layout_mode = 2
+
+[node name="CeilingHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/CeilingHeightRow" unique_id=1360206440]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Ceiling Height"
 
-[node name="CeilingHeightEdit" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=649190871 instance=ExtResource("2")]
+[node name="CeilingHeightEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/CeilingHeightRow" unique_id=649190871 instance=ExtResource("2")]
 layout_mode = 2
+size_flags_horizontal = 3
 Step = 8.0
 StepBig = 16.0
 
-[node name="FloorHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=907474320]
+[node name="FloorHeightRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content" index="1" unique_id=1436109198]
+layout_mode = 2
+
+[node name="FloorHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/FloorHeightRow" unique_id=907474320]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Floor Height"
 
-[node name="FloorHeightEdit" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=654827288 instance=ExtResource("2")]
+[node name="FloorHeightEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/FloorHeightRow" unique_id=654827288 instance=ExtResource("2")]
 layout_mode = 2
+size_flags_horizontal = 3
 Step = 8.0
 StepBig = 16.0
 
-[node name="SectorHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=1955147751]
+[node name="HeightOffsetRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content" index="2" unique_id=1282290281]
+layout_mode = 2
+
+[node name="HeightOffsetLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/HeightOffsetRow" unique_id=1007859210]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "Height Offset"
+
+[node name="HeightOffsetEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/HeightOffsetRow" unique_id=46940944 instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 8.0
+StepBig = 16.0
+
+[node name="SectorHeightRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content" index="3" unique_id=550855517]
+layout_mode = 2
+
+[node name="SectorHeightLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/SectorHeightRow" unique_id=1955147751]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Sector Height"
 
-[node name="SectorHeightValue" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/HeightsGrid" unique_id=929670821]
-layout_mode = 2
-
-[node name="Spacer" type="Control" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow" unique_id=2114988311]
+[node name="SectorHeightValue" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/SectorHeightRow" unique_id=929670821]
 layout_mode = 2
 size_flags_horizontal = 3
 
-[node name="TexturesRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow" unique_id=938256687]
-layout_mode = 2
-
-[node name="FloorTexturePanel" type="PanelContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow" unique_id=2107592747]
-layout_mode = 2
-
-[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel" unique_id=1111060150]
-layout_mode = 2
-
-[node name="FloorTextureLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=1789801616]
-layout_mode = 2
-text = "Floor Texture"
-horizontal_alignment = 1
-
-[node name="FloorTexturePreview" type="TextureButton" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=947521557]
-texture_filter = 1
-custom_minimum_size = Vector2(48, 48)
+[node name="Spacer" type="Control" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer" unique_id=1646775219]
 layout_mode = 2
 size_flags_horizontal = 3
-mouse_default_cursor_shape = 2
-ignore_texture_size = true
-stretch_mode = 0
 
-[node name="FloorTextureEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=1155939521]
-custom_minimum_size = Vector2(140, 0)
+[node name="DamageBox" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer" unique_id=1032054414 instance=ExtResource("3")]
+Title = "Sector damage"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox" index="0"]
+text = "Sector damage"
+
+[node name="DamageTypeRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content" index="0" unique_id=1334541401]
 layout_mode = 2
 
-[node name="CeilingTexturePanel" type="PanelContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow" unique_id=1877584065]
+[node name="DamageTypeLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageTypeRow" unique_id=1600676489]
+custom_minimum_size = Vector2(70, 0)
 layout_mode = 2
+text = "Type"
 
-[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel" unique_id=1286100855]
-layout_mode = 2
-
-[node name="CeilingTextureLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=1216730656]
-layout_mode = 2
-text = "Ceiling Texture"
-horizontal_alignment = 1
-
-[node name="CeilingTexturePreview" type="TextureButton" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=2026907347]
-texture_filter = 1
-custom_minimum_size = Vector2(48, 48)
+[node name="DamageTypeEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageTypeRow" unique_id=1176947035]
+custom_minimum_size = Vector2(120, 0)
 layout_mode = 2
 size_flags_horizontal = 3
-mouse_default_cursor_shape = 2
-ignore_texture_size = true
-stretch_mode = 0
 
-[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/FloorCeilingRow/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=1930930328]
-custom_minimum_size = Vector2(140, 0)
+[node name="DamageAmountRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content" index="1" unique_id=1873485205]
 layout_mode = 2
 
-[node name="EffectsHeader" type="Label" parent="Container/Tabs/Properties/VboxContainer" unique_id=1825585843]
+[node name="DamageAmountLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageAmountRow" unique_id=1489817770]
+custom_minimum_size = Vector2(70, 0)
 layout_mode = 2
-theme_override_font_sizes/font_size = 15
+text = "Amount"
+
+[node name="DamageAmountEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageAmountRow" unique_id=450190409 instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="DamageIntervalRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content" index="2" unique_id=1782065716]
+layout_mode = 2
+
+[node name="DamageIntervalLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageIntervalRow" unique_id=32593848]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Interval"
+
+[node name="DamageIntervalEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/DamageIntervalRow" unique_id=1128502728 instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="LeakinessRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content" index="3" unique_id=1069891614]
+layout_mode = 2
+
+[node name="LeakinessLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/LeakinessRow" unique_id=733531973]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Leakiness"
+
+[node name="LeakinessEdit" parent="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox/Content/LeakinessRow" unique_id=1864775254 instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="EffectsBox" parent="Container/Tabs/Properties/VboxContainer" unique_id=851963745 instance=ExtResource("3")]
+Title = "Effects"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/EffectsBox" index="0"]
 text = "Effects"
 
-[node name="EffectsGrid" type="GridContainer" parent="Container/Tabs/Properties/VboxContainer" unique_id=1070082281]
+[node name="SpecialFieldRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content" index="0" unique_id=1049573835]
 layout_mode = 2
-columns = 2
 
-[node name="SpecialLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=900667877]
+[node name="SpecialLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow" unique_id=900667877]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Special"
 
-[node name="SpecialRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=989339582]
+[node name="SpecialRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow" unique_id=989339582]
 layout_mode = 2
+size_flags_horizontal = 3
 
-[node name="SpecialEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow" unique_id=1379334841]
+[node name="SpecialEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow" unique_id=1379334841]
 custom_minimum_size = Vector2(80, 0)
 layout_mode = 2
 
-[node name="SpecialNameLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid/SpecialRow" unique_id=1632401015]
+[node name="SpecialNameLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow" unique_id=1632401015]
 layout_mode = 2
 
-[node name="BrightnessLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=1849633452]
+[node name="SpecialBrowseButton" type="Button" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SpecialFieldRow/SpecialRow" unique_id=1691941553]
+layout_mode = 2
+text = "Browse..."
+
+[node name="BrightnessRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content" index="1" unique_id=1161232775]
+layout_mode = 2
+
+[node name="BrightnessLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/BrightnessRow" unique_id=1849633452]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Brightness"
 
-[node name="BrightnessEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=409619794 instance=ExtResource("2")]
+[node name="BrightnessEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/BrightnessRow" unique_id=409619794 instance=ExtResource("2")]
 layout_mode = 2
+size_flags_horizontal = 3
 Step = 8.0
 StepBig = 16.0
 
-[node name="GravityLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=1484178576]
+[node name="GravityRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content" index="2" unique_id=1194485892]
+layout_mode = 2
+
+[node name="GravityLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/GravityRow" unique_id=1484178576]
+custom_minimum_size = Vector2(110, 0)
 layout_mode = 2
 text = "Gravity"
 
-[node name="GravityEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsGrid" unique_id=989470735 instance=ExtResource("2")]
+[node name="GravityEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/GravityRow" unique_id=989470735 instance=ExtResource("2")]
 layout_mode = 2
+size_flags_horizontal = 3
 Step = 0.1
 StepSmall = 0.01
 AllowDecimal = true
 
-[node name="IdentificationHeader" type="Label" parent="Container/Tabs/Properties/VboxContainer" unique_id=780678160]
+[node name="SoundSequenceRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content" index="3" unique_id=726264713]
 layout_mode = 2
-theme_override_font_sizes/font_size = 15
+
+[node name="SoundSequenceLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SoundSequenceRow" unique_id=2014167921]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "Sound Sequence"
+
+[node name="SoundSequenceEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SoundSequenceRow" unique_id=1308022001]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FogDensityRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content" index="4" unique_id=1312136295]
+layout_mode = 2
+
+[node name="FogDensityLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/FogDensityRow" unique_id=1441505317]
+custom_minimum_size = Vector2(110, 0)
+layout_mode = 2
+text = "Fog Density"
+
+[node name="FogDensityEdit" parent="Container/Tabs/Properties/VboxContainer/EffectsBox/Content/FogDensityRow" unique_id=2040462652 instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="IdentificationBox" parent="Container/Tabs/Properties/VboxContainer" unique_id=187126897 instance=ExtResource("3")]
+Title = "Identification"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox" index="0"]
 text = "Identification"
 
-[node name="IdentificationGrid" type="GridContainer" parent="Container/Tabs/Properties/VboxContainer" unique_id=389928141]
-layout_mode = 2
-columns = 2
+[node name="SectorTagsEditor" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content" index="0" unique_id=563755374 instance=ExtResource("4")]
 
-[node name="TagLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/IdentificationGrid" unique_id=1558507959]
-layout_mode = 2
-text = "Tag"
+[node name="TagValueEdit" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor/Row1" index="1"]
+size_flags_horizontal = 3
 
-[node name="TagEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/IdentificationGrid" unique_id=87224972]
+[node name="Surfaces" type="MarginContainer" parent="Container/Tabs" unique_id=41786456]
+visible = false
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+metadata/_tab_index = 1
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces" unique_id=956209798]
+layout_mode = 2
+
+[node name="TexturesBox" parent="Container/Tabs/Surfaces/VBoxContainer" unique_id=1613791584 instance=ExtResource("3")]
+Title = "Floor and Ceiling Textures"
+
+[node name="TitleLabel" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox" index="0"]
+text = "Floor and Ceiling Textures"
+
+[node name="TexturesRow" type="HBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content" index="0" unique_id=1038488413]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="FloorTexturePanel" type="PanelContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow" unique_id=1616215972]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel" unique_id=912502339]
+layout_mode = 2
+
+[node name="FloorTextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=945715216]
+layout_mode = 2
+text = "Floor Texture"
+horizontal_alignment = 1
+
+[node name="FloorTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=971385360]
+texture_filter = 1
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_default_cursor_shape = 2
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="FloorTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/FloorTexturePanel/VBoxContainer" unique_id=224339767]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+
+[node name="CeilingTexturePanel" type="PanelContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow" unique_id=1830247245]
+layout_mode = 2
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel" unique_id=305465156]
+layout_mode = 2
+
+[node name="CeilingTextureLabel" type="Label" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=201914285]
+layout_mode = 2
+text = "Ceiling Texture"
+horizontal_alignment = 1
+
+[node name="CeilingTexturePreview" type="TextureButton" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=245520334]
+texture_filter = 1
+custom_minimum_size = Vector2(48, 48)
+layout_mode = 2
+size_flags_horizontal = 3
+mouse_default_cursor_shape = 2
+ignore_texture_size = true
+stretch_mode = 0
+
+[node name="CeilingTextureEdit" type="LineEdit" parent="Container/Tabs/Surfaces/VBoxContainer/TexturesBox/Content/TexturesRow/CeilingTexturePanel/VBoxContainer" unique_id=203473088]
+custom_minimum_size = Vector2(140, 0)
 layout_mode = 2
 
 [node name="Colors" type="CenterContainer" parent="Container/Tabs" unique_id=696473346]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 1
+metadata/_tab_index = 2
 
 [node name="Label" type="Label" parent="Container/Tabs/Colors" unique_id=1832831645]
 layout_mode = 2
@@ -209,7 +375,7 @@ text = "Not yet implemented - see TODO.md"
 [node name="SlopesPortals" type="CenterContainer" parent="Container/Tabs" unique_id=1896356578]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 2
+metadata/_tab_index = 3
 
 [node name="Label" type="Label" parent="Container/Tabs/SlopesPortals" unique_id=643214817]
 layout_mode = 2
@@ -218,7 +384,7 @@ text = "Not yet implemented - see TODO.md"
 [node name="Comment" type="CenterContainer" parent="Container/Tabs" unique_id=91693792]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 3
+metadata/_tab_index = 4
 
 [node name="Label" type="Label" parent="Container/Tabs/Comment" unique_id=639033906]
 layout_mode = 2
@@ -227,8 +393,16 @@ text = "Not yet implemented - see TODO.md"
 [node name="Custom" type="CenterContainer" parent="Container/Tabs" unique_id=1753872745]
 visible = false
 layout_mode = 2
-metadata/_tab_index = 4
+metadata/_tab_index = 5
 
 [node name="Label" type="Label" parent="Container/Tabs/Custom" unique_id=1738332260]
 layout_mode = 2
 text = "Not yet implemented - see TODO.md"
+
+[editable path="Container/Tabs/Properties/VboxContainer/FlagsBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/EffectsBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor"]
+[editable path="Container/Tabs/Surfaces/VBoxContainer/TexturesBox"]

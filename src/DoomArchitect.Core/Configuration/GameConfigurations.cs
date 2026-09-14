@@ -27,7 +27,13 @@ public static class GameConfigurations
         if (Cache.TryGetValue(kind, out var cached)) return cached;
 
         var loader = new CfgLoader(new EmbeddedResourceCfgFileSource(Assembly.GetExecutingAssembly(), ResourceRootPrefix));
-        var fileName = kind == GameConfigurationKind.Doom ? "Doom.cfg" : "Doom2.cfg";
+        var fileName = kind switch
+        {
+            GameConfigurationKind.Doom => "Doom.cfg",
+            GameConfigurationKind.Doom2 => "Doom2.cfg",
+            GameConfigurationKind.GZDoomDoom2UDMF => "GZDoomDoom2UDMF.cfg",
+            _ => throw new ArgumentOutOfRangeException(nameof(kind)),
+        };
         var configuration = GameConfigurationLoader.Load(loader.Load(fileName));
 
         Cache[kind] = configuration;
