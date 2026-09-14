@@ -18,6 +18,7 @@ public partial class MainMenuBar : MenuBar
 	private MapOverlay _overlay;
 	private PreferencesDialog _preferencesDialog;
 	private SectorEditDialog _sectorEditDialog;
+	private LinedefEditDialog _linedefEditDialog;
 	private AcceptDialog _errorDialog;
 
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
@@ -39,6 +40,7 @@ public partial class MainMenuBar : MenuBar
 			if (id == 0) OpenEditSelectionDialog();
 		};
 		_overlay.EditSectorsRequested += OpenSectorEditDialogFor;
+		_overlay.EditLinedefsRequested += OpenLinedefEditDialogFor;
 
 		var mapMenu = GetNode<PopupMenu>("Map");
 		mapMenu.AddItem("Map Options...", 0);
@@ -59,26 +61,38 @@ public partial class MainMenuBar : MenuBar
 
 	/// <summary>
 	/// Generic-sounding on purpose ("Edit Selection", not "Edit Sector") -
-	/// Linedef and Thing property dialogs slot into this same menu item
-	/// next, per <c>TODO.md</c>'s own ordering; only the Sectors-mode
-	/// branch exists so far.
+	/// the Thing property dialog slots into this same menu item next, per
+	/// <c>TODO.md</c>'s own ordering; Sectors and Linedefs modes are both
+	/// wired now.
 	/// </summary>
 	private void OpenEditSelectionDialog()
 	{
-		if (_overlay.Mode != EditMode.Sectors)
+		switch (_overlay.Mode)
 		{
-			ShowError("Edit Selection currently only supports Sectors mode.");
-			return;
-		}
+			case EditMode.Sectors:
+				var selectedSectors = _overlay.Map?.GetSelectedSectors().ToList() ?? new List<Sector>();
+				if (selectedSectors.Count == 0)
+				{
+					ShowError("Select one or more sectors first.");
+					return;
+				}
 
-		var selected = _overlay.Map?.GetSelectedSectors().ToList() ?? new List<Sector>();
-		if (selected.Count == 0)
-		{
-			ShowError("Select one or more sectors first.");
-			return;
-		}
+				OpenSectorEditDialogFor(selectedSectors);
+				break;
+			case EditMode.Linedefs:
+				var selectedLinedefs = _overlay.Map?.GetSelectedLinedefs().ToList() ?? new List<Linedef>();
+				if (selectedLinedefs.Count == 0)
+				{
+					ShowError("Select one or more linedefs first.");
+					return;
+				}
 
-		OpenSectorEditDialogFor(selected);
+				OpenLinedefEditDialogFor(selectedLinedefs);
+				break;
+			default:
+				ShowError("Edit Selection currently only supports Sectors and Linedefs modes.");
+				break;
+		}
 	}
 
 	private void OpenSectorEditDialogFor(IReadOnlyList<Sector> sectors)
@@ -95,6 +109,24 @@ public partial class MainMenuBar : MenuBar
 	private SectorEditDialog CreateSectorEditDialog()
 	{
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/SectorEditDialog.tscn").Instantiate<SectorEditDialog>();
+		AddChild(dialog);
+		return dialog;
+	}
+
+	private void OpenLinedefEditDialogFor(IReadOnlyList<Linedef> linedefs)
+	{
+		if (linedefs.Count == 0) return;
+
+		_linedefEditDialog ??= CreateLinedefEditDialog();
+		_linedefEditDialog.SetLinedefs(
+			linedefs, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
+			_overlay.TextureSet, _overlay.NamedResources, _overlay.TextureIconCache);
+		_linedefEditDialog.PopupCentered();
+	}
+
+	private LinedefEditDialog CreateLinedefEditDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/LinedefEditDialog.tscn").Instantiate<LinedefEditDialog>();
 		AddChild(dialog);
 		return dialog;
 	}

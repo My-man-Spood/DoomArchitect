@@ -133,7 +133,7 @@ public partial class SectorEditDialog : AcceptDialog
 	private LineEdit _specialEdit;
 	private Label _specialNameLabel;
 	private Button _specialBrowseButton;
-	private SectorTagsEditor _tagsEditor;
+	private MapTagsEditor _tagsEditor;
 
 	private TextureBrowserDialog _textureBrowserDialog;
 	private SectorSpecialBrowserDialog _sectorSpecialBrowserDialog;
@@ -198,7 +198,7 @@ public partial class SectorEditDialog : AcceptDialog
 		_gravityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/GravityRow/GravityEdit");
 		_soundSequenceEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/SoundSequenceRow/SoundSequenceEdit");
 		_fogDensityEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/EffectsBox/Content/FogDensityRow/FogDensityEdit");
-		_tagsEditor = GetNode<SectorTagsEditor>("Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor");
+		_tagsEditor = GetNode<MapTagsEditor>("Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/MapTagsEditor");
 
 		_floorHeightEdit.TextChanged += _ => RecomputeHeights();
 		_ceilingHeightEdit.TextChanged += _ => RecomputeHeights();

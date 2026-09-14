@@ -11,22 +11,25 @@ using Godot;
 /// <c>SectorEditFormUDMF.cs</c>, not guessed from icons) - a primary
 /// "Tag N:" row (editable field + spinner + New/Unused/Clear) plus a
 /// "Tags:" row of read-only clickable chips (one per extra tag) with
-/// Clear All/Add/Remove buttons. Kept Sector-specific for now (scoped to
-/// <see cref="Sector"/> directly, not a generic "tagged element"
-/// interface) since Core has no such abstraction yet and there's no
-/// Linedef dialog to justify inventing one before it's needed - UDB
-/// itself shares this exact control between the Sector and Linedef
-/// dialogs, so generalize this if/when that dialog gets built.
+/// Clear All/Add/Remove buttons. Shared between the Sector and Linedef
+/// dialogs (via <see cref="SetSectors"/>/<see cref="SetLinedefs"/>)
+/// exactly like UDB's own real control is - the predicted "generalize
+/// this once the Linedef dialog exists" moment from when this was still
+/// Sector-only. Internally it only ever touches each element's
+/// <see cref="UniFields"/> bag (never a <see cref="Sector"/>- or
+/// <see cref="Linedef"/>-specific member), so generalizing needed no new
+/// Core-level shared interface - just two thin public entry points
+/// feeding the same <c>UniFields</c>-driven model.
 ///
 /// Multi-selection model matches UDB's real one exactly (its own
 /// <c>List&lt;List&lt;int&gt;&gt;</c>/<c>SetValues</c>/<c>ApplyTo</c>): one tag
-/// list per selected sector, edited by *slot index* in lockstep - typing
+/// list per selected element, edited by *slot index* in lockstep - typing
 /// a value, New, Unused, or Clear writes into that same slot for every
-/// selected sector's own list simultaneously. A slot's displayed value is
-/// the first sector's own value at that index, unless another selected
-/// sector disagrees there (including a sector whose own list doesn't
+/// selected element's own list simultaneously. A slot's displayed value is
+/// the first element's own value at that index, unless another selected
+/// element disagrees there (including an element whose own list doesn't
 /// reach that index) - then it shows mixed. Slot count is always the
-/// first sector's own tag count, matching UDB's real display logic.
+/// first element's own tag count, matching UDB's real display logic.
 ///
 /// UDB's real `&gt;=`/`&lt;=` (per-selection-position ascending/descending
 /// range) and `++`/`--` (per-selection-position offset) tag-distribution
@@ -37,12 +40,12 @@ using Godot;
 /// anything other than a blank field or a plain absolute integer here is
 /// simply a no-op.
 ///
-/// Never live-applied to the selected sectors (no visual effect to
+/// Never live-applied to the selected elements (no visual effect to
 /// preview, matching Special/Gravity's existing precedent) - all real
 /// writes happen once, in <see cref="BuildCommands"/>, called from the
 /// host dialog's own OK handler.
 /// </summary>
-public partial class SectorTagsEditor : VBoxContainer
+public partial class MapTagsEditor : VBoxContainer
 {
 	private Label _tagLabel;
 	private StepperLineEdit _tagValueEdit;
@@ -55,8 +58,9 @@ public partial class SectorTagsEditor : VBoxContainer
 	private Button _addButton;
 	private Button _removeButton;
 
-	private IReadOnlyList<Sector> _sectors = Array.Empty<Sector>();
+	private IReadOnlyList<UniFields> _elements = Array.Empty<UniFields>();
 	private MapData _map;
+	private Func<IReadOnlySet<long>> _getUsedForUnusedScope;
 	private List<List<long>> _originalTags = new();
 	private List<List<long>> _workingTags = new();
 	private int _activeSlot;
@@ -76,21 +80,28 @@ public partial class SectorTagsEditor : VBoxContainer
 
 		_tagValueEdit.TextChanged += OnTagValueTextChanged;
 		_newButton.Pressed += () => SetSlotValue(_activeSlot, TagAllocator.FindFree(_map.GetUsedTags()));
-		_unusedButton.Pressed += () => SetSlotValue(_activeSlot, TagAllocator.FindFree(_map.GetUsedSectorTags()));
+		_unusedButton.Pressed += () => SetSlotValue(_activeSlot, TagAllocator.FindFree(_getUsedForUnusedScope()));
 		_clearButton.Pressed += () => SetSlotValue(_activeSlot, 0);
 		_clearAllButton.Pressed += ClearAllTags;
 		_addButton.Pressed += AddTag;
 		_removeButton.Pressed += RemoveActiveTag;
 	}
 
-	public void SetSectors(IReadOnlyList<Sector> sectors, MapData map)
+	public void SetSectors(IReadOnlyList<Sector> sectors, MapData map) =>
+		SetElements(sectors.Select(s => s.Fields).ToList(), map, map.GetUsedSectorTags);
+
+	public void SetLinedefs(IReadOnlyList<Linedef> linedefs, MapData map) =>
+		SetElements(linedefs.Select(l => l.Fields).ToList(), map, map.GetUsedLinedefTags);
+
+	private void SetElements(IReadOnlyList<UniFields> elements, MapData map, Func<IReadOnlySet<long>> getUsedForUnusedScope)
 	{
-		_sectors = sectors;
+		_elements = elements;
 		_map = map;
+		_getUsedForUnusedScope = getUsedForUnusedScope;
 		_activeSlot = 0;
 
-		_originalTags = sectors
-			.Select(s => MapDataTagQueries.ParseTags(s.Fields).DefaultIfEmpty(0).ToList())
+		_originalTags = elements
+			.Select(fields => MapDataTagQueries.ParseTags(fields).DefaultIfEmpty(0).ToList())
 			.ToList();
 		_workingTags = _originalTags.Select(list => new List<long>(list)).ToList();
 
@@ -98,10 +109,10 @@ public partial class SectorTagsEditor : VBoxContainer
 		RefreshActiveSlotDisplay();
 	}
 
-	/// <summary>Always the first selected sector's own tag count - matches UDB's real display logic exactly (see this class's own remarks).</summary>
+	/// <summary>Always the first selected element's own tag count - matches UDB's real display logic exactly (see this class's own remarks).</summary>
 	private int SlotCount => _workingTags.Count > 0 ? _workingTags[0].Count : 0;
 
-	/// <summary>Null means "the selected sectors disagree here" (mixed) - shown as blank in the active-slot field and "???" on that slot's chip.</summary>
+	/// <summary>Null means "the selected elements disagree here" (mixed) - shown as blank in the active-slot field and "???" on that slot's chip.</summary>
 	private long? GetDisplayValue(int slot)
 	{
 		var reference = _workingTags[0][slot];
@@ -113,7 +124,7 @@ public partial class SectorTagsEditor : VBoxContainer
 		return reference;
 	}
 
-	/// <summary>Writes <paramref name="value"/> into every selected sector's own list at <paramref name="slot"/>, padding any sector whose list doesn't yet reach that far - real UDB assumes equal-length lists, this project's sectors aren't guaranteed to start with matching tag counts.</summary>
+	/// <summary>Writes <paramref name="value"/> into every selected element's own list at <paramref name="slot"/>, padding any element whose list doesn't yet reach that far - real UDB assumes equal-length lists, this project's elements aren't guaranteed to start with matching tag counts.</summary>
 	private void SetSlotValue(int slot, long value)
 	{
 		foreach (var list in _workingTags)
@@ -208,19 +219,19 @@ public partial class SectorTagsEditor : VBoxContainer
 	}
 
 	/// <summary>
-	/// One <see cref="SetFieldCommand"/> per changed field per sector,
+	/// One <see cref="SetFieldCommand"/> per changed field per element,
 	/// exactly the pattern <see cref="SectorEditDialog.OnConfirmed"/>
 	/// already uses for every other OK-only field - called once here
-	/// (not per-sector by the caller) since this control is already
-	/// all-sectors-aware.
+	/// (not per-element by the caller) since this control is already
+	/// all-elements-aware.
 	/// </summary>
 	public IReadOnlyList<ICommand> BuildCommands()
 	{
 		var commands = new List<ICommand>();
 
-		for (var i = 0; i < _sectors.Count; i++)
+		for (var i = 0; i < _elements.Count; i++)
 		{
-			var sector = _sectors[i];
+			var fields = _elements[i];
 			var original = _originalTags[i];
 			var final = _workingTags[i];
 			if (original.SequenceEqual(final)) continue;
@@ -229,14 +240,14 @@ public partial class SectorTagsEditor : VBoxContainer
 			var newPrimary = final.Count > 0 ? final[0] : 0;
 			if (newPrimary != oldPrimary)
 			{
-				commands.Add(new SetFieldCommand(sector.Fields, "id", newPrimary == 0 ? null : new UniValue(UniversalType.Integer, newPrimary)));
+				commands.Add(new SetFieldCommand(fields, "id", newPrimary == 0 ? null : new UniValue(UniversalType.Integer, newPrimary)));
 			}
 
 			var oldExtra = string.Join(' ', original.Skip(1));
 			var newExtra = string.Join(' ', final.Skip(1));
 			if (newExtra != oldExtra)
 			{
-				commands.Add(new SetFieldCommand(sector.Fields, "moreids", newExtra.Length == 0 ? null : new UniValue(UniversalType.String, newExtra)));
+				commands.Add(new SetFieldCommand(fields, "moreids", newExtra.Length == 0 ? null : new UniValue(UniversalType.String, newExtra)));
 			}
 		}
 

@@ -1,3 +1,4 @@
+using System.Linq;
 using DoomArchitect.Core.Configuration;
 
 namespace DoomArchitect.Core.Tests.Configuration;
@@ -300,13 +301,65 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
-    public void GZDoomDoom2UDMF_LinedefTypes_AreReusedFromVanillaCommon()
+    public void GZDoomDoom2UDMF_LinedefTypes_UseGenericHexenStyleActions()
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
 
-        var action = gzdoom.GetLinedefAction(1);
+        var doorRaise = gzdoom.GetLinedefAction(12);
 
-        Assert.NotNull(action);
-        Assert.Equal("doors", action!.Category);
+        Assert.NotNull(doorRaise);
+        Assert.Equal("doors", doorRaise!.Category);
+        Assert.Equal(5, doorRaise.Args.Count);
+        Assert.True(doorRaise.Args[0].Used);
+        Assert.Equal("Sector Tag", doorRaise.Args[0].Title);
+        Assert.Null(doorRaise.Args[0].EnumOptions);
+        Assert.True(doorRaise.Args[1].Used);
+        Assert.NotNull(doorRaise.Args[1].EnumOptions);
+        Assert.Contains(doorRaise.Args[1].EnumOptions!, o => o.Value == 16 && o.Title == "Slow");
+        Assert.False(doorRaise.Args[4].Used);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_LinedefTypes_DoNotReuseVanillaClassicActionNumbers()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var actionOne = gzdoom.GetLinedefAction(1);
+
+        Assert.Null(actionOne);
+    }
+
+    [Fact]
+    public void GetLinedefActions_ReturnsAllActionsSortedByNumber()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var actions = gzdoom.GetLinedefActions();
+
+        Assert.NotEmpty(actions);
+        Assert.Equal(actions.OrderBy(a => a.Number).Select(a => a.Number), actions.Select(a => a.Number));
+    }
+
+    [Fact]
+    public void GetLinedefFlags_ReturnsRealUdmfFlags()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var flags = gzdoom.GetLinedefFlags();
+
+        Assert.Contains(flags, f => f.Key == "blocking");
+        Assert.Contains(flags, f => f.Key == "twosided");
+        Assert.Contains(flags, f => f.Key == "zoneboundary");
+    }
+
+    [Fact]
+    public void GetLinedefActivations_ReturnsRealUdmfActivations()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var activations = gzdoom.GetLinedefActivations();
+
+        Assert.Contains(activations, a => a.Key == "playercross");
+        Assert.Contains(activations, a => a.Key == "repeatspecial");
     }
 }

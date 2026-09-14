@@ -51,6 +51,27 @@ public class MapDataTagQueriesTests
     }
 
     [Fact]
+    public void GetUsedLinedefTags_CollectsPrimaryAndExtraTagsFromEveryLinedefOnly()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        sector.Fields.SetInteger("id", 99);
+        var v1 = map.CreateVertex(new System.Numerics.Vector2(0, 0));
+        var v2 = map.CreateVertex(new System.Numerics.Vector2(64, 0));
+        var a = map.CreateLinedef(v1, v2, front: sector, back: null);
+        a.Fields.SetInteger("id", 5);
+        var v3 = map.CreateVertex(new System.Numerics.Vector2(64, 64));
+        var b = map.CreateLinedef(v2, v3, front: sector, back: null);
+        b.Fields.SetInteger("id", 9);
+        b.Fields.SetString("moreids", "10 11", "");
+
+        var used = map.GetUsedLinedefTags();
+
+        Assert.Equal(new HashSet<long> { 5, 9, 10, 11 }, used);
+        Assert.DoesNotContain(99L, used);
+    }
+
+    [Fact]
     public void GetUsedTags_AlsoIncludesLinedefPrimaryTags()
     {
         var map = new MapData();

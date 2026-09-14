@@ -18,7 +18,22 @@ public sealed record ThingTypeInfo(
     int DoomEdNum, string Title, string SpriteName, float Radius, float Height, bool Hangs,
     bool ShowsDirection, int ColorIndex);
 
-public sealed record LinedefActionInfo(int Number, string Title, string Category);
+/// <summary>
+/// One argument slot (of the fixed 5, <c>arg0</c>-<c>arg4</c>) an action
+/// may or may not actually use - <see cref="Used"/> mirrors UDB's real
+/// "does this argN block even exist for this action" check (an unused
+/// slot gets a generic disabled placeholder in the UI rather than being
+/// removed, matching UDB's real always-5-boxes layout).
+/// <see cref="EnumOptions"/> is null for a plain numeric argument, or the
+/// value/label pairs to show as a dropdown instead when the action's
+/// <c>.cfg</c> entry names a shared enum list.
+/// </summary>
+public sealed record LinedefArgumentInfo(string Title, bool Used, IReadOnlyList<LinedefArgumentEnumOption>? EnumOptions);
+
+/// <summary>One labeled choice in a shared <c>enums</c> list an argument can reference by name.</summary>
+public sealed record LinedefArgumentEnumOption(long Value, string Title);
+
+public sealed record LinedefActionInfo(int Number, string Title, string Category, IReadOnlyList<LinedefArgumentInfo> Args);
 
 public sealed record SectorSpecialInfo(int Number, string Title);
 
@@ -43,6 +58,9 @@ public interface IGameConfiguration
 
     LinedefActionInfo? GetLinedefAction(int special);
 
+    /// <summary>Every known linedef action, sorted by number - the "browse actions" dialog's own data source, mirroring <see cref="GetSectorSpecials"/>.</summary>
+    IReadOnlyList<LinedefActionInfo> GetLinedefActions();
+
     SectorSpecialInfo? GetSectorSpecial(int type);
 
     /// <summary>Every known sector special, sorted by number - matches UDB's real <c>SortedSectorEffects</c> ordering; the "browse specials" dialog's own data source.</summary>
@@ -50,6 +68,12 @@ public interface IGameConfiguration
 
     /// <summary>Every real per-sector UDMF boolean field this configuration defines - empty for a non-UDMF-namespace configuration (vanilla Doom/Doom2 have no such concept at all).</summary>
     IReadOnlyList<SectorFlagInfo> GetSectorFlags();
+
+    /// <summary>Every real per-linedef UDMF boolean flag this configuration defines - same "empty for non-UDMF configs" rule as <see cref="GetSectorFlags"/>. Reuses <see cref="SectorFlagInfo"/>'s identical Key/Title shape rather than a new record.</summary>
+    IReadOnlyList<SectorFlagInfo> GetLinedefFlags();
+
+    /// <summary>Every real per-linedef UDMF activation-trigger field (e.g. <c>playercross</c>, <c>monsteruse</c>) - a distinct group from <see cref="GetLinedefFlags"/> in UDB's own real dialog, even though both are just named UDMF booleans under the hood.</summary>
+    IReadOnlyList<SectorFlagInfo> GetLinedefActivations();
 
     /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones the way UDB's real damage-type combo does.</summary>
     IReadOnlyList<string> GetDamageTypes();

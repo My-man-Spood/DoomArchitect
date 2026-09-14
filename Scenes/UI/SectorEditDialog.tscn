@@ -3,7 +3,7 @@
 [ext_resource type="Script" uid="uid://c5oq5kgwov0mj" path="res://Scripts/View/SectorEditDialog.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/GroupBox.tscn" id="3"]
-[ext_resource type="PackedScene" path="res://Scenes/UI/SectorTagsEditor.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/MapTagsEditor.tscn" id="4"]
 
 [node name="SectorEditDialog" type="AcceptDialog" unique_id=846633471]
 oversampling_override = 1.0
@@ -273,9 +273,9 @@ Title = "Identification"
 [node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox" index="0"]
 text = "Identification"
 
-[node name="SectorTagsEditor" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content" index="0" unique_id=563755374 instance=ExtResource("4")]
+[node name="MapTagsEditor" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content" index="0" unique_id=563755374 instance=ExtResource("4")]
 
-[node name="TagValueEdit" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor/Row1" index="1"]
+[node name="TagValueEdit" parent="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/MapTagsEditor/Row1" index="1"]
 size_flags_horizontal = 3
 
 [node name="Surfaces" type="MarginContainer" parent="Container/Tabs" unique_id=41786456]
@@ -587,6 +587,6 @@ text = "Not yet implemented - see TODO.md"
 [editable path="Container/Tabs/Properties/VboxContainer/HBoxContainer/DamageBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/EffectsBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox"]
-[editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/SectorTagsEditor"]
+[editable path="Container/Tabs/Properties/VboxContainer/IdentificationBox/Content/MapTagsEditor"]
 [editable path="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox"]
 [editable path="Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox"]

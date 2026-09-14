@@ -85,6 +85,7 @@ public partial class MapOverlay : Control
 	/// rather than confirmed if it ever feels off in practice).
 	/// </summary>
 	public event System.Action<IReadOnlyList<Sector>> EditSectorsRequested;
+	public event System.Action<IReadOnlyList<Linedef>> EditLinedefsRequested;
 
 	private EditMode _mode = EditMode.Vertices;
 
@@ -388,6 +389,14 @@ public partial class MapOverlay : Control
 	{
 		switch (@event)
 		{
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true, DoubleClick: true } doubleClick:
+				var doubleClickTarget = FindLinedefNear(doubleClick.Position);
+				if (doubleClickTarget != null)
+				{
+					if (!doubleClickTarget.IsSelected) Map.SelectOnly(doubleClickTarget);
+					EditLinedefsRequested?.Invoke(Map.GetSelectedLinedefs().ToList());
+				}
+				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				BeginMarqueeOrClick(press.Position);
 				break;

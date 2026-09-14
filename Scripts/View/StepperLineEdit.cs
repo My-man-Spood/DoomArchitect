@@ -53,6 +53,27 @@ public partial class StepperLineEdit : HBoxContainer
 		set => _lineEdit.Text = value;
 	}
 
+	/// <summary>
+	/// Blocks both typing and the spin buttons - needed by
+	/// <see cref="LinedefEditDialog"/>'s Back tab, whose whole field set is
+	/// disabled outright (not just dimmed) when the selected linedef has no
+	/// back sidedef, matching UDB's real <c>Enabled = false</c> treatment.
+	/// </summary>
+	public bool Editable
+	{
+		get => _lineEdit.Editable;
+		set
+		{
+			_lineEdit.Editable = value;
+			if (value) UpdateSpinnerEnabled();
+			else
+			{
+				_upButton.Disabled = true;
+				_downButton.Disabled = true;
+			}
+		}
+	}
+
 	public override void _Ready()
 	{
 		_lineEdit = GetNode<LineEdit>("LineEdit");
