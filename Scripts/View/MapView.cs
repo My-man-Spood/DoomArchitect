@@ -127,6 +127,11 @@ public partial class MapView : Node3D
 		_overlay.TextureSet = _textureSet;
 		_overlay.TextureIconCache = _textureIconCache;
 		_overlay.NamedResources = _namedResources;
+
+		if (CommandLineOptions.TryGetFileAndMap(out var cliFilePath, out var cliMapName))
+		{
+			openMapMenu.LoadFromCommandLine(cliFilePath, cliMapName);
+		}
 	}
 
 	public override void _Process(double delta)

@@ -33,6 +33,11 @@ using Godot;
 /// both back, so opening the same map again remembers its resources, and
 /// opening a different, previously-unopened map for the same game
 /// configuration is pre-filled with the same default.
+///
+/// <see cref="LoadFromCommandLine"/> is a separate, fully non-interactive
+/// entry point for the dev-only <c>--file</c>/<c>--map</c> launch
+/// arguments (see <see cref="CommandLineOptions"/>) - it skips every
+/// dialog above entirely rather than reusing this flow's UI.
 /// </summary>
 public partial class OpenMapMenu : PanelContainer
 {
@@ -185,6 +190,12 @@ public partial class OpenMapMenu : PanelContainer
 
 	private void ShowMapOptionsDialog(MapData mapData, string wadPath, string mapName, string fileNameHint)
 	{
+		PopulateMapOptionsDialogDefaults(mapData, wadPath, mapName, fileNameHint);
+		_mapOptionsDialog.PopupCentered();
+	}
+
+	private void PopulateMapOptionsDialogDefaults(MapData mapData, string wadPath, string mapName, string fileNameHint)
+	{
 		var mapSettings = MapSettingsFile.Load(wadPath);
 		var suggestion = mapSettings.GetGameConfiguration()
 			?? GameConfigurationDetector.Detect(mapData, mapName, fileNameHint);
@@ -195,8 +206,62 @@ public partial class OpenMapMenu : PanelContainer
 			? savedResources
 			: AppSettingsFile.Load().GetDefaultResources(suggestion);
 		_mapOptionsDialog.SetResourcePaths(resourcePaths);
+	}
 
-		_mapOptionsDialog.PopupCentered();
+	/// <summary>
+	/// Loads a specific WAD/map immediately, skipping every interactive
+	/// dialog (file picker, map picker, and the Map Options confirmation) -
+	/// backs the dev-only <c>--file</c>/<c>--map</c> command-line args (see
+	/// <see cref="CommandLineOptions"/>), not a real UDB-parity feature.
+	/// Pre-fills the Map Options dialog exactly as <see cref="ShowMapOptionsDialog"/>
+	/// would, then confirms it immediately as if the user had clicked OK -
+	/// still reads/writes the same <c>.dbs</c>/app-settings persistence, so
+	/// a subsequent manual "Map Options..." for this map sees the same
+	/// state either path would have left it in.
+	/// </summary>
+	public void LoadFromCommandLine(string wadPath, string mapName)
+	{
+		try
+		{
+			var wad = WadFile.Read(wadPath);
+
+			var maps = new List<MapEntry>();
+			foreach (var name in wad.FindUdmfMapNames()) maps.Add(new MapEntry(name, IsUdmf: true));
+			foreach (var name in wad.FindClassicMapNames()) maps.Add(new MapEntry(name, IsUdmf: false));
+
+			var match = maps.FirstOrDefault(m => string.Equals(m.Name, mapName, StringComparison.OrdinalIgnoreCase));
+			if (match.Name == null)
+			{
+				ShowError($"Map '{mapName}' not found in '{Path.GetFileName(wadPath)}'.");
+				return;
+			}
+
+			MapData mapData;
+			if (match.IsUdmf)
+			{
+				var document = UdmfReader.Read(wad.ReadMapTextMap(match.Name));
+				mapData = document.Map;
+			}
+			else
+			{
+				var (data, _) = ClassicMapReader.Read(wad, match.Name);
+				mapData = data;
+			}
+
+			_pendingWad = wad;
+			_pendingWadPath = wadPath;
+			_pendingFileName = Path.GetFileName(wadPath);
+			_pendingMapData = mapData;
+			_pendingMapName = match.Name;
+			_isRevisitingCurrentMap = false;
+
+			PopulateMapOptionsDialogDefaults(mapData, wadPath, match.Name, _pendingFileName);
+			OnMapOptionsConfirmed();
+		}
+		catch (Exception ex)
+		{
+			ShowError(ex.Message);
+		}
 	}
 
 	private void OnMapOptionsConfirmed()
