@@ -24,4 +24,4 @@ placeholder_text = "Filter..."
 custom_minimum_size = Vector2(500, 340)
 layout_mode = 2
 size_flags_vertical = 3
-columns = 3
+columns = 2

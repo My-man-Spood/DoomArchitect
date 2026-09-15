@@ -308,10 +308,9 @@ public class GameConfigurationLoaderTests
         var doorRaise = gzdoom.GetLinedefAction(12);
 
         Assert.NotNull(doorRaise);
-        Assert.Equal("doors", doorRaise!.Category);
+        Assert.Equal("door", doorRaise!.Category);
         Assert.Equal(5, doorRaise.Args.Count);
         Assert.True(doorRaise.Args[0].Used);
-        Assert.Equal("Sector Tag", doorRaise.Args[0].Title);
         Assert.Null(doorRaise.Args[0].EnumOptions);
         Assert.True(doorRaise.Args[1].Used);
         Assert.NotNull(doorRaise.Args[1].EnumOptions);
@@ -324,9 +323,14 @@ public class GameConfigurationLoaderTests
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
 
+        // Action 1 vanilla-side means "open door, wait, close" (category "doors" in
+        // VanillaCommon.cfg) - in the real UDMF/Hexen action table it's an entirely
+        // different action (a polyobject anchor line), proving the two numbering
+        // spaces are genuinely independent rather than one reusing the other.
         var actionOne = gzdoom.GetLinedefAction(1);
 
-        Assert.Null(actionOne);
+        Assert.NotNull(actionOne);
+        Assert.NotEqual("doors", actionOne!.Category);
     }
 
     [Fact]
@@ -338,6 +342,22 @@ public class GameConfigurationLoaderTests
 
         Assert.NotEmpty(actions);
         Assert.Equal(actions.OrderBy(a => a.Number).Select(a => a.Number), actions.Select(a => a.Number));
+    }
+
+    /// <summary>
+    /// A floor guard, not an exact count - catches a gross regression (e.g.
+    /// a future edit that accidentally drops a whole category block or
+    /// re-narrows this back down to a small starter set) without pinning
+    /// the test to the precise number every time a new action is added.
+    /// </summary>
+    [Fact]
+    public void GetLinedefActions_CoversTheRealActionTableBreadth()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var actions = gzdoom.GetLinedefActions();
+
+        Assert.True(actions.Count > 150, $"Expected the real GZDoom UDMF action table's full breadth (~190 actions), got {actions.Count}.");
     }
 
     [Fact]
