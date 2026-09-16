@@ -1290,8 +1290,10 @@ file just tracks what's built and what's next.
       (`Core.Editing.NumericFieldExpression`) plus real spinner buttons
       (`StepperLineEdit`, porting UDB's actual `ButtonsNumericTextbox`
       step values - 8/16/1 for heights and brightness, 0.1/1/0.01 for
-      gravity). Linedef+Sidedef (largest of the three - dynamic per-action
-      argument-editing UI) and Thing dialogs are still not started.
+      gravity). Linedef+Sidedef and Thing dialogs were still not started
+      at the time this was written - see the dedicated Linedef entry
+      below (now done) and TODO.md's own tracking for Thing, the last of
+      the three main property dialogs, not yet started.
 
       **Update, Properties tab closer to real parity + GZDoom UDMF config:**
       a real GZDoom Doom2 UDMF screenshot exposed how much v1 was missing -
@@ -1408,6 +1410,72 @@ file just tracks what's built and what's next.
       editing them currently changes nothing you can see - wiring them
       into the actual mesh/lighting pipeline is separate, not-yet-started
       work.
+- [x] Property editing UI, Linedef (v1) - `LinedefEditDialog`, ported from
+      UDB's real `LinedefEditFormUDMF` - the largest of the three main
+      property dialogs, mostly because of its dynamic per-action argument
+      editing UI. Properties tab: Action number + "Browse..."
+      (`LinedefActionBrowserDialog`, grouped into collapsible per-category
+      folders like UDB's real `ActionBrowserForm`, not one flat list -
+      matters once the action table reflects real breadth, see below), 5
+      fixed argument slots (never dynamically added/removed, matching
+      UDB's real `ArgumentsControl`) relabeled per the selected action's
+      own real arg0-arg4 metadata and toggling between a numeric field and
+      an enum dropdown. Godot has no equivalent to UDB's real editable
+      combo-box argument control (which lets you type an exact value even
+      for an enum-backed argument) - added a manual click-to-toggle on the
+      argument's own label as the adaptation, carrying the value across
+      the switch (exact value enum-to-number, nearest match number-to-
+      enum). Flags (26 real UDMF booleans) and Activation (10 real UDMF
+      triggers) are a genuinely separate group in real UDB even though
+      both are just named booleans under the hood - both rebuilt per game
+      configuration the same way Sector's own Flags group already is.
+      Identification reuses the Sector dialog's own tags control,
+      generalized from `SectorTagsEditor` into `MapTagsEditor` (UDB really
+      does share this exact control between both dialogs). Front/Back
+      tabs: whole-sidedef offset (already modeled, real-time) plus per-
+      texture-part (Upper/Middle/Lower) offset/scale/light-override using
+      the 18 real, genuinely distinct UDMF field names (verified against
+      `UniversalStreamReader`/`Writer`, not assumed). A one-sided line's
+      Back tab shows disabled rather than hidden, matching UDB's real
+      `Enabled = false` treatment.
+
+      **The linedef action table needed two real correctness passes, not
+      just UI work.** First pass shipped only 12 hand-picked Hexen-style
+      generic actions - researched the complete real ~191-action table
+      (6 parallel research passes into UDB's actual `Hexen_linedefs.cfg`/
+      `ZDoom_linedefs.cfg` source) once flagged as far under real GZDoom
+      UDMF's own breadth. Second pass fixed a real data bug found on
+      review afterward: `keys` (`Door_LockedRaise`/`Generic_Door`'s lock
+      argument) shipped Hexen's own puzzle-key names in this Doom2-
+      targeted config instead of Doom's real red/blue/yellow keycard/
+      skull keys - root cause was flattening UDB's own real per-game
+      `enums_doom`/`enums_hexen`/etc. value-list layering into one merged
+      table, losing the "which game's list is this" information that
+      would have made the correct choice obvious; fixed by keeping a
+      `_doom`-suffixed name plus a comment explaining the convention for
+      any future Hexen/Heretic config (see [[feedback_udb_is_north_star]]
+      in memory - this is now a standing rule: mirror UDB's real file/
+      data layering, not just its end behavior, even when the actual
+      prose still needs independent authoring for licensing). Also added
+      back the numeric-value prefix UDB's own real enum titles always
+      carry (e.g. "16: Slow"), dropped during independent rephrasing.
+      **Deliberately out of scope:** the other ~24 real UDB argument types
+      beyond plain numeric/enum (tag/texture/thing pickers, angle dials,
+      etc.); ACS arg0-as-string; a Generalized (Boom) specials tab, same
+      reasoning as Sector's own deferred Generalized Effects tab; sidedef
+      Custom-fields button; sidedef/sector reassignment or creation;
+      Comment/Custom tabs (placeholders, matching Sector's own pattern).
+- [ ] Property editing UI, Thing - `ThingEditDialog`, ported from UDB's
+      real `ThingEditFormUDMF`. The last of the three main property
+      dialogs (Sector and Linedef are both done above). Not started yet -
+      needs its own research pass into the real form before planning,
+      same as the other two (don't assume its shape from the Sector/
+      Linedef dialogs already built here). Thing type picker will need
+      *some* real thing-type catalog/browser, which several already-built
+      pieces currently punt on for lack of one (Generic_Door/Stairs-style
+      actor-class linedef arguments fall back to plain numeric, thing
+      types are reused wholesale from the vanilla Doom2 config in
+      `GZDoomDoom2UDMF.cfg` rather than GZDoom's own real, larger table).
 - [x] Texture picker (v1) - `TextureBrowserDialog`, ported from UDB's real
       `TextureBrowserForm`: a per-resource tree ("All" plus one node per
       loaded WAD/PK3, matching UDB's real `ResourceTextureSet` tree
@@ -1437,6 +1505,28 @@ file just tracks what's built and what's next.
       non-thread-safe internal caches); `roottextures`/`rootflats`/the
       text-based `TEXTURES` lump DSL (already-deferred game-config
       options, unrelated to this fix).
+
+      **Update, real shape + reused across dialogs:** the per-field
+      preview (Sector's Floor/Ceiling, Linedef's Front/Back Upper/Middle/
+      Lower) was originally a horizontal label+small-preview+field row -
+      checked directly against UDB's real `ImageSelectorControl` and
+      found that's not its actual layout at all (an earlier pass modeled
+      it off a screenshot). Extracted a reusable `TexturePreviewEdit`
+      matching the real control: preview stacked above a plain name field
+      (no caption label, freeing it to be shown much bigger - 96x96 up
+      from 40x40) with a floating corner label showing the decoded
+      texture's own real pixel dimensions (UDB's real `labelSize`). Also
+      fixed two real bugs in `TextureBrowserDialog`'s own gallery, found
+      once actually compared side by side with UDB's real
+      `TextureBrowserForm`: Godot's `ItemList.max_columns` defaults to 1
+      (single column) regardless of `icon_mode`, so the "grid" was
+      silently rendering as a plain list - set explicitly to 0 (auto-wrap
+      by width); and the resource/category tree was on the wrong side -
+      UDB's own real form puts the gallery on the left and the tree on
+      the right (`splitter.Panel1`/`Panel2`, confirmed directly in
+      `TextureBrowserForm.Designer.cs`), swapped to match. Also enlarged
+      the dialog and bumped the default thumbnail size to 128px, matching
+      UDB's own real default `ImageSize`.
 - [ ] Texture browser category tree (UDB's real `MatchingTextureSet`) -
       UDB's texture/flat browser has a second tree branch alongside
       per-resource grouping: named categories ("Wood", "Metal", "Base",

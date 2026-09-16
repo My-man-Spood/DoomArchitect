@@ -18,10 +18,14 @@ config/features=PackedStringArray("4.7", "C#", "Forward Plus")
 
 window/subwindows/embed_subwindows=false
 
-[gui]
-
-theme/custom="res://Assets/BaseTheme.tres"
-
 [dotnet]
 
 project/assembly_name="DoomArchitect"
+
+[editor]
+
+run/main_run_args="--file=/home/spood/Doom/MENTICIDE.WAD --map=MAP01"
+
+[gui]
+
+theme/custom="res://Assets/BaseTheme.tres"
