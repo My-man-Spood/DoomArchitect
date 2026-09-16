@@ -44,45 +44,67 @@ public static class DoomPictureReader
 
         if (width < 1 || height < 1) return null;
 
-        var columnOffsets = new int[width];
-        for (var x = 0; x < width; x++) columnOffsets[x] = reader.ReadInt32();
-
-        var rgba = new byte[width * height * 4];
-
-        for (var x = 0; x < width; x++)
+        // Everything from here on trusts the lump's own header-declared
+        // width plus whatever column offsets/post data follow it - real
+        // WAD content in the wild (a sprite-namespace lump that isn't
+        // actually a patch, a truncated/corrupt one, or one whose column
+        // offsets point past the end of its own data) can violate any of
+        // that, which surfaces as a stream-bounds exception
+        // (EndOfStreamException most commonly, but a bad seek/index can
+        // throw other exception types too) rather than a clean early
+        // return. Matches this project's own established
+        // ImageSharpModernImageDecoder precedent: a decode failure here is
+        // a data-quality problem in the WAD, not a programming error, so
+        // it's handled like any other "couldn't resolve this patch" case
+        // (a null return) rather than propagated to crash the caller -
+        // this method's own "Try" name is a real contract, not just
+        // nullable-annotation decoration.
+        try
         {
-            stream.Seek(dataOffset + columnOffsets[x], SeekOrigin.Begin);
+            var columnOffsets = new int[width];
+            for (var x = 0; x < width; x++) columnOffsets[x] = reader.ReadInt32();
 
-            var y = (int)reader.ReadByte();
-            var terminator = y;
+            var rgba = new byte[width * height * 4];
 
-            while (terminator != 255)
+            for (var x = 0; x < width; x++)
             {
-                var count = reader.ReadByte();
-                reader.ReadByte(); // padding byte before pixel data
+                stream.Seek(dataOffset + columnOffsets[x], SeekOrigin.Begin);
 
-                for (var i = 0; i < count; i++)
+                var y = (int)reader.ReadByte();
+                var terminator = y;
+
+                while (terminator != 255)
                 {
-                    var paletteIndex = reader.ReadByte();
-                    var offset = (y + i) * width + x;
-                    if (offset < 0 || offset >= width * height) return null;
+                    var count = reader.ReadByte();
+                    reader.ReadByte(); // padding byte before pixel data
 
-                    var (r, g, b) = palette[paletteIndex];
-                    var pixelIndex = offset * 4;
-                    rgba[pixelIndex] = r;
-                    rgba[pixelIndex + 1] = g;
-                    rgba[pixelIndex + 2] = b;
-                    rgba[pixelIndex + 3] = 255;
+                    for (var i = 0; i < count; i++)
+                    {
+                        var paletteIndex = reader.ReadByte();
+                        var offset = (y + i) * width + x;
+                        if (offset < 0 || offset >= width * height) return null;
+
+                        var (r, g, b) = palette[paletteIndex];
+                        var pixelIndex = offset * 4;
+                        rgba[pixelIndex] = r;
+                        rgba[pixelIndex + 1] = g;
+                        rgba[pixelIndex + 2] = b;
+                        rgba[pixelIndex + 3] = 255;
+                    }
+
+                    reader.ReadByte(); // padding byte after pixel data
+
+                    terminator = reader.ReadByte();
+                    if (terminator < y || (height > 256 && terminator == y)) y += terminator;
+                    else y = terminator;
                 }
-
-                reader.ReadByte(); // padding byte after pixel data
-
-                terminator = reader.ReadByte();
-                if (terminator < y || (height > 256 && terminator == y)) y += terminator;
-                else y = terminator;
             }
-        }
 
-        return new PixelImage(width, height, rgba, offsetX, offsetY);
+            return new PixelImage(width, height, rgba, offsetX, offsetY);
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 }

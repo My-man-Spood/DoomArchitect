@@ -78,6 +78,40 @@ public class DoomPictureReaderTests
         Assert.Null(image);
     }
 
+    /// <summary>
+    /// A regression case for a real crash: a sprite-namespace lump whose
+    /// header declares a width the rest of the lump's own data can't
+    /// actually back (e.g. a truncated/corrupt lump, or one that isn't
+    /// really patch-format data at all despite sitting in the sprite
+    /// range - <see cref="Core.Textures.TextureSet.ResolveSpriteRotations"/>
+    /// enumerates sprite-namespace lumps by name pattern alone, with no
+    /// guarantee every match is actually well-formed). Reading the column
+    /// offset table ran off the end of the byte array and threw a real
+    /// <see cref="EndOfStreamException"/> straight out of <see cref="DoomPictureReader.TryRead"/>,
+    /// crashing the whole app from several layers up
+    /// (<c>SpriteIconCache.ProcessBudget</c>) - this method's own "Try"
+    /// name is a real contract, not just nullable-annotation decoration,
+    /// so malformed data must resolve to a null return like every other
+    /// "couldn't decode this" case here, never an unhandled exception.
+    /// </summary>
+    [Fact]
+    public void TryRead_HeaderClaimsMoreDataThanTheLumpActuallyHas_ReturnsNullInsteadOfThrowing()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write((short)100); // width - claims 100 columns
+        writer.Write((short)4); // height
+        writer.Write((short)0); // offsetX
+        writer.Write((short)0); // offsetY
+        // No column offset table at all, let alone 100 entries of it -
+        // the lump ends right after the header.
+
+        var image = DoomPictureReader.TryRead(stream.ToArray(), Palette);
+
+        Assert.Null(image);
+    }
+
     [Fact]
     public void TryRead_NonZeroOffsets_ArePopulatedOnThePixelImage()
     {
