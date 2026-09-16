@@ -1,15 +1,15 @@
 namespace DoomArchitect.Core.Map;
 
 /// <summary>
-/// Backs the Sector/Linedef dialogs' "New" (map-wide) and "Unused" (this
-/// element type only) tag-allocation buttons. Only scans what this
-/// project's Core actually models today - each sector's and each
-/// linedef's own <c>id</c>/<c>moreids</c> fields - not linedef
+/// Backs the Sector/Linedef/Thing dialogs' "New" (map-wide) and "Unused"
+/// (this element type only) tag-allocation buttons. Only scans what this
+/// project's Core actually models today - each sector's, linedef's, and
+/// thing's own <c>id</c>/<c>moreids</c> fields - not linedef/thing
 /// action-argument tag slots (e.g. a Teleport's destination tag), since
-/// <see cref="Linedef"/> has no typed argument accessors and
-/// <c>IGameConfiguration</c> has no per-argument "this is a tag" metadata
-/// to identify them by; a real gap against UDB's own broader search, not
-/// an oversight.
+/// neither <see cref="Linedef"/> nor <see cref="Thing"/> has typed
+/// argument accessors and <c>IGameConfiguration</c> has no per-argument
+/// "this is a tag" metadata to identify them by; a real gap against UDB's
+/// own broader search, not an oversight.
 /// </summary>
 public static class MapDataTagQueries
 {
@@ -18,6 +18,7 @@ public static class MapDataTagQueries
         var used = new HashSet<long>();
         CollectSectorTags(map, used);
         CollectLinedefTags(map, used);
+        CollectThingTags(map, used);
         return used;
     }
 
@@ -36,6 +37,14 @@ public static class MapDataTagQueries
         return used;
     }
 
+    /// <summary>The "this element type only" scope for a thing's own tag editor - mirrors <see cref="GetUsedSectorTags"/>/<see cref="GetUsedLinedefTags"/>.</summary>
+    public static IReadOnlySet<long> GetUsedThingTags(this MapData map)
+    {
+        var used = new HashSet<long>();
+        CollectThingTags(map, used);
+        return used;
+    }
+
     private static void CollectSectorTags(MapData map, HashSet<long> used)
     {
         foreach (var sector in map.Sectors)
@@ -49,6 +58,14 @@ public static class MapDataTagQueries
         foreach (var linedef in map.Linedefs)
         {
             foreach (var tag in ParseTags(linedef.Fields)) used.Add(tag);
+        }
+    }
+
+    private static void CollectThingTags(MapData map, HashSet<long> used)
+    {
+        foreach (var thing in map.Things)
+        {
+            foreach (var tag in ParseTags(thing.Fields)) used.Add(tag);
         }
     }
 

@@ -72,6 +72,38 @@ public class MapDataTagQueriesTests
     }
 
     [Fact]
+    public void GetUsedThingTags_CollectsPrimaryAndExtraTagsFromEveryThingOnly()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        sector.Fields.SetInteger("id", 99);
+        var a = map.CreateThing(new System.Numerics.Vector2(0, 0), 1);
+        a.Fields.SetInteger("id", 5);
+        var b = map.CreateThing(new System.Numerics.Vector2(64, 0), 1);
+        b.Fields.SetInteger("id", 9);
+        b.Fields.SetString("moreids", "10 11", "");
+
+        var used = map.GetUsedThingTags();
+
+        Assert.Equal(new HashSet<long> { 5, 9, 10, 11 }, used);
+        Assert.DoesNotContain(99L, used);
+    }
+
+    [Fact]
+    public void GetUsedTags_AlsoIncludesThingPrimaryTags()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new System.Numerics.Vector2(0, 0), 1);
+        thing.Fields.SetInteger("id", 30);
+
+        var used = map.GetUsedTags();
+
+        Assert.Contains(30L, used);
+        Assert.DoesNotContain(30L, map.GetUsedSectorTags());
+        Assert.DoesNotContain(30L, map.GetUsedLinedefTags());
+    }
+
+    [Fact]
     public void GetUsedTags_AlsoIncludesLinedefPrimaryTags()
     {
         var map = new MapData();

@@ -98,6 +98,16 @@ public sealed class MapData
         thing.NeedsUpdate = true;
     }
 
+    /// <summary>
+    /// Flags a thing's rendered position as stale without moving it - for a
+    /// caller (e.g. <c>ThingEditDialog</c>) that mutated
+    /// <see cref="Thing.Height"/>/<see cref="Thing.Angle"/>/<see cref="Thing.Type"/>
+    /// directly rather than through <see cref="MoveThing"/>, mirroring
+    /// <see cref="MarkDirty(Sector)"/>'s identical role for a sector's own
+    /// directly-mutated fields.
+    /// </summary>
+    public void MarkDirty(Thing thing) => thing.NeedsUpdate = true;
+
     public IEnumerable<Thing> GetDirtyThings() => _things.Where(t => t.NeedsUpdate);
 
     public void ClearDirty(Thing thing) => thing.NeedsUpdate = false;

@@ -8,15 +8,21 @@ namespace DoomArchitect.Core.Configuration;
 /// rotation-frame guessing. <see cref="ShowsDirection"/> and
 /// <see cref="ColorIndex"/> mirror two more real UDB <c>.cfg</c> fields
 /// (<c>arrow</c>/<c>color</c>) this project hadn't modeled until now -
-/// <see cref="ColorIndex"/> is a small palette index the same way UDB's
-/// own is, but resolved against DoomArchitect's own palette
-/// (<c>Rendering.ThingCategoryColors</c> in the App layer - Core stays
-/// rendering-agnostic), not UDB's actual editor color scheme, which is
-/// UDB's own UI design choice rather than a vanilla-Doom fact.
+/// <see cref="ColorIndex"/> is the real <c>.cfg</c> <c>color</c> field
+/// value (0-19), resolved against <c>Rendering.ThingCategoryColors</c> in
+/// the App layer (Core stays rendering-agnostic) - that palette is UDB's
+/// own real shipped-default thing-color palette
+/// (<c>ColorCollection.THINGCOLOR00</c>-<c>19</c>), not a DoomArchitect
+/// invention, since there's no reason to diverge from something this
+/// familiar to a UDB user.
+/// <see cref="Category"/> is the raw <c>.cfg</c> category block key (e.g.
+/// <c>"monsters"</c>) - the embedded thing-type picker's own grouping key,
+/// same "plain taxonomy label" role <c>ActionInfo.Category</c> already
+/// plays for the linedef action browser.
 /// </summary>
 public sealed record ThingTypeInfo(
     int DoomEdNum, string Title, string SpriteName, float Radius, float Height, bool Hangs,
-    bool ShowsDirection, int ColorIndex);
+    bool ShowsDirection, int ColorIndex, string Category);
 
 /// <summary>
 /// One argument slot (of the fixed 5, <c>arg0</c>-<c>arg4</c>) an action
@@ -28,12 +34,20 @@ public sealed record ThingTypeInfo(
 /// value/label pairs to show as a dropdown instead when the action's
 /// <c>.cfg</c> entry names a shared enum list.
 /// </summary>
-public sealed record LinedefArgumentInfo(string Title, bool Used, IReadOnlyList<LinedefArgumentEnumOption>? EnumOptions);
+public sealed record ArgumentInfo(string Title, bool Used, IReadOnlyList<ArgumentEnumOption>? EnumOptions);
 
 /// <summary>One labeled choice in a shared <c>enums</c> list an argument can reference by name.</summary>
-public sealed record LinedefArgumentEnumOption(long Value, string Title);
+public sealed record ArgumentEnumOption(long Value, string Title);
 
-public sealed record LinedefActionInfo(int Number, string Title, string Category, IReadOnlyList<LinedefArgumentInfo> Args);
+/// <summary>
+/// A Hexen-style action special and its own real arg0-arg4 metadata -
+/// genuinely shared data, not Linedef-specific (named plainly "Action",
+/// not "LinedefAction", once confirmed a Thing's own <c>special</c>/
+/// <c>arg0-4</c> fields resolve their argument metadata from this exact
+/// same table in real UDB - see <c>ArgumentsControl</c>'s own parallel
+/// <c>SetValue(Linedef,...)</c>/<c>SetValue(Thing,...)</c> overloads).
+/// </summary>
+public sealed record ActionInfo(int Number, string Title, string Category, IReadOnlyList<ArgumentInfo> Args);
 
 public sealed record SectorSpecialInfo(int Number, string Title);
 
@@ -56,10 +70,13 @@ public interface IGameConfiguration
 {
     ThingTypeInfo? GetThingType(int doomEdNum);
 
-    LinedefActionInfo? GetLinedefAction(int special);
+    /// <summary>Every known thing type, sorted by DoomEd number - the embedded thing-type picker's own data source, mirroring <see cref="GetSectorSpecials"/>/<see cref="GetActions"/>.</summary>
+    IReadOnlyList<ThingTypeInfo> GetThingTypes();
 
-    /// <summary>Every known linedef action, sorted by number - the "browse actions" dialog's own data source, mirroring <see cref="GetSectorSpecials"/>.</summary>
-    IReadOnlyList<LinedefActionInfo> GetLinedefActions();
+    ActionInfo? GetAction(int special);
+
+    /// <summary>Every known action special, sorted by number - shared by the Linedef and Thing dialogs' own "browse actions" data source (a Thing's own <c>special</c>/<c>arg0-4</c> resolve against this same table in real UDB), mirroring <see cref="GetSectorSpecials"/>.</summary>
+    IReadOnlyList<ActionInfo> GetActions();
 
     SectorSpecialInfo? GetSectorSpecial(int type);
 
@@ -74,6 +91,9 @@ public interface IGameConfiguration
 
     /// <summary>Every real per-linedef UDMF activation-trigger field (e.g. <c>playercross</c>, <c>monsteruse</c>) - a distinct group from <see cref="GetLinedefFlags"/> in UDB's own real dialog, even though both are just named UDMF booleans under the hood.</summary>
     IReadOnlyList<SectorFlagInfo> GetLinedefActivations();
+
+    /// <summary>Every real per-thing UDMF boolean flag this configuration defines - same "empty for non-UDMF configs" rule as <see cref="GetSectorFlags"/>. Reuses <see cref="SectorFlagInfo"/>'s identical Key/Title shape rather than a new record (third consumer now).</summary>
+    IReadOnlyList<SectorFlagInfo> GetThingFlags();
 
     /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones the way UDB's real damage-type combo does.</summary>
     IReadOnlyList<string> GetDamageTypes();

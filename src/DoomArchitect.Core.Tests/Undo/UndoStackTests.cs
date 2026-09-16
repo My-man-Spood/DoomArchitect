@@ -115,6 +115,38 @@ public class UndoStackTests
         Assert.False(stack.CanUndo);
     }
 
+    /// <summary>
+    /// A regression case for a real bug found while building
+    /// <c>ThingEditDialog</c>: a property dialog's own <c>OnConfirmed</c>
+    /// mixes already-applied commands (real-time fields, mutated directly
+    /// as the user types) with never-applied ones (OK-only fields, whose
+    /// <see cref="SetFieldCommand"/> only ever gets built at Confirm time) in
+    /// one <see cref="CommandGroup"/> - calling <see cref="UndoStack.Record"/>
+    /// on that group (as <see cref="Record_AddsAnAlreadyPerformedCommandWithoutRunningItAgain"/>
+    /// documents is the correct call for an *already-applied* command)
+    /// silently leaves every never-applied member unwritten, since
+    /// <see cref="UndoStack.Record"/> never calls <see cref="ICommand.Do"/>.
+    /// <see cref="UndoStack.Execute"/> is the correct call whenever a group
+    /// contains even one such member - re-running an already-applied
+    /// command's <c>Do()</c> a second time is harmless (it just re-sets the
+    /// same current value).
+    /// </summary>
+    [Fact]
+    public void Execute_WithAnUnappliedSetFieldCommandInAGroup_ActuallyWritesTheField()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(0, 0), 1);
+        var stack = new UndoStack();
+
+        var command = new SetFieldCommand(thing.Fields, "special", new UniValue(UniversalType.Integer, 42L));
+        stack.Execute(new CommandGroup(new ICommand[] { command }));
+
+        Assert.Equal(42, thing.Fields.GetInteger("special", 0));
+
+        stack.Undo();
+        Assert.Equal(0, thing.Fields.GetInteger("special", 0));
+    }
+
     [Fact]
     public void CommandGroup_Undo_RevertsAllMembersInReverseOrder()
     {

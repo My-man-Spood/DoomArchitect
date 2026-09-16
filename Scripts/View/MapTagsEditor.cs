@@ -93,6 +93,10 @@ public partial class MapTagsEditor : VBoxContainer
 	public void SetLinedefs(IReadOnlyList<Linedef> linedefs, MapData map) =>
 		SetElements(linedefs.Select(l => l.Fields).ToList(), map, map.GetUsedLinedefTags);
 
+	/// <summary>Third real consumer, confirmed directly against UDB's own <c>TagsSelector</c> usage in <c>ThingEditFormUDMF.cs</c> - a Thing's own <c>id</c>/<c>moreids</c> fields are the exact same UDMF tag mechanism Sector/Linedef already share.</summary>
+	public void SetThings(IReadOnlyList<Thing> things, MapData map) =>
+		SetElements(things.Select(t => t.Fields).ToList(), map, map.GetUsedThingTags);
+
 	private void SetElements(IReadOnlyList<UniFields> elements, MapData map, Func<IReadOnlySet<long>> getUsedForUnusedScope)
 	{
 		_elements = elements;

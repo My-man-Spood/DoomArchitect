@@ -1,0 +1,45 @@
+[gd_scene load_steps=3 format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/ThingTypePicker.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
+
+[node name="ThingTypePicker" type="VBoxContainer"]
+script = ExtResource("1")
+
+[node name="FilterEdit" type="LineEdit" parent="."]
+layout_mode = 2
+placeholder_text = "Filter..."
+
+[node name="Tree" type="Tree" parent="."]
+custom_minimum_size = Vector2(0, 220)
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="PreviewRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="PreviewIcon" type="TextureRect" parent="PreviewRow"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+stretch_mode = 5
+expand_mode = 1
+
+[node name="PreviewNameLabel" type="Label" parent="PreviewRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 1
+vertical_alignment = 1
+
+[node name="TypeIdRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="TypeIdLabel" type="Label" parent="TypeIdRow"]
+layout_mode = 2
+text = "Type:"
+
+[node name="TypeIdEdit" parent="TypeIdRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0

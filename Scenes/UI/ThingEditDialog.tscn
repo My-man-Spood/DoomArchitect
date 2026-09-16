@@ -1,0 +1,447 @@
+[gd_scene load_steps=8 format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/ThingEditDialog.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/GroupBox.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/MapTagsEditor.tscn" id="4"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ThingTypePicker.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/AngleDialControl.tscn" id="6"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ActionArgumentsEditor.tscn" id="7"]
+
+[node name="ThingEditDialog" type="AcceptDialog"]
+oversampling_override = 1.0
+title = "Edit Thing(s)"
+initial_position = 2
+size = Vector2i(820, 560)
+min_size = Vector2i(660, 420)
+script = ExtResource("1")
+
+[node name="Container" type="VBoxContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 8.0
+offset_top = 8.0
+offset_right = -8.0
+offset_bottom = -45.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Tabs" type="TabContainer" parent="Container"]
+layout_mode = 2
+size_flags_vertical = 3
+current_tab = 0
+
+[node name="Properties" type="MarginContainer" parent="Container/Tabs"]
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+metadata/_tab_index = 0
+
+[node name="VboxContainer" type="VBoxContainer" parent="Container/Tabs/Properties"]
+layout_mode = 2
+
+[node name="PropertiesRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer"]
+layout_mode = 2
+size_flags_vertical = 3
+theme_override_constants/separation = 24
+
+[node name="ThingBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow" instance=ExtResource("3")]
+custom_minimum_size = Vector2(260, 0)
+layout_mode = 2
+size_flags_vertical = 3
+Title = "Thing"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/ThingBox" index="0"]
+text = "Thing"
+
+[node name="ThingTypePicker" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/ThingBox/Content" index="0" instance=ExtResource("5")]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="RightColumn" type="VBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 3
+theme_override_constants/separation = 8
+
+[node name="TopRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="FlagsBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow" instance=ExtResource("3")]
+layout_mode = 2
+size_flags_horizontal = 3
+Title = "Flags"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/FlagsBox" index="0"]
+text = "Flags"
+
+[node name="FlagsContainer" type="VFlowContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/FlagsBox/Content" index="0"]
+layout_mode = 2
+theme_override_constants/h_separation = 16
+theme_override_constants/v_separation = 0
+
+[node name="DialsColumn" type="VBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow"]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="RollDialBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn" instance=ExtResource("3")]
+layout_mode = 2
+Title = "Roll"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/RollDialBox" index="0"]
+text = "Roll"
+
+[node name="AngleDialControl" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/RollDialBox/Content" index="0" instance=ExtResource("6")]
+layout_mode = 2
+
+[node name="PitchDialBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn" instance=ExtResource("3")]
+layout_mode = 2
+Title = "Pitch"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/PitchDialBox" index="0"]
+text = "Pitch"
+
+[node name="AngleDialControl" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/PitchDialBox/Content" index="0" instance=ExtResource("6")]
+layout_mode = 2
+
+[node name="AngleDialBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn" instance=ExtResource("3")]
+layout_mode = 2
+Title = "Angle"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/AngleDialBox" index="0"]
+text = "Angle"
+
+[node name="AngleDialControl" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/AngleDialBox/Content" index="0" instance=ExtResource("6")]
+layout_mode = 2
+
+[node name="BottomRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="PositionBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow" instance=ExtResource("3")]
+layout_mode = 2
+Title = "Position"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox" index="0"]
+text = "Position"
+
+[node name="XRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content" index="0"]
+layout_mode = 2
+
+[node name="XLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/XRow"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "X"
+
+[node name="PositionXEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/XRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 16.0
+
+[node name="YRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content" index="1"]
+layout_mode = 2
+
+[node name="YLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/YRow"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="PositionYEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/YRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 16.0
+
+[node name="ZRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content" index="2"]
+layout_mode = 2
+
+[node name="ZLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/ZRow"]
+custom_minimum_size = Vector2(20, 0)
+layout_mode = 2
+text = "Z"
+
+[node name="HeightEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox/Content/ZRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 8.0
+
+[node name="RotationBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow" instance=ExtResource("3")]
+layout_mode = 2
+size_flags_horizontal = 3
+Title = "Rotation"
+
+[node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox" index="0"]
+text = "Rotation"
+
+[node name="AngleRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content" index="0"]
+layout_mode = 2
+
+[node name="AngleLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/AngleRow"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+text = "Angle"
+
+[node name="AngleEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/AngleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 45.0
+
+[node name="AngleRandomCheck" type="CheckBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/AngleRow"]
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Random"
+
+[node name="PitchRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content" index="1"]
+layout_mode = 2
+
+[node name="PitchLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/PitchRow"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+text = "Pitch"
+
+[node name="PitchEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/PitchRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 45.0
+
+[node name="PitchRandomCheck" type="CheckBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/PitchRow"]
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Random"
+
+[node name="RollRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content" index="2"]
+layout_mode = 2
+
+[node name="RollLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/RollRow"]
+custom_minimum_size = Vector2(50, 0)
+layout_mode = 2
+text = "Roll"
+
+[node name="RollEdit" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/RollRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 45.0
+
+[node name="RollRandomCheck" type="CheckBox" parent="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox/Content/RollRow"]
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Random"
+
+[node name="FlagCheckBoxTemplate" type="CheckBox" parent="Container/Tabs/Properties/VboxContainer"]
+visible = false
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Flag"
+
+[node name="ActionTagMisc" type="MarginContainer" parent="Container/Tabs"]
+visible = false
+layout_mode = 2
+theme_override_constants/margin_left = 10
+theme_override_constants/margin_top = 10
+theme_override_constants/margin_right = 10
+theme_override_constants/margin_bottom = 10
+metadata/_tab_index = 1
+
+[node name="VboxContainer" type="VBoxContainer" parent="Container/Tabs/ActionTagMisc"]
+layout_mode = 2
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer"]
+layout_mode = 2
+theme_override_constants/separation = 24
+
+[node name="RenderingBox" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer" instance=ExtResource("3")]
+Title = "Rendering"
+
+[node name="TitleLabel" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox" index="0"]
+text = "Rendering"
+
+[node name="ScaleRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content" index="0"]
+layout_mode = 2
+
+[node name="ScaleLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Scale"
+
+[node name="XLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "X"
+
+[node name="ScaleXEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="YLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/ScaleRow"]
+custom_minimum_size = Vector2(14, 0)
+layout_mode = 2
+text = "Y"
+
+[node name="ScaleYEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/ScaleRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="AlphaRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content" index="1"]
+layout_mode = 2
+
+[node name="AlphaLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/AlphaRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Alpha"
+
+[node name="AlphaEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/AlphaRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="ResetAlphaButton" type="Button" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/AlphaRow"]
+layout_mode = 2
+text = "Reset"
+
+[node name="RenderStyleRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content" index="2"]
+layout_mode = 2
+
+[node name="RenderStyleLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/RenderStyleRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+text = "Render Style"
+
+[node name="RenderStyleEdit" type="LineEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox/Content/RenderStyleRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="BehaviourBox" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer" instance=ExtResource("3")]
+Title = "Behaviour"
+
+[node name="TitleLabel" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox" index="0"]
+text = "Behaviour"
+
+[node name="GravityRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content" index="0"]
+layout_mode = 2
+
+[node name="GravityLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/GravityRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Gravity"
+
+[node name="GravityEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/GravityRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="ScoreRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content" index="1"]
+layout_mode = 2
+
+[node name="ScoreLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/ScoreRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Score"
+
+[node name="ScoreEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/ScoreRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="HealthRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content" index="2"]
+layout_mode = 2
+
+[node name="HealthLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/HealthRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Health Multiplier"
+
+[node name="HealthEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/HealthRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+Step = 0.1
+StepSmall = 0.01
+AllowDecimal = true
+
+[node name="ConversationIdRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content" index="3"]
+layout_mode = 2
+
+[node name="ConversationIdLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/ConversationIdRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Conversation ID"
+
+[node name="ConversationIdEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/ConversationIdRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="FloatBobPhaseRow" type="HBoxContainer" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content" index="4"]
+layout_mode = 2
+
+[node name="FloatBobPhaseLabel" type="Label" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/FloatBobPhaseRow"]
+custom_minimum_size = Vector2(100, 0)
+layout_mode = 2
+text = "Float Bob Phase"
+
+[node name="FloatBobPhaseEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/FloatBobPhaseRow" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ActionBox" parent="Container/Tabs/ActionTagMisc/VboxContainer" instance=ExtResource("3")]
+Title = "Action"
+
+[node name="TitleLabel" parent="Container/Tabs/ActionTagMisc/VboxContainer/ActionBox" index="0"]
+text = "Action"
+
+[node name="ActionArgumentsEditor" parent="Container/Tabs/ActionTagMisc/VboxContainer/ActionBox/Content" index="0" instance=ExtResource("7")]
+layout_mode = 2
+
+[node name="IdentificationBox" parent="Container/Tabs/ActionTagMisc/VboxContainer" instance=ExtResource("3")]
+Title = "Identification"
+
+[node name="TitleLabel" parent="Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox" index="0"]
+text = "Identification"
+
+[node name="MapTagsEditor" parent="Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox/Content" index="0" instance=ExtResource("4")]
+
+[node name="TagValueEdit" parent="Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox/Content/MapTagsEditor/Row1" index="1"]
+size_flags_horizontal = 3
+
+[node name="Comment" type="CenterContainer" parent="Container/Tabs"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 2
+
+[node name="Label" type="Label" parent="Container/Tabs/Comment"]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"
+
+[node name="Custom" type="CenterContainer" parent="Container/Tabs"]
+visible = false
+layout_mode = 2
+metadata/_tab_index = 3
+
+[node name="Label" type="Label" parent="Container/Tabs/Custom"]
+layout_mode = 2
+text = "Not yet implemented - see TODO.md"
+
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/ThingBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/FlagsBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/RollDialBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/PitchDialBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/TopRow/DialsColumn/AngleDialBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/PositionBox"]
+[editable path="Container/Tabs/Properties/VboxContainer/PropertiesRow/RightColumn/BottomRow/RotationBox"]
+[editable path="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/RenderingBox"]
+[editable path="Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox"]
+[editable path="Container/Tabs/ActionTagMisc/VboxContainer/ActionBox"]
+[editable path="Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox"]
+[editable path="Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox/Content/MapTagsEditor"]

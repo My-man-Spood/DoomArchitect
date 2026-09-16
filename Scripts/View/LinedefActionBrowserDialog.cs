@@ -54,8 +54,8 @@ public partial class LinedefActionBrowserDialog : AcceptDialog
 	private LineEdit _filterEdit;
 	private Tree _tree;
 
-	private IReadOnlyList<LinedefActionInfo> _allActions = Array.Empty<LinedefActionInfo>();
-	private readonly Dictionary<TreeItem, LinedefActionInfo> _actionByTreeItem = new();
+	private IReadOnlyList<ActionInfo> _allActions = Array.Empty<ActionInfo>();
+	private readonly Dictionary<TreeItem, ActionInfo> _actionByTreeItem = new();
 	private Action<string> _onSelected;
 
 	public override void _Ready()
@@ -79,7 +79,7 @@ public partial class LinedefActionBrowserDialog : AcceptDialog
 
 	public void Browse(IGameConfiguration gameConfiguration, string currentValue, Action<string> onSelected)
 	{
-		_allActions = gameConfiguration.GetLinedefActions();
+		_allActions = gameConfiguration.GetActions();
 		_onSelected = onSelected;
 
 		_filterEdit.Text = "";

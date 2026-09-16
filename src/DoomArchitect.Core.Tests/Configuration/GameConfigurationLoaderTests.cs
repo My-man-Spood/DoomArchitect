@@ -26,17 +26,17 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
-    public void Doom_Zombieman_ResolvesWithACategoryOverrideOnTopOfDefaults()
+    public void Doom_FormerHuman_ResolvesWithACategoryOverrideOnTopOfDefaults()
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
-        var zombieman = doom.GetThingType(3004);
+        var formerHuman = doom.GetThingType(3004);
 
-        Assert.NotNull(zombieman);
-        Assert.Equal("Zombieman", zombieman!.Title);
-        Assert.Equal("POSSA2A8", zombieman.SpriteName);
-        Assert.Equal(20f, zombieman.Radius);
-        Assert.Equal(56f, zombieman.Height); // inherited from the "monsters" category default, not restated per entry
+        Assert.NotNull(formerHuman);
+        Assert.Equal("Former Human", formerHuman!.Title);
+        Assert.Equal("POSSA2A8", formerHuman.SpriteName);
+        Assert.Equal(20f, formerHuman.Radius);
+        Assert.Equal(56f, formerHuman.Height); // inherited from the "monsters" category default, not restated per entry
     }
 
     [Fact]
@@ -44,7 +44,7 @@ public class GameConfigurationLoaderTests
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
-        Assert.Null(doom.GetThingType(64)); // Arch-vile
+        Assert.Null(doom.GetThingType(64)); // Archvile
     }
 
     [Fact]
@@ -52,12 +52,12 @@ public class GameConfigurationLoaderTests
     {
         var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
 
-        var zombieman = doom2.GetThingType(3004);
+        var formerHuman = doom2.GetThingType(3004);
         var archvile = doom2.GetThingType(64);
 
-        Assert.NotNull(zombieman);
+        Assert.NotNull(formerHuman);
         Assert.NotNull(archvile);
-        Assert.Equal("Arch-vile", archvile!.Title);
+        Assert.Equal("Archvile", archvile!.Title);
         Assert.Equal("VILEA2D8", archvile.SpriteName);
     }
 
@@ -89,15 +89,15 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
-    public void Doom_Zombieman_ShowsDirectionAndUsesTheMonsterColor()
+    public void Doom_FormerHuman_ShowsDirectionAndUsesTheMonsterColor()
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
-        var zombieman = doom.GetThingType(3004);
+        var formerHuman = doom.GetThingType(3004);
 
-        Assert.NotNull(zombieman);
-        Assert.True(zombieman!.ShowsDirection);
-        Assert.Equal(3, zombieman.ColorIndex);
+        Assert.NotNull(formerHuman);
+        Assert.True(formerHuman!.ShowsDirection);
+        Assert.Equal(12, formerHuman.ColorIndex); // UDB's real THINGCOLOR12 (Tomato) - the monsters category's own real color
     }
 
     [Fact]
@@ -109,7 +109,7 @@ public class GameConfigurationLoaderTests
 
         Assert.NotNull(stimpack);
         Assert.False(stimpack!.ShowsDirection);
-        Assert.Equal(6, stimpack.ColorIndex);
+        Assert.Equal(1, stimpack.ColorIndex); // UDB's real THINGCOLOR01 (RoyalBlue) - the health category's own real color
     }
 
     [Fact]
@@ -204,7 +204,7 @@ public class GameConfigurationLoaderTests
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
-        var action = doom.GetLinedefAction(1);
+        var action = doom.GetAction(1);
 
         Assert.NotNull(action);
         Assert.Equal("doors", action!.Category);
@@ -240,7 +240,7 @@ public class GameConfigurationLoaderTests
         var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
 
         Assert.Equal(doom.GetSectorSpecial(9)!.Title, doom2.GetSectorSpecial(9)!.Title);
-        Assert.Equal(doom.GetLinedefAction(1)!.Category, doom2.GetLinedefAction(1)!.Category);
+        Assert.Equal(doom.GetAction(1)!.Category, doom2.GetAction(1)!.Category);
     }
 
     [Fact]
@@ -289,7 +289,7 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
-    public void GZDoomDoom2UDMF_ThingTypes_AreReusedFromDoom2()
+    public void GZDoomDoom2UDMF_ThingTypes_IncludeTheFullVanillaDoom2Roster()
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
         var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
@@ -300,12 +300,83 @@ public class GameConfigurationLoaderTests
         Assert.Equal(doom2.GetThingType(64)!.Title, archvile!.Title);
     }
 
+    /// <summary>
+    /// Confirms the real GZDoom/ZDoom/Boom thing-type layers actually reach
+    /// this configuration through GZDoomDoom2UDMF.cfg's own thingtypes
+    /// include() chain (Includes/ZDoomThings.cfg's "doom"/"zdoom" sub-paths
+    /// and Includes/GZDoomThings.cfg's "gzdoom"/"gzdoom_lights" sub-paths,
+    /// plus BoomThings.cfg nested inside "zdoom") - not just that the
+    /// vanilla roster still resolves.
+    /// </summary>
+    [Fact]
+    public void GZDoomDoom2UDMF_ThingTypes_IncludeTheRealZDoomAndGZDoomAdditions()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var patrolPoint = gzdoom.GetThingType(9024); // ZDoom_things.cfg "zdoom" sub-block
+        var dynamicLight = gzdoom.GetThingType(9800); // GZDoom_things.cfg "gzdoom_lights" sub-block
+        var pusher = gzdoom.GetThingType(5001); // Boom_things.cfg, nested inside ZDoomThings.cfg's own "zdoom" block
+        var stealthImp = gzdoom.GetThingType(9057); // ZDoom_things.cfg "doom" sub-block
+
+        Assert.Equal("Patrol Point", patrolPoint?.Title);
+        Assert.Equal("Light", dynamicLight?.Title);
+        Assert.Equal("Pusher", pusher?.Title);
+        Assert.Equal("Imp (stealth)", stealthImp?.Title);
+    }
+
+    [Fact]
+    public void GetThingTypes_ReturnsAllTypesSortedByDoomEdNumber()
+    {
+        var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
+
+        var types = doom2.GetThingTypes();
+
+        Assert.NotEmpty(types);
+        Assert.Equal(types.OrderBy(t => t.DoomEdNum).Select(t => t.DoomEdNum), types.Select(t => t.DoomEdNum));
+    }
+
+    [Fact]
+    public void GetThingTypes_EachEntryCarriesItsRealCategoryKey()
+    {
+        var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
+
+        var types = doom2.GetThingTypes();
+
+        Assert.Contains(types, t => t.DoomEdNum == 3001 && t.Category == "monsters");
+        Assert.Contains(types, t => t.DoomEdNum == 2001 && t.Category == "weapons");
+        Assert.Contains(types, t => t.DoomEdNum == 5 && t.Category == "keys");
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_GetThingFlags_ReturnsTheReal25RealUdmfFlags()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var flags = gzdoom.GetThingFlags();
+
+        Assert.Equal(25, flags.Count);
+        Assert.Contains(flags, f => f.Key == "skill1");
+        Assert.Contains(flags, f => f.Key == "skill8");
+        Assert.DoesNotContain(flags, f => f.Key == "skill9"); // real UDMF spec only defines 8 skill levels, not 16
+        Assert.Contains(flags, f => f.Key == "class5");
+        Assert.DoesNotContain(flags, f => f.Key == "class6"); // ZDoom only defines 5 player classes
+        Assert.Contains(flags, f => f.Key == "countsecret");
+    }
+
+    [Fact]
+    public void Doom_GetThingFlags_ReturnsNoneSinceVanillaConfigsDoNotDefineAny()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        Assert.Empty(doom.GetThingFlags());
+    }
+
     [Fact]
     public void GZDoomDoom2UDMF_LinedefTypes_UseGenericHexenStyleActions()
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
 
-        var doorRaise = gzdoom.GetLinedefAction(12);
+        var doorRaise = gzdoom.GetAction(12);
 
         Assert.NotNull(doorRaise);
         Assert.Equal("door", doorRaise!.Category);
@@ -327,7 +398,7 @@ public class GameConfigurationLoaderTests
         // VanillaCommon.cfg) - in the real UDMF/Hexen action table it's an entirely
         // different action (a polyobject anchor line), proving the two numbering
         // spaces are genuinely independent rather than one reusing the other.
-        var actionOne = gzdoom.GetLinedefAction(1);
+        var actionOne = gzdoom.GetAction(1);
 
         Assert.NotNull(actionOne);
         Assert.NotEqual("doors", actionOne!.Category);
@@ -338,7 +409,7 @@ public class GameConfigurationLoaderTests
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
 
-        var actions = gzdoom.GetLinedefActions();
+        var actions = gzdoom.GetActions();
 
         Assert.NotEmpty(actions);
         Assert.Equal(actions.OrderBy(a => a.Number).Select(a => a.Number), actions.Select(a => a.Number));
@@ -355,7 +426,7 @@ public class GameConfigurationLoaderTests
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
 
-        var actions = gzdoom.GetLinedefActions();
+        var actions = gzdoom.GetActions();
 
         Assert.True(actions.Count > 150, $"Expected the real GZDoom UDMF action table's full breadth (~190 actions), got {actions.Count}.");
     }

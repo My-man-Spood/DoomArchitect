@@ -71,6 +71,7 @@ public partial class MapOverlay : Control
 	public IGameConfiguration GameConfiguration { get; set; }
 	public TextureSet TextureSet { get; set; }
 	public TextureIconCache TextureIconCache { get; set; }
+	public SpriteIconCache SpriteIconCache { get; set; }
 
 	/// <summary>Every currently loaded resource, named for display - the texture browser's per-resource tree.</summary>
 	public IReadOnlyList<NamedResource> NamedResources { get; set; } = System.Array.Empty<NamedResource>();
@@ -86,6 +87,7 @@ public partial class MapOverlay : Control
 	/// </summary>
 	public event System.Action<IReadOnlyList<Sector>> EditSectorsRequested;
 	public event System.Action<IReadOnlyList<Linedef>> EditLinedefsRequested;
+	public event System.Action<IReadOnlyList<Thing>> EditThingsRequested;
 
 	private EditMode _mode = EditMode.Vertices;
 
@@ -523,6 +525,14 @@ public partial class MapOverlay : Control
 	{
 		switch (@event)
 		{
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true, DoubleClick: true } doubleClick:
+				var doubleClickTarget = FindThingNear(doubleClick.Position);
+				if (doubleClickTarget != null)
+				{
+					if (!doubleClickTarget.IsSelected) Map.SelectOnly(doubleClickTarget);
+					EditThingsRequested?.Invoke(Map.GetSelectedThings().ToList());
+				}
+				break;
 			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } press:
 				BeginMarqueeOrClick(press.Position);
 				break;

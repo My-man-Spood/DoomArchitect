@@ -1,0 +1,143 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/ActionArgumentsEditor.cs" id="1"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/StepperLineEdit.tscn" id="2"]
+
+[node name="ActionArgumentsEditor" type="VBoxContainer"]
+script = ExtResource("1")
+
+[node name="ActionRow" type="HBoxContainer" parent="."]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="ActionLabel" type="Label" parent="ActionRow"]
+layout_mode = 2
+text = "Action:"
+
+[node name="ActionEdit" type="LineEdit" parent="ActionRow"]
+custom_minimum_size = Vector2(70, 0)
+layout_mode = 2
+
+[node name="ActionNameLabel" type="Label" parent="ActionRow"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ActionBrowseButton" type="Button" parent="ActionRow"]
+layout_mode = 2
+text = "Browse..."
+
+[node name="ArgsGrid" type="GridContainer" parent="."]
+layout_mode = 2
+theme_override_constants/h_separation = 24
+theme_override_constants/v_separation = 8
+columns = 2
+
+[node name="Arg0Row" type="HBoxContainer" parent="ArgsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArgLabel" type="Button" parent="ArgsGrid/Arg0Row"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Argument 1"
+flat = true
+alignment = 0
+
+[node name="ArgNumberEdit" parent="ArgsGrid/Arg0Row" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="ArgEnumEdit" type="OptionButton" parent="ArgsGrid/Arg0Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Arg1Row" type="HBoxContainer" parent="ArgsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArgLabel" type="Button" parent="ArgsGrid/Arg1Row"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Argument 2"
+flat = true
+alignment = 0
+
+[node name="ArgNumberEdit" parent="ArgsGrid/Arg1Row" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="ArgEnumEdit" type="OptionButton" parent="ArgsGrid/Arg1Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Arg2Row" type="HBoxContainer" parent="ArgsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArgLabel" type="Button" parent="ArgsGrid/Arg2Row"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Argument 3"
+flat = true
+alignment = 0
+
+[node name="ArgNumberEdit" parent="ArgsGrid/Arg2Row" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="ArgEnumEdit" type="OptionButton" parent="ArgsGrid/Arg2Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Arg3Row" type="HBoxContainer" parent="ArgsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArgLabel" type="Button" parent="ArgsGrid/Arg3Row"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Argument 4"
+flat = true
+alignment = 0
+
+[node name="ArgNumberEdit" parent="ArgsGrid/Arg3Row" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="ArgEnumEdit" type="OptionButton" parent="ArgsGrid/Arg3Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Arg4Row" type="HBoxContainer" parent="ArgsGrid"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="ArgLabel" type="Button" parent="ArgsGrid/Arg4Row"]
+custom_minimum_size = Vector2(140, 0)
+layout_mode = 2
+mouse_default_cursor_shape = 2
+text = "Argument 5"
+flat = true
+alignment = 0
+
+[node name="ArgNumberEdit" parent="ArgsGrid/Arg4Row" instance=ExtResource("2")]
+layout_mode = 2
+size_flags_horizontal = 3
+StepBig = 10.0
+
+[node name="ArgEnumEdit" type="OptionButton" parent="ArgsGrid/Arg4Row"]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
@@ -41,6 +42,8 @@ public partial class MapView : Node3D
 	private TextureSet _textureSet;
 	private readonly TextureIconCache _textureIconCache = new();
 	private const int TextureIconDecodeBudgetPerFrame = 8;
+	private readonly SpriteIconCache _spriteIconCache = new();
+	private const int SpriteIconDecodeBudgetPerFrame = 8;
 	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
 	private UndoStack _undoStack = new();
 	private bool _in3D;
@@ -90,6 +93,7 @@ public partial class MapView : Node3D
 		_textureSet = TextureSet.CreateEmpty();
 		_textureCache = new TextureCache(_textureSet);
 		_textureIconCache.SeedAll(_textureSet);
+		_spriteIconCache.SeedAll(_textureSet, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
 
 		// Reads _textureCache/_map fresh on every call rather than a
 		// captured value, so this keeps working correctly across LoadMap
@@ -126,6 +130,7 @@ public partial class MapView : Node3D
 		_overlay.GameConfiguration = _gameConfiguration;
 		_overlay.TextureSet = _textureSet;
 		_overlay.TextureIconCache = _textureIconCache;
+		_overlay.SpriteIconCache = _spriteIconCache;
 		_overlay.NamedResources = _namedResources;
 
 		if (CommandLineOptions.TryGetFileAndMap(out var cliFilePath, out var cliMapName))
@@ -137,6 +142,7 @@ public partial class MapView : Node3D
 	public override void _Process(double delta)
 	{
 		_textureIconCache.ProcessBudget(TextureIconDecodeBudgetPerFrame);
+		_spriteIconCache.ProcessBudget(SpriteIconDecodeBudgetPerFrame);
 
 		foreach (var sector in _map.GetDirtySectors())
 		{
@@ -255,6 +261,7 @@ public partial class MapView : Node3D
 		_textureIconCache.SeedAll(textures);
 		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
+		_spriteIconCache.SeedAll(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
 		_map = newMap;
 
 		RebuildAllMeshes();
@@ -280,6 +287,7 @@ public partial class MapView : Node3D
 		_textureIconCache.SeedAll(textures);
 		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
+		_spriteIconCache.SeedAll(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
 
 		RebuildAllMeshes();
 	}
@@ -338,6 +346,7 @@ public partial class MapView : Node3D
 		_overlay.GameConfiguration = _gameConfiguration;
 		_overlay.TextureSet = _textureSet;
 		_overlay.TextureIconCache = _textureIconCache;
+		_overlay.SpriteIconCache = _spriteIconCache;
 		_overlay.NamedResources = _namedResources;
 	}
 

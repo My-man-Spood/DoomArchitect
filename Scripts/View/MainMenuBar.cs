@@ -19,6 +19,7 @@ public partial class MainMenuBar : MenuBar
 	private PreferencesDialog _preferencesDialog;
 	private SectorEditDialog _sectorEditDialog;
 	private LinedefEditDialog _linedefEditDialog;
+	private ThingEditDialog _thingEditDialog;
 	private AcceptDialog _errorDialog;
 
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
@@ -41,6 +42,7 @@ public partial class MainMenuBar : MenuBar
 		};
 		_overlay.EditSectorsRequested += OpenSectorEditDialogFor;
 		_overlay.EditLinedefsRequested += OpenLinedefEditDialogFor;
+		_overlay.EditThingsRequested += OpenThingEditDialogFor;
 
 		var mapMenu = GetNode<PopupMenu>("Map");
 		mapMenu.AddItem("Map Options...", 0);
@@ -61,9 +63,7 @@ public partial class MainMenuBar : MenuBar
 
 	/// <summary>
 	/// Generic-sounding on purpose ("Edit Selection", not "Edit Sector") -
-	/// the Thing property dialog slots into this same menu item next, per
-	/// <c>TODO.md</c>'s own ordering; Sectors and Linedefs modes are both
-	/// wired now.
+	/// Sectors, Linedefs, and now Things modes are all wired.
 	/// </summary>
 	private void OpenEditSelectionDialog()
 	{
@@ -89,8 +89,18 @@ public partial class MainMenuBar : MenuBar
 
 				OpenLinedefEditDialogFor(selectedLinedefs);
 				break;
+			case EditMode.Things:
+				var selectedThings = _overlay.Map?.GetSelectedThings().ToList() ?? new List<Thing>();
+				if (selectedThings.Count == 0)
+				{
+					ShowError("Select one or more things first.");
+					return;
+				}
+
+				OpenThingEditDialogFor(selectedThings);
+				break;
 			default:
-				ShowError("Edit Selection currently only supports Sectors and Linedefs modes.");
+				ShowError("Edit Selection currently only supports Sectors, Linedefs, and Things modes.");
 				break;
 		}
 	}
@@ -127,6 +137,24 @@ public partial class MainMenuBar : MenuBar
 	private LinedefEditDialog CreateLinedefEditDialog()
 	{
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/LinedefEditDialog.tscn").Instantiate<LinedefEditDialog>();
+		AddChild(dialog);
+		return dialog;
+	}
+
+	private void OpenThingEditDialogFor(IReadOnlyList<Thing> things)
+	{
+		if (things.Count == 0) return;
+
+		_thingEditDialog ??= CreateThingEditDialog();
+		_thingEditDialog.SetThings(
+			things, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
+			_overlay.SpriteIconCache);
+		_thingEditDialog.PopupCentered();
+	}
+
+	private ThingEditDialog CreateThingEditDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/ThingEditDialog.tscn").Instantiate<ThingEditDialog>();
 		AddChild(dialog);
 		return dialog;
 	}

@@ -19,47 +19,11 @@ using Godot;
 /// <see cref="SectorEditDialog"/>'s own established "placeholder tab,
 /// shape recognizable, not yet built" pattern.
 ///
-/// **The dynamic argument system** (verified against
-/// <c>LinedefEditFormUDMF.ArgumentsControl</c>, not guessed): a *fixed* 5
-/// argument rows (never dynamically added/removed) - each row pairs a
-/// clickable label (<see cref="ArgRow.LabelButton"/>) with *both* a
-/// <see cref="StepperLineEdit"/> (plain numeric) and an
-/// <see cref="OptionButton"/> (enum dropdown), toggling which is
-/// <see cref="Control.Visible"/> - this project's own established
-/// "always-present, toggle Visible" idiom (e.g. <see cref="MapTagsEditor"/>'s
-/// Remove button) rather than literally adding/removing controls. Default
-/// view is decided by whether the currently typed action's
-/// <see cref="LinedefArgumentInfo.EnumOptions"/> is set; clicking the
-/// label manually flips it (see <see cref="ToggleArgView"/>), a deliberate
-/// adaptation of UDB's real <c>ArgumentBox</c> - UDB's own real control is
-/// a single WinForms *editable* combo box (<c>ComboBoxStyle.DropDown</c>),
-/// so typing any raw integer always works even for an enum-backed
-/// argument (confirmed directly in <c>ArgumentBox.cs</c>/
-/// <c>EnumOptionHandler.cs</c> - an unrecognized typed value just becomes
-/// a synthesized one-off enum entry showing that raw number). Godot has no
-/// equivalent editable-combo control, so this project reproduces the same
-/// end capability (type any exact number, even for an enum-backed arg)
-/// via two separate purpose-built controls and a manual switch between
-/// them instead of one hybrid control - same real capability, different
-/// control shape for this project's stack, flagged here per this
-/// project's own "UDB is the north star" convention rather than left
-/// silent. The label is only clickable when the argument actually has
-/// enum options at all (<see cref="ArgRow.LabelButton"/>'s own
-/// <c>Disabled</c> state); manually toggling resets back to the default
-/// enum view whenever the action itself changes (<see cref="UpdateActionUi"/>
-/// unconditionally re-derives both controls' <c>Visible</c> state every
-/// time it runs), since a different action's own arg slot is a genuinely
-/// different argument, not a continuation of whatever view the user had
-/// picked before. An unused slot (the action's own <c>argN</c> block
-/// doesn't exist in the <c>.cfg</c>) shows a generic disabled "Argument N"
-/// placeholder, matching UDB's real behavior of never hiding a slot
-/// outright. Recomputed on <see cref="_actionEdit"/>'s own
-/// <c>TextChanged</c>, mirroring how <see cref="SectorEditDialog"/>'s
-/// <c>_specialEdit.TextChanged</c> already drives
-/// <c>UpdateSpecialNameLabel</c>. A blank/unparsable/mixed-across-
-/// selection action field falls back to all 5 slots showing the generic
-/// placeholder (nothing wrong is ever written this way - see
-/// <see cref="OnConfirmed"/>'s remarks on why this is safe).
+/// **The dynamic argument system** now lives in the shared
+/// <see cref="ActionArgumentsEditor"/> control (extracted from what was
+/// originally this class's own inline copy, once the Thing dialog needed
+/// the exact same behavior - see that class's own remarks for the real
+/// UDB verification and reasoning behind its manual enum/number toggle).
 ///
 /// Action/arguments/Flags/Activation/Tag are all deliberately OK-only (no
 /// visual effect to preview), matching this project's established
@@ -108,11 +72,8 @@ using Godot;
 public partial class LinedefEditDialog : AcceptDialog
 {
 	private sealed record Snapshot(
-		long ActionNumber, long[] Args,
 		IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, bool> Activations,
 		SideSnapshot Front, SideSnapshot Back);
-
-	private sealed record ArgRow(Button LabelButton, StepperLineEdit NumberEdit, OptionButton EnumEdit);
 
 	private sealed record PartSnapshot(double OffsetX, double OffsetY, double ScaleX, double ScaleY, long Light, bool LightAbsolute);
 
@@ -144,10 +105,7 @@ public partial class LinedefEditDialog : AcceptDialog
 	};
 
 	private TabContainer _tabs;
-	private LineEdit _actionEdit;
-	private Label _actionNameLabel;
-	private Button _actionBrowseButton;
-	private ArgRow[] _argRows;
+	private ActionArgumentsEditor _actionEditor;
 	private Container _flagsContainer;
 	private Container _activationsContainer;
 	private CheckBox _flagCheckBoxTemplate;
@@ -155,20 +113,17 @@ public partial class LinedefEditDialog : AcceptDialog
 	private SideControls _front;
 	private SideControls _back;
 
-	private LinedefActionBrowserDialog _actionBrowserDialog;
 	private TextureBrowserDialog _textureBrowserDialog;
 
 	private readonly Dictionary<string, CheckBox> _flagCheckBoxes = new();
 	private readonly Dictionary<string, CheckBox> _activationCheckBoxes = new();
 	private readonly HashSet<string> _touchedFlags = new();
 	private readonly HashSet<string> _touchedActivations = new();
-	private readonly HashSet<int> _touchedArgs = new();
 	private readonly HashSet<CheckBox> _touchedCheckBoxes = new();
 
 	private IReadOnlyList<Linedef> _linedefs = Array.Empty<Linedef>();
 	private Dictionary<Linedef, Snapshot> _snapshots = new();
 	private MapData _map;
-	private IGameConfiguration _gameConfiguration;
 	private UndoStack _undoStack;
 	private TextureSet _textureSet;
 	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
@@ -176,26 +131,11 @@ public partial class LinedefEditDialog : AcceptDialog
 	private Action _onLiveChange;
 	private bool _suppressLiveApply;
 
-	private LinedefActionInfo _currentAction;
-	private IReadOnlyList<LinedefArgumentInfo> _currentArgInfos = DefaultArgInfos();
-
 	public override void _Ready()
 	{
 		_tabs = GetNode<TabContainer>("Container/Tabs");
 
-		_actionEdit = GetNode<LineEdit>("Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow/ActionEdit");
-		_actionNameLabel = GetNode<Label>("Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow/ActionNameLabel");
-		_actionBrowseButton = GetNode<Button>("Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow/ActionBrowseButton");
-
-		_argRows = new ArgRow[5];
-		for (var i = 0; i < 5; i++)
-		{
-			var rowPath = $"Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg{i}Row";
-			_argRows[i] = new ArgRow(
-				GetNode<Button>($"{rowPath}/ArgLabel"),
-				GetNode<StepperLineEdit>($"{rowPath}/ArgNumberEdit"),
-				GetNode<OptionButton>($"{rowPath}/ArgEnumEdit"));
-		}
+		_actionEditor = GetNode<ActionArgumentsEditor>("Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionArgumentsEditor");
 
 		_flagsContainer = GetNode<Container>("Container/Tabs/Properties/VboxContainer/FlagsBox/Content/FlagsContainer");
 		_activationsContainer = GetNode<Container>("Container/Tabs/Properties/VboxContainer/ActivationBox/Content/ActivationsContainer");
@@ -204,30 +144,6 @@ public partial class LinedefEditDialog : AcceptDialog
 
 		_front = LoadSideControls("Front");
 		_back = LoadSideControls("Back");
-
-		_actionEdit.TextChanged += _ => UpdateActionUi();
-		_actionBrowseButton.Pressed += BrowseAction;
-
-		for (var i = 0; i < 5; i++)
-		{
-			var slot = i;
-			_argRows[slot].NumberEdit.TextChanged += _ => _touchedArgs.Add(slot);
-			_argRows[slot].EnumEdit.ItemSelected += _ => _touchedArgs.Add(slot);
-			_argRows[slot].LabelButton.Pressed += () => ToggleArgView(slot);
-
-			// Godot's own theme-default "disabled" font color (used here purely
-			// to block clicks on a non-toggleable label, not to signal "this
-			// argument is invalid") reads far too dim to comfortably read a
-			// perfectly normal, in-use argument's own title - override it to a
-			// gentler dim than the theme default. Needs enough contrast against
-			// the fully-bright, actually-clickable case to still read as "not
-			// interactive" at a glance (0.85 turned out too close to full
-			// brightness for that), while staying well short of the theme
-			// default's much heavier dimming - distinct from (and stacking
-			// under) the separate Modulate-based dimming UpdateActionUi already
-			// applies for a genuinely *unused* slot.
-			_argRows[slot].LabelButton.AddThemeColorOverride("font_disabled_color", new Color(1, 1, 1, 0.6f));
-		}
 
 		WireSide(_front, l => l.Front, s => s.Front);
 		WireSide(_back, l => l.Back, s => s.Back);
@@ -251,9 +167,6 @@ public partial class LinedefEditDialog : AcceptDialog
 			}
 		}
 	}
-
-	private static IReadOnlyList<LinedefArgumentInfo> DefaultArgInfos() =>
-		Enumerable.Range(0, 5).Select(i => new LinedefArgumentInfo($"Argument {i + 1}", Used: false, EnumOptions: null)).ToList();
 
 	private SideControls LoadSideControls(string side)
 	{
@@ -329,7 +242,6 @@ public partial class LinedefEditDialog : AcceptDialog
 	{
 		_linedefs = linedefs;
 		_map = map;
-		_gameConfiguration = gameConfiguration;
 		_undoStack = undoStack;
 		_onLiveChange = onLiveChange;
 		_textureSet = textureSet;
@@ -340,22 +252,17 @@ public partial class LinedefEditDialog : AcceptDialog
 		var activationKeys = gameConfiguration.GetLinedefActivations();
 
 		_snapshots = linedefs.ToDictionary(l => l, l => new Snapshot(
-			l.Fields.GetInteger("special", 0),
-			Enumerable.Range(0, 5).Select(i => l.Fields.GetInteger($"arg{i}", 0)).ToArray(),
 			flagKeys.ToDictionary(f => f.Key, f => l.Fields.GetBool(f.Key, false)),
 			activationKeys.ToDictionary(a => a.Key, a => l.Fields.GetBool(a.Key, false)),
 			BuildSideSnapshot(l.Front, map),
 			BuildSideSnapshot(l.Back, map)));
 
+		_actionEditor.Setup(linedefs.Select(l => l.Fields).ToList(), gameConfiguration);
 		_tagsEditor.SetLinedefs(linedefs, map);
 
 		_touchedFlags.Clear();
 		_touchedActivations.Clear();
-		_touchedArgs.Clear();
 		_touchedCheckBoxes.Clear();
-
-		_actionEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.ActionNumber));
-		UpdateActionUi();
 
 		RebuildCheckboxes(_flagsContainer, flagKeys, _flagCheckBoxes, _touchedFlags, s => s.Flags);
 		RebuildCheckboxes(_activationsContainer, activationKeys, _activationCheckBoxes, _touchedActivations, s => s.Activations);
@@ -516,175 +423,6 @@ public partial class LinedefEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// Re-derives <see cref="_currentAction"/>/<see cref="_currentArgInfos"/>
-	/// from whatever's currently typed in <see cref="_actionEdit"/> - a
-	/// blank, unparsable, or unrecognized (including cross-selection
-	/// "mixed") action number simply falls back to
-	/// <see cref="DefaultArgInfos"/> (all 5 slots generic and disabled),
-	/// same "blank means don't know/don't touch" convention as everywhere
-	/// else in this dialog.
-	/// </summary>
-	private void UpdateActionUi()
-	{
-		var text = _actionEdit.Text.Trim();
-		_currentAction = long.TryParse(text, out var number) ? _gameConfiguration?.GetLinedefAction((int)number) : null;
-		_currentArgInfos = _currentAction?.Args ?? DefaultArgInfos();
-		_actionNameLabel.Text = _currentAction?.Title ?? "";
-
-		for (var i = 0; i < 5; i++)
-		{
-			var info = _currentArgInfos[i];
-			var row = _argRows[i];
-			var isEnum = info.EnumOptions != null;
-
-			row.LabelButton.Text = info.Title;
-			row.LabelButton.Modulate = info.Used ? Colors.White : new Color(1, 1, 1, 0.5f);
-			row.LabelButton.Disabled = !isEnum;
-			row.LabelButton.MouseDefaultCursorShape = isEnum ? Control.CursorShape.PointingHand : Control.CursorShape.Arrow;
-			row.NumberEdit.Visible = !isEnum;
-			row.EnumEdit.Visible = isEnum;
-			row.NumberEdit.Editable = info.Used;
-			row.EnumEdit.Disabled = !info.Used;
-
-			if (isEnum)
-			{
-				row.EnumEdit.Clear();
-				foreach (var option in info.EnumOptions!)
-				{
-					row.EnumEdit.AddItem(option.Title);
-					row.EnumEdit.SetItemMetadata(row.EnumEdit.ItemCount - 1, option.Value);
-				}
-			}
-		}
-
-		RefreshArgValueDisplays();
-	}
-
-	/// <summary>
-	/// Shows each selected linedef's own current stored <c>argN</c> value,
-	/// shared-or-blank across the selection for a plain numeric slot; an
-	/// enum slot only gets a pre-selected item when every selected linedef
-	/// already agrees on a value that's actually one of that enum's real
-	/// options (otherwise it's left showing the dropdown's own first item
-	/// purely cosmetically - never written unless the user actually
-	/// touches it, see <see cref="OnConfirmed"/>).
-	/// </summary>
-	private void RefreshArgValueDisplays()
-	{
-		for (var i = 0; i < 5; i++)
-		{
-			var row = _argRows[i];
-			var info = _currentArgInfos[i];
-			var values = _snapshots.Values.Select(s => s.Args[i]).ToList();
-			if (values.Count == 0) continue;
-
-			if (info.EnumOptions != null)
-			{
-				var shared = values.All(v => v == values[0]) ? (long?)values[0] : null;
-				if (shared == null) continue;
-
-				var matchIndex = -1;
-				for (var idx = 0; idx < row.EnumEdit.ItemCount; idx++)
-				{
-					if (row.EnumEdit.GetItemMetadata(idx).AsInt64() != shared.Value) continue;
-					matchIndex = idx;
-					break;
-				}
-
-				if (matchIndex >= 0) row.EnumEdit.Selected = matchIndex;
-			}
-			else
-			{
-				row.NumberEdit.Text = SharedOrBlank(values.Select(v => (double)v));
-			}
-		}
-	}
-
-	/// <summary>
-	/// Manually flips one argument row between its numeric and enum view -
-	/// see this class's own remarks for why this exists at all (Godot has
-	/// no editable-combo-box equivalent to UDB's real <c>ArgumentBox</c>).
-	/// A no-op when the argument has no enum options to toggle to at all
-	/// (<see cref="ArgRow.LabelButton"/> is disabled in that case, so this
-	/// should never actually fire then, but the plain-numeric-only guard
-	/// stays here too as a direct safety net). Carries the value across
-	/// the switch rather than resetting it: enum-to-number copies the
-	/// exact currently-selected value (blank if nothing's selected, i.e.
-	/// a mixed/blank multi-select state - never a fabricated zero);
-	/// number-to-enum snaps to the *nearest* real enum value rather than
-	/// requiring an exact match, since the whole point of allowing a typed
-	/// number is that it may not be one of the named options.
-	/// </summary>
-	private void ToggleArgView(int slot)
-	{
-		var info = _currentArgInfos[slot];
-		if (info.EnumOptions == null) return;
-
-		var row = _argRows[slot];
-		if (row.EnumEdit.Visible)
-		{
-			var selected = row.EnumEdit.Selected;
-			row.NumberEdit.Text = selected >= 0 ? row.EnumEdit.GetItemMetadata(selected).AsInt64().ToString(CultureInfo.InvariantCulture) : "";
-			row.NumberEdit.Visible = true;
-			row.EnumEdit.Visible = false;
-		}
-		else
-		{
-			var typed = NumericFieldExpression.Resolve(row.NumberEdit.Text, 0.0);
-			if (typed.HasValue)
-			{
-				var nearestIndex = FindNearestEnumIndex(row.EnumEdit, (long)Math.Round(typed.Value));
-				if (nearestIndex >= 0) row.EnumEdit.Selected = nearestIndex;
-			}
-
-			row.EnumEdit.Visible = true;
-			row.NumberEdit.Visible = false;
-		}
-	}
-
-	private static int FindNearestEnumIndex(OptionButton enumEdit, long value)
-	{
-		var bestIndex = -1;
-		var bestDistance = long.MaxValue;
-
-		for (var idx = 0; idx < enumEdit.ItemCount; idx++)
-		{
-			var distance = Math.Abs(enumEdit.GetItemMetadata(idx).AsInt64() - value);
-			if (distance >= bestDistance) continue;
-
-			bestDistance = distance;
-			bestIndex = idx;
-		}
-
-		return bestIndex;
-	}
-
-	/// <summary>
-	/// Setting <see cref="LineEdit.Text"/> directly doesn't raise
-	/// <c>TextChanged</c> (the same plain Godot behavior already relied on
-	/// elsewhere, e.g. <see cref="SectorEditDialog.BrowseTexture"/>) - so
-	/// the callback also calls <see cref="UpdateActionUi"/> itself,
-	/// exactly reproducing what typing the action number by hand would
-	/// have done (relabeling the 5 argument slots, in particular).
-	/// </summary>
-	private void BrowseAction()
-	{
-		_actionBrowserDialog ??= CreateActionBrowserDialog();
-		_actionBrowserDialog.Browse(_gameConfiguration, _actionEdit.Text, number =>
-		{
-			_actionEdit.Text = number;
-			UpdateActionUi();
-		});
-	}
-
-	private LinedefActionBrowserDialog CreateActionBrowserDialog()
-	{
-		var dialog = GD.Load<PackedScene>("res://Scenes/UI/LinedefActionBrowserDialog.tscn").Instantiate<LinedefActionBrowserDialog>();
-		AddChild(dialog);
-		return dialog;
-	}
-
-	/// <summary>
 	/// Shared by the Flags and Activation groups - same duplicate-the-
 	/// hidden-template mechanism as <see cref="SectorEditDialog.RebuildFlagsCheckboxes"/>,
 	/// just parameterized over which container/key-set/touched-set/value-
@@ -744,51 +482,17 @@ public partial class LinedefEditDialog : AcceptDialog
 	/// linedef's original <c>Fields</c> value - deliberately never live-
 	/// applied while the dialog was open (nothing to preview), matching
 	/// <see cref="SectorEditDialog.OnConfirmed"/>'s own reasoning for its
-	/// own gameplay-only fields. A mixed/blank action field resolves to
-	/// each linedef's own original action (never written), and since
-	/// <see cref="_currentArgInfos"/> then falls back to all-generic-
-	/// unused slots in that case too, no argument write is attempted
-	/// either - a mixed selection's own individual action numbers (and
-	/// whatever arguments belong to them) are simply left alone, exactly
-	/// matching UDB's real practice of only editing what the dialog can
-	/// actually make sense of.
+	/// own gameplay-only fields. Action/arguments are resolved by
+	/// <see cref="_actionEditor"/> itself (see its own remarks for how a
+	/// mixed/blank action field is handled).
 	/// </summary>
 	private void OnConfirmed()
 	{
-		var commands = new List<ICommand>();
+		var commands = new List<ICommand>(_actionEditor.BuildCommands());
 
 		foreach (var linedef in _linedefs)
 		{
 			var snapshot = _snapshots[linedef];
-
-			var newAction = NumericFieldExpression.ResolveInteger(_actionEdit.Text, snapshot.ActionNumber) ?? snapshot.ActionNumber;
-			if (newAction != snapshot.ActionNumber)
-			{
-				commands.Add(new SetFieldCommand(linedef.Fields, "special", newAction == 0 ? null : new UniValue(UniversalType.Integer, newAction)));
-			}
-
-			for (var i = 0; i < 5; i++)
-			{
-				var row = _argRows[i];
-				long newValue;
-
-				// Reads whichever control is *currently visible*, not whether the
-				// argument is statically enum-capable - a manual toggle (see
-				// ToggleArgView) can put an enum-backed argument into number view,
-				// and a typed custom value there must not be silently ignored.
-				if (row.EnumEdit.Visible)
-				{
-					if (!_touchedArgs.Contains(i)) continue;
-					newValue = row.EnumEdit.GetItemMetadata(row.EnumEdit.Selected).AsInt64();
-				}
-				else
-				{
-					newValue = NumericFieldExpression.ResolveInteger(row.NumberEdit.Text, snapshot.Args[i]) ?? snapshot.Args[i];
-				}
-
-				if (newValue == snapshot.Args[i]) continue;
-				commands.Add(new SetFieldCommand(linedef.Fields, $"arg{i}", newValue == 0 ? null : new UniValue(UniversalType.Integer, newValue)));
-			}
 
 			foreach (var key in _touchedFlags)
 			{
@@ -814,7 +518,12 @@ public partial class LinedefEditDialog : AcceptDialog
 
 		commands.AddRange(_tagsEditor.BuildCommands());
 
-		if (commands.Count > 0) _undoStack.Record(new CommandGroup(commands));
+		// Execute, not Record - see SectorEditDialog.OnConfirmed's own
+		// identical remarks: only the Front/Back offset/texture commands
+		// above were ever live-applied, everything else here (Action/Args/
+		// Flags/Activation/Tag/per-part offset-scale-light) was never
+		// applied anywhere else and Record alone would leave it unwritten.
+		if (commands.Count > 0) _undoStack.Execute(new CommandGroup(commands));
 	}
 
 	/// <summary>Skips outright when this particular linedef doesn't actually have this side - matching UDB's own real per-linedef Apply guard, so a mixed one-sided/two-sided selection can never corrupt a one-sided line even though the tab itself was enabled from the first selected linedef's own shape.</summary>

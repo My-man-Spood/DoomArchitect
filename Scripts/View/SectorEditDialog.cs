@@ -684,7 +684,16 @@ public partial class SectorEditDialog : AcceptDialog
 
 		commands.AddRange(_tagsEditor.BuildCommands());
 
-		if (commands.Count > 0) _undoStack.Record(new CommandGroup(commands));
+		// Execute, not Record: unlike the height/texture/brightness commands
+		// above (already live-applied while typing, so Do() would just
+		// harmlessly re-set an already-current value), every OK-only command
+		// here (Special/Gravity/damage fields/Flags/Tags) was never applied
+		// anywhere else - Record alone assumes the command already ran
+		// (verified directly against UndoStackTests' own
+		// Record_AddsAnAlreadyPerformedCommandWithoutRunningItAgain case) and
+		// would otherwise silently leave every one of these fields
+		// unwritten.
+		if (commands.Count > 0) _undoStack.Execute(new CommandGroup(commands));
 	}
 
 	private void AddIfChanged<T>(List<ICommand> commands, Sector sector, T oldValue, T newValue, Action<Sector, T> setter)

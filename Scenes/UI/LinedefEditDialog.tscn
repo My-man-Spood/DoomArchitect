@@ -5,6 +5,7 @@
 [ext_resource type="PackedScene" path="res://Scenes/UI/GroupBox.tscn" id="3"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/MapTagsEditor.tscn" id="4"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/TexturePreviewEdit.tscn" id="5"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ActionArgumentsEditor.tscn" id="6"]
 
 [node name="LinedefEditDialog" type="AcceptDialog" unique_id=2119575552]
 oversampling_override = 1.0
@@ -67,141 +68,8 @@ Title = "Action"
 [node name="TitleLabel" parent="Container/Tabs/Properties/VboxContainer/ActionBox" index="0"]
 text = "Action"
 
-[node name="ActionRow" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content" index="0" unique_id=1055531433]
+[node name="ActionArgumentsEditor" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content" index="0" instance=ExtResource("6")]
 layout_mode = 2
-theme_override_constants/separation = 10
-
-[node name="ActionLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow" unique_id=1310209021]
-layout_mode = 2
-text = "Action:"
-
-[node name="ActionEdit" type="LineEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow" unique_id=505089383]
-custom_minimum_size = Vector2(70, 0)
-layout_mode = 2
-
-[node name="ActionNameLabel" type="Label" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow" unique_id=463973032]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ActionBrowseButton" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionRow" unique_id=520058238]
-layout_mode = 2
-text = "Browse..."
-
-[node name="ArgsGrid" type="GridContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content" index="1" unique_id=823076963]
-layout_mode = 2
-theme_override_constants/h_separation = 24
-theme_override_constants/v_separation = 8
-columns = 2
-
-[node name="Arg0Row" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid" unique_id=1191610813]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ArgLabel" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg0Row" unique_id=1012191167]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-mouse_default_cursor_shape = 2
-text = "Argument 1"
-flat = true
-alignment = 0
-
-[node name="ArgNumberEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg0Row" unique_id=2018008223 instance=ExtResource("2")]
-layout_mode = 2
-size_flags_horizontal = 3
-StepBig = 10.0
-
-[node name="ArgEnumEdit" type="OptionButton" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg0Row" unique_id=878707071]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Arg1Row" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid" unique_id=2039294572]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ArgLabel" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg1Row" unique_id=1790082715]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-mouse_default_cursor_shape = 2
-text = "Argument 2"
-flat = true
-alignment = 0
-
-[node name="ArgNumberEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg1Row" unique_id=1749329370 instance=ExtResource("2")]
-layout_mode = 2
-size_flags_horizontal = 3
-StepBig = 10.0
-
-[node name="ArgEnumEdit" type="OptionButton" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg1Row" unique_id=674430239]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Arg2Row" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid" unique_id=1375222153]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ArgLabel" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg2Row" unique_id=213197711]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-mouse_default_cursor_shape = 2
-text = "Argument 3"
-flat = true
-alignment = 0
-
-[node name="ArgNumberEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg2Row" unique_id=1167292769 instance=ExtResource("2")]
-layout_mode = 2
-size_flags_horizontal = 3
-StepBig = 10.0
-
-[node name="ArgEnumEdit" type="OptionButton" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg2Row" unique_id=1953365964]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Arg3Row" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid" unique_id=1489917567]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ArgLabel" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg3Row" unique_id=1828504965]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-mouse_default_cursor_shape = 2
-text = "Argument 4"
-flat = true
-alignment = 0
-
-[node name="ArgNumberEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg3Row" unique_id=1522623996 instance=ExtResource("2")]
-layout_mode = 2
-size_flags_horizontal = 3
-StepBig = 10.0
-
-[node name="ArgEnumEdit" type="OptionButton" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg3Row" unique_id=1305480477]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="Arg4Row" type="HBoxContainer" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid" unique_id=752300140]
-layout_mode = 2
-size_flags_horizontal = 3
-
-[node name="ArgLabel" type="Button" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg4Row" unique_id=1867734503]
-custom_minimum_size = Vector2(140, 0)
-layout_mode = 2
-mouse_default_cursor_shape = 2
-text = "Argument 5"
-flat = true
-alignment = 0
-
-[node name="ArgNumberEdit" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg4Row" unique_id=670714226 instance=ExtResource("2")]
-layout_mode = 2
-size_flags_horizontal = 3
-StepBig = 10.0
-
-[node name="ArgEnumEdit" type="OptionButton" parent="Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg4Row" unique_id=981755311]
-visible = false
-layout_mode = 2
-size_flags_horizontal = 3
 
 [node name="ActivationBox" parent="Container/Tabs/Properties/VboxContainer" unique_id=1905787281 instance=ExtResource("3")]
 Title = "Activation"

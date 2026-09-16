@@ -25,6 +25,7 @@ public static class GameConfigurationLoader
             LoadFlagInfoDictionary(document.FindBlock("sectorflags")),
             LoadFlagInfoDictionary(document.FindBlock("linedefflags")),
             LoadFlagInfoDictionary(document.FindBlock("linedefactivations")),
+            LoadFlagInfoDictionary(document.FindBlock("thingflags")),
             LoadDamageTypes(document));
     }
 
@@ -50,16 +51,16 @@ public static class GameConfigurationLoader
                 var showsDirection = entry.Find("arrow")?.AsBool() ?? category.Find("arrow")?.AsBool() ?? true;
                 var colorIndex = entry.Find("color")?.AsInt() ?? category.Find("color")?.AsInt() ?? 0;
 
-                result[doomEdNum] = new ThingTypeInfo(doomEdNum, title, sprite, width, height, hangs, showsDirection, colorIndex);
+                result[doomEdNum] = new ThingTypeInfo(doomEdNum, title, sprite, width, height, hangs, showsDirection, colorIndex, category.Key);
             }
         }
 
         return result;
     }
 
-    private static Dictionary<int, LinedefActionInfo> LoadLinedefActions(CfgBlock? linedefTypes, Dictionary<string, List<LinedefArgumentEnumOption>> enums)
+    private static Dictionary<int, ActionInfo> LoadLinedefActions(CfgBlock? linedefTypes, Dictionary<string, List<ArgumentEnumOption>> enums)
     {
-        var result = new Dictionary<int, LinedefActionInfo>();
+        var result = new Dictionary<int, ActionInfo>();
         if (linedefTypes == null) return result;
 
         foreach (var category in linedefTypes.Blocks)
@@ -69,7 +70,7 @@ public static class GameConfigurationLoader
                 if (!int.TryParse(entry.Key, out var number)) continue;
 
                 var title = entry.Find("title")?.AsString() ?? $"Action {number}";
-                result[number] = new LinedefActionInfo(number, title, category.Key, LoadArguments(entry, enums));
+                result[number] = new ActionInfo(number, title, category.Key, LoadArguments(entry, enums));
             }
         }
 
@@ -78,46 +79,46 @@ public static class GameConfigurationLoader
 
     /// <summary>
     /// The fixed 5 <c>arg0</c>-<c>arg4</c> slots - a slot with no matching
-    /// sub-block in the <c>.cfg</c> entry is <see cref="LinedefArgumentInfo.Used"/>
+    /// sub-block in the <c>.cfg</c> entry is <see cref="ArgumentInfo.Used"/>
     /// <c>false</c> with a generic placeholder title, matching UDB's real
     /// always-5-boxes-some-disabled layout rather than a variable-length list.
     /// </summary>
-    private static IReadOnlyList<LinedefArgumentInfo> LoadArguments(CfgBlock entry, Dictionary<string, List<LinedefArgumentEnumOption>> enums)
+    private static IReadOnlyList<ArgumentInfo> LoadArguments(CfgBlock entry, Dictionary<string, List<ArgumentEnumOption>> enums)
     {
-        var args = new List<LinedefArgumentInfo>(5);
+        var args = new List<ArgumentInfo>(5);
 
         for (var i = 0; i < 5; i++)
         {
             var argBlock = entry.FindBlock($"arg{i}");
             if (argBlock == null)
             {
-                args.Add(new LinedefArgumentInfo($"Argument {i + 1}", Used: false, EnumOptions: null));
+                args.Add(new ArgumentInfo($"Argument {i + 1}", Used: false, EnumOptions: null));
                 continue;
             }
 
             var title = argBlock.Find("title")?.AsString() ?? $"Argument {i + 1}";
             var enumName = argBlock.Find("enum")?.AsString();
             var enumOptions = enumName != null ? enums.GetValueOrDefault(enumName) : null;
-            args.Add(new LinedefArgumentInfo(title, Used: true, enumOptions));
+            args.Add(new ArgumentInfo(title, Used: true, enumOptions));
         }
 
         return args;
     }
 
     /// <summary>The <c>enums { name { value = "label"; ... } ... }</c> block - a shared table an argument's own <c>enum</c> key references by name, so a speed/type enum reused by several actions is only authored once.</summary>
-    private static Dictionary<string, List<LinedefArgumentEnumOption>> LoadEnums(CfgBlock? enums)
+    private static Dictionary<string, List<ArgumentEnumOption>> LoadEnums(CfgBlock? enums)
     {
-        var result = new Dictionary<string, List<LinedefArgumentEnumOption>>();
+        var result = new Dictionary<string, List<ArgumentEnumOption>>();
         if (enums == null) return result;
 
         foreach (var enumBlock in enums.Blocks)
         {
-            var options = new List<LinedefArgumentEnumOption>();
+            var options = new List<ArgumentEnumOption>();
             foreach (var assignment in enumBlock.Assignments)
             {
                 if (long.TryParse(assignment.Key, out var value))
                 {
-                    options.Add(new LinedefArgumentEnumOption(value, assignment.Value.AsString()));
+                    options.Add(new ArgumentEnumOption(value, assignment.Value.AsString()));
                 }
             }
 
@@ -168,20 +169,22 @@ public static class GameConfigurationLoader
     private sealed class ParsedGameConfiguration : IGameConfiguration
     {
         private readonly Dictionary<int, ThingTypeInfo> _thingTypes;
-        private readonly Dictionary<int, LinedefActionInfo> _linedefActions;
+        private readonly Dictionary<int, ActionInfo> _linedefActions;
         private readonly Dictionary<int, SectorSpecialInfo> _sectorSpecials;
         private readonly Dictionary<string, SectorFlagInfo> _sectorFlags;
         private readonly Dictionary<string, SectorFlagInfo> _linedefFlags;
         private readonly Dictionary<string, SectorFlagInfo> _linedefActivations;
+        private readonly Dictionary<string, SectorFlagInfo> _thingFlags;
         private readonly List<string> _damageTypes;
 
         public ParsedGameConfiguration(
             Dictionary<int, ThingTypeInfo> thingTypes,
-            Dictionary<int, LinedefActionInfo> linedefActions,
+            Dictionary<int, ActionInfo> linedefActions,
             Dictionary<int, SectorSpecialInfo> sectorSpecials,
             Dictionary<string, SectorFlagInfo> sectorFlags,
             Dictionary<string, SectorFlagInfo> linedefFlags,
             Dictionary<string, SectorFlagInfo> linedefActivations,
+            Dictionary<string, SectorFlagInfo> thingFlags,
             List<string> damageTypes)
         {
             _thingTypes = thingTypes;
@@ -190,14 +193,17 @@ public static class GameConfigurationLoader
             _sectorFlags = sectorFlags;
             _linedefFlags = linedefFlags;
             _linedefActivations = linedefActivations;
+            _thingFlags = thingFlags;
             _damageTypes = damageTypes;
         }
 
         public ThingTypeInfo? GetThingType(int doomEdNum) => _thingTypes.GetValueOrDefault(doomEdNum);
 
-        public LinedefActionInfo? GetLinedefAction(int special) => _linedefActions.GetValueOrDefault(special);
+        public IReadOnlyList<ThingTypeInfo> GetThingTypes() => _thingTypes.Values.OrderBy(t => t.DoomEdNum).ToList();
 
-        public IReadOnlyList<LinedefActionInfo> GetLinedefActions() => _linedefActions.Values.OrderBy(a => a.Number).ToList();
+        public ActionInfo? GetAction(int special) => _linedefActions.GetValueOrDefault(special);
+
+        public IReadOnlyList<ActionInfo> GetActions() => _linedefActions.Values.OrderBy(a => a.Number).ToList();
 
         public SectorSpecialInfo? GetSectorSpecial(int type) => _sectorSpecials.GetValueOrDefault(type);
 
@@ -208,6 +214,8 @@ public static class GameConfigurationLoader
         public IReadOnlyList<SectorFlagInfo> GetLinedefFlags() => _linedefFlags.Values.ToList();
 
         public IReadOnlyList<SectorFlagInfo> GetLinedefActivations() => _linedefActivations.Values.ToList();
+
+        public IReadOnlyList<SectorFlagInfo> GetThingFlags() => _thingFlags.Values.ToList();
 
         public IReadOnlyList<string> GetDamageTypes() => _damageTypes;
     }
