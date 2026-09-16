@@ -1,3 +1,4 @@
+using System.Linq;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Tests.IO;
 using DoomArchitect.Core.Textures;
@@ -133,6 +134,78 @@ public class TextureSetTests
         var second = set.TryGetSpriteTexture("POSSA1");
 
         Assert.Same(first, second);
+    }
+
+    [Fact]
+    public void ResolveSpriteRotations_EightSeparateLumps_MapsEachRotationDigitToItsOwnLumpNoMirror()
+    {
+        var wad = BuildWad(new[] { ("S_START", Array.Empty<byte>()) }
+            .Concat(Enumerable.Range(1, 8).Select(r => ($"TROOA{r}", Array.Empty<byte>())))
+            .Append(("S_END", Array.Empty<byte>()))
+            .ToArray());
+        var set = TextureSet.Load(wad);
+
+        var rotations = set.ResolveSpriteRotations("TROOA1");
+
+        Assert.Equal(8, rotations.Count);
+        for (var i = 0; i < 8; i++)
+        {
+            Assert.Equal($"TROOA{i + 1}", rotations[i].LumpName);
+            Assert.False(rotations[i].Mirror);
+        }
+    }
+
+    [Fact]
+    public void ResolveSpriteRotations_MirroredPairLumps_ResolvesBothRotationsWithCorrectMirrorFlag()
+    {
+        var wad = BuildWad(
+            ("S_START", Array.Empty<byte>()),
+            ("TROOA1", Array.Empty<byte>()),
+            ("TROOA2A8", Array.Empty<byte>()),
+            ("TROOA3A7", Array.Empty<byte>()),
+            ("TROOA4A6", Array.Empty<byte>()),
+            ("TROOA5", Array.Empty<byte>()),
+            ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var rotations = set.ResolveSpriteRotations("TROOA1");
+
+        Assert.Equal("TROOA1", rotations[0].LumpName);
+        Assert.False(rotations[0].Mirror);
+        Assert.Equal("TROOA2A8", rotations[1].LumpName);
+        Assert.False(rotations[1].Mirror);
+        Assert.Equal("TROOA2A8", rotations[7].LumpName);
+        Assert.True(rotations[7].Mirror);
+        Assert.Equal("TROOA4A6", rotations[3].LumpName);
+        Assert.False(rotations[3].Mirror);
+        Assert.Equal("TROOA4A6", rotations[5].LumpName);
+        Assert.True(rotations[5].Mirror);
+        Assert.Equal("TROOA5", rotations[4].LumpName);
+        Assert.False(rotations[4].Mirror);
+    }
+
+    [Fact]
+    public void ResolveSpriteRotations_SingleNonRotatingLump_FillsEverySlotWithItNoMirror()
+    {
+        var wad = BuildWad(("S_START", Array.Empty<byte>()), ("PLASA0", Array.Empty<byte>()), ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var rotations = set.ResolveSpriteRotations("PLASA0");
+
+        Assert.All(rotations, r => Assert.Equal("PLASA0", r.LumpName));
+        Assert.All(rotations, r => Assert.False(r.Mirror));
+    }
+
+    [Fact]
+    public void ResolveSpriteRotations_NoMatchingLumpsAtAll_FallsBackToTheRepresentativeNameForEverySlot()
+    {
+        var wad = BuildWad(("S_START", Array.Empty<byte>()), ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var rotations = set.ResolveSpriteRotations("TROOA2A8");
+
+        Assert.All(rotations, r => Assert.Equal("TROOA2A8", r.LumpName));
+        Assert.All(rotations, r => Assert.False(r.Mirror));
     }
 
     [Fact]

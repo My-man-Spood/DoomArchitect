@@ -13,10 +13,14 @@ namespace DoomArchitect.Rendering;
 /// shape, backed by <see cref="TextureSet.TryGetSpriteTexture"/> (the same
 /// real Doom-picture-format decode the 3D view's own thing billboards
 /// already use, just packaged here as a flat 2D icon instead of a
-/// <c>StandardMaterial3D</c>). Exists for the Thing dialog's embedded type
-/// picker and its own live preview panel - neither of which needs a
-/// sprite's full rotation set, just the one canonical frame each
-/// <see cref="Core.Configuration.ThingTypeInfo.SpriteName"/> already names.
+/// <c>StandardMaterial3D</c>). Two real consumers: the Thing dialog's
+/// embedded type picker and its own live preview panel (via
+/// <see cref="GetSpriteIcon"/>/<see cref="GetOrDecodeSpriteIcon"/>, just
+/// the one canonical frame each
+/// <see cref="Core.Configuration.ThingTypeInfo.SpriteName"/> already
+/// names), and the 2D map view's own live, rotation-aware Thing rendering
+/// (via <see cref="GetOrDecodeRotationFrame"/>, UDB's real per-angle
+/// sprite-frame selection - see <see cref="TextureSet.ResolveSpriteRotations"/>).
 ///
 /// Deliberately seeded from a caller-supplied name list
 /// (<see cref="SeedAll"/>'s <c>spriteNames</c>), not "every sprite lump in
@@ -43,6 +47,7 @@ namespace DoomArchitect.Rendering;
 public sealed class SpriteIconCache
 {
     private readonly Dictionary<string, ImageTexture> _icons = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, IReadOnlyList<SpriteRotationFrame>> _rotationTables = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<string> _pending = new();
     private TextureSet _textures;
 
@@ -57,6 +62,7 @@ public sealed class SpriteIconCache
     {
         _textures = textures;
         _icons.Clear();
+        _rotationTables.Clear();
         _pending.Clear();
 
         foreach (var name in spriteNames.Where(n => !string.IsNullOrEmpty(n)).Distinct(StringComparer.OrdinalIgnoreCase))
@@ -96,5 +102,33 @@ public sealed class SpriteIconCache
     {
         var pixels = _textures.TryGetSpriteTexture(name);
         return pixels == null ? null : ImageTexture.CreateFromImage(pixels.ToGodotImage());
+    }
+
+    /// <summary>
+    /// The 2D map view's own real rotation-aware lookup - resolves
+    /// (once per <paramref name="representativeSpriteName"/>, then reuses
+    /// the same table on every later call, including from a different
+    /// <paramref name="angleIndex"/>) the real 8-slot rotation table via
+    /// <see cref="TextureSet.ResolveSpriteRotations"/>, then decodes
+    /// (or reuses an already-decoded) icon for whichever lump that angle
+    /// slot names - multiple rotation slots commonly share the exact same
+    /// lump (Doom's real mirrored-pair convention), so this shares
+    /// <see cref="GetOrDecodeSpriteIcon"/>'s own <c>_icons</c> cache rather
+    /// than decoding per-slot. <paramref name="angleIndex"/> is 0-7
+    /// (rotation digit 1-8), matching <see cref="TextureSet.ResolveSpriteRotations"/>'s
+    /// own indexing exactly - callers never need to add 1.
+    /// </summary>
+    public (ImageTexture Icon, bool Mirror) GetOrDecodeRotationFrame(string representativeSpriteName, int angleIndex)
+    {
+        if (_textures == null || string.IsNullOrEmpty(representativeSpriteName)) return (null, false);
+
+        if (!_rotationTables.TryGetValue(representativeSpriteName, out var table))
+        {
+            table = _textures.ResolveSpriteRotations(representativeSpriteName);
+            _rotationTables[representativeSpriteName] = table;
+        }
+
+        var slot = table[Math.Clamp(angleIndex, 0, 7)];
+        return (GetOrDecodeSpriteIcon(slot.LumpName), slot.Mirror);
     }
 }

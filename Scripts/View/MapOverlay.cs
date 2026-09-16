@@ -136,8 +136,6 @@ public partial class MapOverlay : Control
 	/// </summary>
 	public bool MarqueeSelectTouching { get; set; }
 
-	private Texture2D _thingIcon;
-	private Texture2D _thingIconNoDirection;
 
 	/// <summary>
 	/// The persistent on/off state (matches UDB's toolbar checkbox, which
@@ -274,12 +272,6 @@ public partial class MapOverlay : Control
 
 	private MapVector2 SnapIfEnabled(MapVector2 position) =>
 		EffectiveSnap ? GridSnapper.Snap(position, GridSize) : position;
-
-	public override void _Ready()
-	{
-		_thingIcon = GD.Load<Texture2D>("res://Assets/Icons/icon_thing.svg");
-		_thingIconNoDirection = GD.Load<Texture2D>("res://Assets/Icons/icon_thing_nodir.svg");
-	}
 
 	public override void _Process(double delta)
 	{
@@ -902,52 +894,207 @@ public partial class MapOverlay : Control
 		}
 	}
 
+	/// <summary>Inset between the square's own edge and the real sprite drawn inside it - matches UDB's own real small fixed inset (<c>THING_SPRITE_SHRINK</c>), not zero, so the sprite never visually merges into the square's own border.</summary>
+	private const float ThingSpriteInsetPixels = 2f;
+
+	/// <summary>The Thing square's own corner radius - a DoomArchitect-specific softening UDB's own real square icon doesn't have, kept small (and scaled down further for a genuinely tiny square via the <c>screenRadius * 0.3f</c> cap at its own call site) so it still reads as "a square," not a rounded pill.</summary>
+	private const float ThingSquareCornerRadiusPixels = 3f;
+
+	/// <summary>The shaft's own visible length, as a multiple of the square's own half-size - a fixed reach beyond wherever <see cref="DrawThingArrow"/> determines the square's own true edge to be along the facing direction, so the shaft reads the same length whether the thing faces a side or a corner.</summary>
+	private const float ThingArrowShaftLengthMultiplier = 0.35f;
+
+	/// <summary>Small gap between the square's own true edge (see <see cref="DrawThingArrow"/>'s own <c>edgeDistance</c> calculation) and where the shaft actually starts, as a multiple of the square's own half-size - keeps the shaft from visually touching the square's own border.</summary>
+	private const float ThingArrowGapMultiplier = 0.08f;
+
+	/// <summary>The V-shaped arrowhead wings' own length, as a multiple of the square's own half-size - independent of the (now short) shaft length so the wings stay a readable size regardless.</summary>
+	private const float ThingArrowHeadLengthMultiplier = 0.3f;
+
+	/// <summary>The V-shaped arrowhead's own half-angle - wider than a typical arrowhead so the two wings read clearly even at this small a size.</summary>
+	private const float ThingArrowHeadAngleDegrees = 35f;
+
 	/// <summary>
 	/// Sized in world space (scaling with zoom) rather than the fixed
 	/// screen-pixel size <see cref="DrawVertices"/> uses - a thing's
 	/// radius is a real map-unit footprint, worth showing at its actual
-	/// relative scale. Rotated to the thing's own <see cref="Thing.Angle"/>
-	/// via <see cref="DrawSetTransform"/> rather than the front-indicator-
-	/// tick approach linedefs use, since the icon's direction is baked
-	/// into its own art (a notch cut out of the circle) rather than drawn
-	/// as a separate line.
+	/// relative scale. Ported from UDB's own real
+	/// <c>Renderer2D.RenderThingsBatch</c> (verified directly, not
+	/// guessed): a square, not a circle - "things are square in Doom" -
+	/// sized to the type's own real radius; the actual decoded sprite
+	/// drawn on top at its own native colors and aspect ratio (never
+	/// rotated to <see cref="Thing.Angle"/> - a Doom sprite's own facing is
+	/// baked into *which rotation frame* is shown, resolved live per-thing
+	/// via <see cref="SpriteIconCache.GetOrDecodeRotationFrame"/>/
+	/// <see cref="Core.Textures.TextureSet.ResolveSpriteRotations"/>, not
+	/// by rotating a fixed image); a small separate arrow only for a type
+	/// that actually has a meaningful facing (<see cref="ThingTypeInfo.ShowsDirection"/>),
+	/// rotated to <see cref="Thing.Angle"/> since it's the one element that
+	/// genuinely needs to point somewhere. Unlike UDB's own bundled
+	/// <c>ThingTexture2D.png</c> atlas art, the square here is a plain flat
+	/// fill - this project's own original choice of exactly how to draw
+	/// "a square", not a claim about matching UDB's own bundled pixels.
+	/// </summary>
+	/// <summary>
+	/// The hovered thing is drawn in its own separate pass, after every
+	/// other thing, so it's always on top regardless of where it happens
+	/// to sit in <see cref="MapData.Things"/>'s own list order (which
+	/// otherwise decides paint order outright - later in the list draws
+	/// over earlier, no other sorting at all) - matches UDB's own real
+	/// <c>Renderer2D.RenderThingsBatch</c>, confirmed directly: its own
+	/// main pass explicitly skips <c>t.Highlighted</c>
+	/// (<c>if(!fixedcolor &amp;&amp; t.Highlighted) continue;</c>) and
+	/// renders it separately afterward for the exact same reason - two
+	/// overlapping things at similar screen positions should never let
+	/// list order hide the one actually being pointed at.
 	/// </summary>
 	private void DrawThings()
 	{
-		if (_thingIcon == null) return;
-
 		var alpha = Mode == EditMode.Things ? 1f : InactiveModeAlpha;
+		var hovered = Mode == EditMode.Things ? _hoveredThing : null;
 
 		foreach (var thing in Map.Things)
 		{
-			var info = GameConfiguration?.GetThingType(thing.Type);
-			var radius = info?.Radius ?? ThingMeshBuilder.FallbackRadius;
-			var screenRadius = WorldSizeToScreenPixels(radius);
-			var diameter = screenRadius * 2f;
-
-			// A type that doesn't actually rotate in gameplay (most
-			// pickups/decorations) gets the plain ring icon instead of
-			// the directional notch one - showing a facing indicator for
-			// something with no meaningful facing is actively misleading,
-			// not just unnecessary detail. Unrecognized types keep the
-			// directional icon, matching this project's existing "assume
-			// nothing" default from before per-type data existed.
-			var icon = info is { ShowsDirection: false } ? _thingIconNoDirection : _thingIcon;
-			// Hovered/dragged swaps the category tint for HoverColor
-			// outright, the same treatment vertices/linedefs already use,
-			// rather than a new visual language just for Things.
-			var isHighlighted = Mode == EditMode.Things && thing == _hoveredThing;
-			var tint = isHighlighted ? HoverColor
-				: thing.IsSelected ? SelectedColor
-				: ThingCategoryColors.Get(info?.ColorIndex ?? 0);
-
-			var center = Project(thing.Position);
-			var rotation = -Mathf.DegToRad(thing.Angle);
-
-			DrawSetTransform(center, rotation, Vector2.One);
-			DrawTextureRect(icon, new Rect2(-screenRadius, -screenRadius, diameter, diameter), false, new Color(tint, alpha));
-			DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+			if (thing == hovered) continue;
+			DrawThing(thing, alpha, isHighlighted: false);
 		}
+
+		if (hovered != null) DrawThing(hovered, alpha, isHighlighted: true);
+	}
+
+	private void DrawThing(Thing thing, float alpha, bool isHighlighted)
+	{
+		var info = GameConfiguration?.GetThingType(thing.Type);
+		var radius = info?.Radius ?? ThingMeshBuilder.FallbackRadius;
+		var screenRadius = WorldSizeToScreenPixels(radius);
+		var diameter = screenRadius * 2f;
+
+		// Hovered/dragged swaps the category tint for HoverColor
+		// outright, the same treatment vertices/linedefs already use,
+		// rather than a new visual language just for Things.
+		var tint = isHighlighted ? HoverColor
+			: thing.IsSelected ? SelectedColor
+			: ThingCategoryColors.Get(info?.ColorIndex ?? 0);
+
+		var center = Project(thing.Position);
+		var square = new Rect2(center - new Vector2(screenRadius, screenRadius), new Vector2(diameter, diameter));
+
+		DrawRoundedRect(square, Mathf.Min(ThingSquareCornerRadiusPixels, screenRadius * 0.3f), new Color(tint, alpha));
+		DrawThingSprite(thing, info, square, alpha);
+
+		// A type that doesn't actually rotate in gameplay (most
+		// pickups/decorations) gets no arrow at all - showing a facing
+		// indicator for something with no meaningful facing is
+		// actively misleading, not just unnecessary detail. Unrecognized
+		// types keep the arrow, matching this project's existing "assume
+		// nothing" default from before per-type data existed.
+		if (info is not { ShowsDirection: false }) DrawThingArrow(thing, center, screenRadius, alpha);
+	}
+
+	/// <summary>
+	/// UDB's own real per-angle rotation-frame selection
+	/// (<c>General.ClampAngle(-t.AngleDoom + 270) / 45</c>, verified
+	/// directly against <c>Renderer2D.RenderThingsBatch</c>) - two things
+	/// of the identical type facing different directions genuinely show
+	/// different decoded sprite frames, not the same image rotated. Drawn
+	/// at its own real aspect ratio (never stretched to fill the square)
+	/// and native colors (never tinted by the category color, matching
+	/// UDB's own real behavior) - a missing/undecoded sprite simply
+	/// leaves the plain colored square with no overlay, same "still
+	/// renders something, just less detail" fallback this project's own
+	/// texture previews already use elsewhere.
+	/// </summary>
+	private void DrawThingSprite(Thing thing, ThingTypeInfo info, Rect2 square, float alpha)
+	{
+		if (SpriteIconCache == null || string.IsNullOrEmpty(info?.SpriteName)) return;
+
+		var angleIndex = (((-thing.Angle + 270) % 360) + 360) % 360 / 45;
+		var (icon, mirror) = SpriteIconCache.GetOrDecodeRotationFrame(info.SpriteName, angleIndex);
+		if (icon == null) return;
+
+		var bounds = square.Grow(-ThingSpriteInsetPixels);
+		if (bounds.Size.X <= 0f || bounds.Size.Y <= 0f) return;
+
+		var iconSize = icon.GetSize();
+		var scale = bounds.Size.X / Mathf.Max(iconSize.X, iconSize.Y);
+		var drawSize = iconSize * scale;
+
+		DrawSetTransform(bounds.GetCenter(), 0f, new Vector2(mirror ? -1f : 1f, 1f));
+		DrawTextureRect(icon, new Rect2(-drawSize / 2f, drawSize), false, new Color(1f, 1f, 1f, alpha));
+		DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
+	}
+
+	/// <summary>Stroke width for <see cref="DrawThingArrow"/>'s own stick-figure lines - thin on purpose, not a filled/outlined shape at all.</summary>
+	private const float ThingArrowLineWidth = 1f;
+	private const float ThingArrowOutlineWidth = 3f;
+
+	/// <summary>
+	/// A thin "stick" arrow (a shaft plus a two-line V-shaped head, no fill
+	/// and no closed outline shape at all) pointing in
+	/// <see cref="Thing.Angle"/>'s own facing direction - UDB's own real
+	/// arrow is a separate element drawn in addition to (not instead of)
+	/// the rotation-aware sprite, confirmed directly against
+	/// <c>Renderer2D.CreateThingArrowVerts</c>. The stick shape itself,
+	/// and its exact geometry, are DoomArchitect-specific choices, not
+	/// UDB's own real ones: a filled triangle sat on top of the sprite and
+	/// hid whatever was underneath instead of just pointing at it, and a
+	/// shaft starting at the thing's own center ran back across the
+	/// sprite too - the shaft now starts just past the square's own true
+	/// edge along the facing direction (see this method's own
+	/// <c>edgeDistance</c>/<see cref="ThingArrowGapMultiplier"/>) and
+	/// reaches only a short, fixed way further out regardless of that
+	/// direction (<see cref="ThingArrowShaftLengthMultiplier"/>), with
+	/// wider wings (<see cref="ThingArrowHeadAngleDegrees"/>) than a
+	/// typical arrowhead so they stay readable at this small a size.
+	///
+	/// Colored white-on-black (a wider black pass first, a thinner white
+	/// pass on top of the exact same lines) rather than one flat color -
+	/// verified directly against UDB's own real
+	/// <c>CreateThingArrowVerts</c>, whose own vertex color is packed
+	/// opaque white (<c>verts[offset].c = -1</c>), drawn from an icon atlas
+	/// whose own art already bakes in a black outline for contrast against
+	/// any background; reproduced here as an actual two-pass outlined
+	/// stroke instead, since this project draws the arrow as plain
+	/// geometry rather than a textured atlas sprite. Plain white alone (or
+	/// plain black alone, tried first) reads poorly against whichever half
+	/// of the map view happens to share that same tone - the outline keeps
+	/// it visible against both. Never the category/hover/selection tint the
+	/// square uses - it only ever needs to read as "a facing indicator,"
+	/// not carry any of that state itself.
+	/// </summary>
+	private void DrawThingArrow(Thing thing, Vector2 center, float screenRadius, float alpha)
+	{
+		var facingAngle = -Mathf.DegToRad(thing.Angle);
+
+		// The square isn't a circle, so its own true edge distance from
+		// center varies with direction - farther out at a corner (up to
+		// screenRadius * sqrt(2)) than at a side (exactly screenRadius).
+		// Using a fixed radial distance here (an earlier version of this
+		// method did) put the shaft's own start point outside the square
+		// when facing a side but inside it when facing a corner - this is
+		// the standard "distance from center to a square's own boundary
+		// along a given direction" formula instead, so the shaft starts
+		// just past the real edge regardless of which way the thing faces.
+		var edgeDistance = screenRadius / Mathf.Max(Mathf.Abs(Mathf.Cos(facingAngle)), Mathf.Abs(Mathf.Sin(facingAngle)));
+		var startDistance = edgeDistance + screenRadius * ThingArrowGapMultiplier;
+		var tipDistance = startDistance + screenRadius * ThingArrowShaftLengthMultiplier;
+
+		var shaftStart = new Vector2(startDistance, 0f);
+		var tip = new Vector2(tipDistance, 0f);
+		var headLength = screenRadius * ThingArrowHeadLengthMultiplier;
+		var headAngle = Mathf.DegToRad(ThingArrowHeadAngleDegrees);
+
+		var headLeft = tip - new Vector2(headLength * Mathf.Cos(headAngle), headLength * Mathf.Sin(headAngle));
+		var headRight = tip - new Vector2(headLength * Mathf.Cos(headAngle), -headLength * Mathf.Sin(headAngle));
+
+		DrawSetTransform(center, facingAngle, Vector2.One);
+
+		foreach (var (color, width) in new[] { (new Color(Colors.Black, alpha), ThingArrowOutlineWidth), (new Color(Colors.White, alpha), ThingArrowLineWidth) })
+		{
+			DrawLine(shaftStart, tip, color, width, true);
+			DrawLine(tip, headLeft, color, width, true);
+			DrawLine(tip, headRight, color, width, true);
+		}
+
+		DrawSetTransform(Vector2.Zero, 0f, Vector2.One);
 	}
 
 	/// <summary>
@@ -982,6 +1129,49 @@ public partial class MapOverlay : Control
 
 	private void DrawWorldLine(MapVector2 from, MapVector2 to, Color color, float width = 1f) =>
 		DrawLine(Project(from), Project(to), color, width);
+
+	/// <summary>
+	/// Godot's own <see cref="CanvasItem.DrawRect"/> has no corner-radius
+	/// parameter at all (that only exists on <see cref="StyleBoxFlat"/>,
+	/// a <c>Control</c> theming resource, not an immediate-mode draw call)
+	/// - built by hand instead, as a filled polygon: each corner's own
+	/// quarter-circle arc (<paramref name="segmentsPerCorner"/> straight
+	/// segments each - a handful is already smooth at this small an icon
+	/// size, no need for a high segment count) traced in order around the
+	/// rect, connected corner-to-corner by the straight edges implicitly
+	/// (a polygon closes on its own between its last and first point, so
+	/// the edges themselves need no separate points beyond each arc's own
+	/// start/end).
+	/// </summary>
+	private void DrawRoundedRect(Rect2 rect, float radius, Color color, int segmentsPerCorner = 4)
+	{
+		radius = Mathf.Max(0f, Mathf.Min(radius, Mathf.Min(rect.Size.X, rect.Size.Y) / 2f));
+		if (radius <= 0.01f)
+		{
+			DrawRect(rect, color);
+			return;
+		}
+
+		var corners = new (Vector2 Center, float StartAngle)[]
+		{
+			(rect.Position + new Vector2(radius, radius), Mathf.Pi),
+			(rect.Position + new Vector2(rect.Size.X - radius, radius), -Mathf.Pi / 2f),
+			(rect.Position + rect.Size - new Vector2(radius, radius), 0f),
+			(rect.Position + new Vector2(radius, rect.Size.Y - radius), Mathf.Pi / 2f),
+		};
+
+		var points = new List<Vector2>((segmentsPerCorner + 1) * corners.Length);
+		foreach (var (cornerCenter, startAngle) in corners)
+		{
+			for (var i = 0; i <= segmentsPerCorner; i++)
+			{
+				var angle = startAngle + Mathf.Pi / 2f * (i / (float)segmentsPerCorner);
+				points.Add(cornerCenter + new Vector2(Mathf.Cos(angle), Mathf.Sin(angle)) * radius);
+			}
+		}
+
+		DrawColoredPolygon(points.ToArray(), color);
+	}
 
 	private Vector2 Project(MapVector2 doomPosition) => Camera.UnprojectPosition(doomPosition.ToWorld(0f));
 

@@ -248,6 +248,69 @@ public sealed class TextureSet
         return image;
     }
 
+    /// <summary>
+    /// Resolves the real Doom sprite-rotation naming convention (a public,
+    /// objective engine fact - not UDB's own creative content, the same
+    /// kind of safe-to-implement-directly fact as a UDMF field name) into an
+    /// 8-entry table, one per viewing angle (index 0 = rotation digit 1,
+    /// index 7 = rotation digit 8 - matching UDB's own real
+    /// <c>ThingTypeInfo.SpriteFrame</c> array indexing exactly, verified
+    /// directly against its own <c>SetupSpriteFrame</c>/render-time
+    /// <c>info.SpriteFrame[spriteangle]</c> lookup). <paramref name="representativeSpriteName"/>
+    /// is a game-configuration thing-type's own stored <c>sprite</c> value
+    /// (e.g. <c>"TROOA2A8"</c>) - only its first 5 characters (actor code +
+    /// frame letter, e.g. <c>"TROOA"</c>) matter here; the specific
+    /// rotation digit(s) already baked into that one representative string
+    /// are irrelevant since every other real rotation lump sharing that
+    /// same actor+frame prefix is enumerated directly from the loaded
+    /// resources. A lump named <c>base + "0"</c> (e.g. <c>"TROOA0"</c>)
+    /// means "this frame doesn't rotate at all" - every slot resolves to
+    /// it. An 8-character lump (<c>base + digit + frame + digit</c>, e.g.
+    /// <c>"TROOA2A8"</c>) is Doom's real mirrored-pair optimization: the
+    /// same drawn image serves two opposite rotations, one of them
+    /// horizontally flipped - <see cref="SpriteRotationFrame.Mirror"/>
+    /// flags exactly which. A rotation with no lump at all falls back to
+    /// <paramref name="representativeSpriteName"/> itself (never a null
+    /// entry), matching this project's own established "always resolve to
+    /// something renderable" convention.
+    /// </summary>
+    public IReadOnlyList<SpriteRotationFrame> ResolveSpriteRotations(string representativeSpriteName)
+    {
+        var slots = new SpriteRotationFrame?[8];
+
+        if (representativeSpriteName.Length >= 5)
+        {
+            var basePrefix = representativeSpriteName[..5];
+            var frameLetter = representativeSpriteName[4];
+
+            _spriteRange ??= _resources.FindNamespaceLumps(ResourceNamespace.Sprites);
+            foreach (var lump in _spriteRange)
+            {
+                if (lump.Name.Length is not (6 or 8)) continue;
+                if (!lump.Name.StartsWith(basePrefix, StringComparison.OrdinalIgnoreCase)) continue;
+
+                var rotation1 = lump.Name[5];
+                if (rotation1 == '0')
+                {
+                    for (var i = 0; i < 8; i++) slots[i] ??= new SpriteRotationFrame(lump.Name, Mirror: false);
+                    continue;
+                }
+
+                if (rotation1 is >= '1' and <= '8') slots[rotation1 - '1'] ??= new SpriteRotationFrame(lump.Name, Mirror: false);
+
+                if (lump.Name.Length != 8) continue;
+                var frameLetter2 = lump.Name[6];
+                var rotation2 = lump.Name[7];
+                if (char.ToUpperInvariant(frameLetter2) != char.ToUpperInvariant(frameLetter)) continue;
+                if (rotation2 is >= '1' and <= '8') slots[rotation2 - '1'] ??= new SpriteRotationFrame(lump.Name, Mirror: true);
+            }
+        }
+
+        for (var i = 0; i < 8; i++) slots[i] ??= new SpriteRotationFrame(representativeSpriteName, Mirror: false);
+
+        return slots!;
+    }
+
     private PixelImage? ResolvePatchByName(string name)
     {
         var lump = _resources.FindLump(name);
@@ -291,3 +354,6 @@ public sealed class TextureSet
         return stream.ToArray();
     }
 }
+
+/// <summary>One resolved rotation slot from <see cref="TextureSet.ResolveSpriteRotations"/> - the real sprite lump to show for that viewing angle, and whether it needs to be drawn horizontally flipped (Doom's real mirrored-rotation-pair convention).</summary>
+public sealed record SpriteRotationFrame(string LumpName, bool Mirror);
