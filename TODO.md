@@ -1714,21 +1714,114 @@ file just tracks what's built and what's next.
       sector lighting is already done, see above), shader effects,
       anything that leans on Godot's own renderer being live in the 2D
       view too
+- [ ] Saving maps - `UdmfWriter` (`Core.IO`) is fully built and tested
+      (see the Map I/O section above) but has exactly zero callers outside
+      `UdmfWriterTests` - no "Save"/"Save As" menu item exists at all
+      (`MainMenuBar`'s File menu has only "Open Map...") and `WadFile` is
+      read-only (no `Write`/lump-replacement capability, no `WadWriter`
+      class anywhere in `Core.IO`). `MapData` also has no document-level
+      "unsaved changes" concept yet - only the per-element `NeedsRebuild`/
+      `NeedsUpdate` render-cache flags, which aren't the same thing and
+      get cleared every frame regardless of whether anything was actually
+      saved. Needs, in rough order: a `WadWriter` (or a real WAD's own
+      lump-splice-in-place capability) to actually get `UdmfWriter`'s
+      output back into a `.wad` file; a document-dirty flag/event
+      `UndoStack` can drive (every `Execute`/`Record` marks dirty, a save
+      clears it); the actual File menu items.
+- [ ] Creating new maps - no "New Map" item exists in `MainMenuBar`/
+      `OpenMapMenu` either. `MapData`'s own parameterless constructor
+      already produces a fully valid empty map (empty vertex/linedef/
+      sector/thing lists) - `new MapData()` works today, it's just never
+      called from the App layer outside tests. Most of the real work is
+      already built and reusable: `OpenMapMenu.ShowMapOptionsDialog`/
+      `MapOptionsDialog`/`PopulateMapOptionsDialogDefaults` already do the
+      "pick a game configuration + resources, confirm" step a New Map
+      flow needs (UDB's own New Map wizard is the same shape) - a New Map
+      path would branch at the point `OnMapOptionsConfirmed` currently
+      calls `WadFile.Read`/the UDMF or classic reader, calling
+      `new MapData()` instead and skipping straight to firing
+      `MapLoaded`. What's missing: any "which WAD (new or existing) and
+      what map-lump name" picker - `MapSelectDialog` only ever picks
+      *among* a WAD's existing maps, nothing today lets a user name a
+      fresh one - and this also depends on the "Saving maps" entry above
+      existing at all, since a newly created map is unsaved by definition.
+- [ ] Drawing mode (UDB's real "Draw Lines" mode - click to place new
+      vertices, closing a loop auto-builds a sector on the enclosed side)
+      - doesn't exist in any form yet. `EditMode` only has the 4
+      selection modes (Vertices/Linedefs/Sectors/Things); every
+      `MapOverlay.Handle*Input` method is exhaustively select/marquee/
+      drag-existing-elements, with no branch anywhere that creates a new
+      vertex or linedef by clicking into empty space.
+      `Core.Geometry.SectorTracer.Trace` looks like it should be
+      reusable for this but isn't quite: it walks a sector's own already-
+      assigned sidedefs to reconstruct boundary loops (used today for
+      marquee hit-testing/hover-fill), which needs sidedefs/sectors to
+      already exist - it doesn't detect closed loops among bare
+      unassigned linedefs or decide what new sector(s) to create on each
+      side of a freshly closed loop. That loop-closing/sector-creation
+      step (UDB's own real `SectorBuilder`/draw-mode logic) has no
+      counterpart in Core at all yet - this is a real, code-verified gap,
+      not just "needs a new EditMode," and its own research/design pass
+      is worth doing before starting, the same way the property dialogs
+      and thing-type catalog each got one.
+- [ ] Adding things - no way to place a *new* Thing exists yet, only
+      select/move/edit already-loaded ones. `MapData.CreateThing(Vector2,
+      int)` is already public (not private/internal - only ever actually
+      called from `UdmfReader` during map loading and from Core tests)
+      and `MapOverlay.HandleThingInput` already has an established
+      click-to-select/right-drag-to-move shape to extend, but there's no
+      click-into-empty-space-to-create branch, and no undo command at all
+      for creating (or deleting) any element of any kind yet - `Core.Undo`
+      only has `MoveVertexCommand`/`MoveThingCommand`/`SetFieldCommand`/
+      `SetPropertyCommand`/`CommandGroup`, so an undoable "place Thing"
+      needs a new `ICommand` (a real, small, well-scoped one - the
+      pattern's already established by `MoveThingCommand`). Worth doing
+      before "Drawing mode" above, or at least before general element-
+      creation/deletion commands get generalized off it, since it's the
+      simplest of the two "create a new element" gaps (a single point, no
+      loop-closing/sector-building step).
 
 ## Known concerns
 
-- [ ] `Scripts/View/MapOverlay.cs` is ~500 lines and growing, mixing four
-      distinct concerns: drawing (grid/vertices/linedefs/sector fill),
-      per-mode input/drag handling, camera projection math (`Unproject`/
-      `Project`/`ViewportBounds`/zoom), and grid math. Not a problem yet,
-      but flagged as a god-object-in-the-making - noted 2026-09-04 rather
-      than fixed, since the user doesn't mind it yet. Natural split when
-      it's addressed: separate classes composed by `MapOverlay` along
-      those seams (e.g. a per-mode input handler set, a camera-math
-      helper), not partial classes - partials hide the size without
-      actually decoupling responsibilities. Revisit once Things/property-
-      editing UI adds another mode's worth of code, or sooner if it
-      starts being painful to navigate
+- [x] `Scripts/View/MapOverlay.cs` god-object cleanup - flagged
+      2026-09-04 at ~500 lines; revisited 2026-09-16 once it had grown to
+      1181, well past the "revisit once it starts being painful to
+      navigate" trigger (the Thing-rendering work alone added ~260 lines
+      to it). Split into 9 files, as separate composed classes (not
+      partials, per this entry's own original guidance):
+      `MapOverlayCamera` (projection math), `MapOverlayGrid` (background
+      grid), `MarqueeSelector` (the shared left-button marquee state
+      machine every mode drives), `MapOverlayColors` (the hover/selection
+      tints all four element types use identically), and one handler per
+      element type - `VertexOverlayHandler`/`LinedefOverlayHandler`/
+      `SectorOverlayHandler`/`ThingOverlayHandler` - each owning that
+      type's own hit-testing, input, and drawing. Split by element type
+      rather than input-vs-drawing, since that's the axis the file's own
+      growth actually followed (the Thing work never touched Vertex/
+      Linedef/Sector code, and "drawing mode"/"adding things" - both now
+      on the open list above - will cut the same way).
+      **Went further than a pure file-move**: reading all four modes' own
+      original `Handle*Input` methods side by side confirmed they were a
+      genuinely identical skeleton (left-click select/marquee, right-
+      click drag, matching UDB's own real button split), differing only
+      in which `MapData` query/undo command/optional double-click event
+      to use - collapsed into one generic `ElementOverlayHandler<TSelectable,TDraggable>`
+      engine (two type parameters since a linedef/sector has no position
+      of its own and drags its own *vertices* instead of itself, unlike
+      Vertex/Thing), with each per-element handler supplying the real
+      differences as constructor delegates. `MapOverlay` itself is now a
+      ~260-line thin orchestrator (constructs the pieces, dispatches
+      `_UnhandledInput`/`_Draw` to them). One real bug fixed along the
+      way: found two orphaned, unattached `<summary>` doc-comment blocks
+      left behind by an earlier `DrawThings`/`DrawThing` split, re-merged
+      onto the method they actually describe. One real risk caught before
+      it shipped: originally constructed the new pieces in `_Ready()`,
+      but `MapView`'s own `_Ready()` assigns straight into
+      `MapOverlay.Camera` with no guaranteed ordering between the two (not
+      a parent-child relationship) - moved construction into `MapOverlay`'s
+      own constructor (field initializers) instead, so every property
+      setter is safe from the very first frame regardless of Godot's own
+      node-ready order.
 
 ## Process
 
