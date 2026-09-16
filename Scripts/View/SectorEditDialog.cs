@@ -42,11 +42,16 @@ using Godot;
 /// simplifications, not fidelity gaps in what's actually editable. Every
 /// section header is a real <see cref="GroupBox"/> (a titled, bordered
 /// section box), not a bare <see cref="Label"/>. Floor/Ceiling Texture
-/// each pair a plain <see cref="LineEdit"/> with an inline clickable
-/// thumbnail (<see cref="TextureButton"/>) that opens
-/// <see cref="TextureBrowserDialog"/> - matching UDB's real
-/// <c>ImageSelectorControl</c> (typing a name and clicking the preview
-/// both work, and the preview updates live either way). The Surfaces tab
+/// each use a <see cref="TexturePreviewEdit"/> - a real, reusable port of
+/// UDB's actual <c>ImageSelectorControl</c> shape (preview stacked above
+/// the plain name field, a floating corner label showing the decoded
+/// texture's own real pixel dimensions) shared with
+/// <see cref="LinedefEditDialog"/>'s own Front/Back texture pickers -
+/// an earlier pass modeled this as a horizontal label+small-preview+field
+/// row instead, from a screenshot rather than the real control's own real
+/// layout, corrected once checked directly (typing a name and clicking
+/// the preview both work, and the preview updates live either way,
+/// exactly like the real control). The Surfaces tab
 /// mirrors UDB's real per-surface layout (two group boxes, "Ceiling" then
 /// "Floor" - verified against <c>SectorEditFormUDMF.Designer.cs</c>, not
 /// assumed to be Properties-adjacent) with the real UDMF texture offset
@@ -104,10 +109,8 @@ public partial class SectorEditDialog : AcceptDialog
 	private StepperLineEdit _ceilingHeightEdit;
 	private StepperLineEdit _heightOffsetEdit;
 	private Label _sectorHeightValue;
-	private LineEdit _floorTextureEdit;
-	private LineEdit _ceilingTextureEdit;
-	private TextureButton _floorTexturePreview;
-	private TextureButton _ceilingTexturePreview;
+	private TexturePreviewEdit _floorTexture;
+	private TexturePreviewEdit _ceilingTexture;
 	private StepperLineEdit _floorOffsetXEdit;
 	private StepperLineEdit _floorOffsetYEdit;
 	private StepperLineEdit _ceilingOffsetXEdit;
@@ -165,14 +168,8 @@ public partial class SectorEditDialog : AcceptDialog
 		_ceilingHeightEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/CeilingHeightRow/CeilingHeightEdit");
 		_heightOffsetEdit = GetNode<StepperLineEdit>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/HeightOffsetRow/HeightOffsetEdit");
 		_sectorHeightValue = GetNode<Label>("Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox/Content/SectorHeightRow/SectorHeightValue");
-		_floorTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow/FloorTextureEdit");
-		_ceilingTextureEdit = GetNode<LineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow/CeilingTextureEdit");
-		_floorTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/TextureRow/FloorTexturePreview");
-		_ceilingTexturePreview = GetNode<TextureButton>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/TextureRow/CeilingTexturePreview");
-		_floorTexturePreview.Resized += () => KeepSquare(_floorTexturePreview);
-		_ceilingTexturePreview.Resized += () => KeepSquare(_ceilingTexturePreview);
-		WireHoverHighlight(_floorTexturePreview);
-		WireHoverHighlight(_ceilingTexturePreview);
+		_floorTexture = GetNode<TexturePreviewEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/FloorTexturePreviewEdit");
+		_ceilingTexture = GetNode<TexturePreviewEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/CeilingTexturePreviewEdit");
 		_floorOffsetXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow/FloorOffsetXEdit");
 		_floorOffsetYEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/FloorBox/Content/OffsetRow/FloorOffsetYEdit");
 		_ceilingOffsetXEdit = GetNode<StepperLineEdit>("Container/Tabs/Surfaces/VBoxContainer/SurfacesRow/CeilingBox/Content/OffsetRow/CeilingOffsetXEdit");
@@ -204,18 +201,18 @@ public partial class SectorEditDialog : AcceptDialog
 		_ceilingHeightEdit.TextChanged += _ => RecomputeHeights();
 		_heightOffsetEdit.TextChanged += _ => RecomputeHeights();
 		_brightnessEdit.TextChanged += text => ApplyRealTimeNumber(text, s => s.Brightness, (s, v) => s.Brightness = (int)Math.Round(v));
-		_floorTextureEdit.TextChanged += text =>
+		_floorTexture.TextChanged += text =>
 		{
 			ApplyRealTimeTexture(text, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
-			UpdateTexturePreview(_floorTexturePreview, text);
+			UpdateTexturePreview(_floorTexture, text);
 		};
-		_ceilingTextureEdit.TextChanged += text =>
+		_ceilingTexture.TextChanged += text =>
 		{
 			ApplyRealTimeTexture(text, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
-			UpdateTexturePreview(_ceilingTexturePreview, text);
+			UpdateTexturePreview(_ceilingTexture, text);
 		};
-		_floorTexturePreview.Pressed += () => BrowseTexture(_floorTextureEdit, _floorTexturePreview, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
-		_ceilingTexturePreview.Pressed += () => BrowseTexture(_ceilingTextureEdit, _ceilingTexturePreview, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
+		_floorTexture.PreviewPressed += () => BrowseTexture(_floorTexture, s => s.FloorTexture, (s, v) => s.FloorTexture = v);
+		_ceilingTexture.PreviewPressed += () => BrowseTexture(_ceilingTexture, s => s.CeilingTexture, (s, v) => s.CeilingTexture = v);
 		_specialEdit.TextChanged += _ => UpdateSpecialNameLabel();
 		_specialBrowseButton.Pressed += BrowseSpecial;
 		_floorLightAbsoluteCheck.Toggled += _ => _floorLightAbsoluteTouched = true;
@@ -237,8 +234,8 @@ public partial class SectorEditDialog : AcceptDialog
 	{
 		if (!Visible) return;
 
-		UpdateTexturePreview(_floorTexturePreview, _floorTextureEdit.Text);
-		UpdateTexturePreview(_ceilingTexturePreview, _ceilingTextureEdit.Text);
+		UpdateTexturePreview(_floorTexture, _floorTexture.Text);
+		UpdateTexturePreview(_ceilingTexture, _ceilingTexture.Text);
 	}
 
 	/// <summary>
@@ -304,8 +301,8 @@ public partial class SectorEditDialog : AcceptDialog
 		_floorHeightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorHeight));
 		_ceilingHeightEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingHeight));
 		_heightOffsetEdit.Text = "0"; // always transient/UI-only - never reflects a stored value, see this class's own remarks
-		_floorTextureEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorTexture));
-		_ceilingTextureEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingTexture));
+		_floorTexture.Text = SharedOrBlank(_snapshots.Values.Select(s => s.FloorTexture));
+		_ceilingTexture.Text = SharedOrBlank(_snapshots.Values.Select(s => s.CeilingTexture));
 		_damageTypeEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => s.DamageType));
 		_damageAmountEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.DamageAmount));
 		_damageIntervalEdit.Text = SharedOrBlank(_snapshots.Values.Select(s => (double)s.DamageInterval));
@@ -336,8 +333,8 @@ public partial class SectorEditDialog : AcceptDialog
 
 		RebuildFlagsCheckboxes(flagKeys);
 		UpdateSpecialNameLabel();
-		UpdateTexturePreview(_floorTexturePreview, _floorTextureEdit.Text);
-		UpdateTexturePreview(_ceilingTexturePreview, _ceilingTextureEdit.Text);
+		UpdateTexturePreview(_floorTexture, _floorTexture.Text);
+		UpdateTexturePreview(_ceilingTexture, _ceilingTexture.Text);
 		UpdateSectorHeight();
 	}
 
@@ -509,21 +506,21 @@ public partial class SectorEditDialog : AcceptDialog
 	/// flats, never wall textures) - the click target is the thumbnail
 	/// itself, matching UDB's real <c>ImageSelectorControl</c> (its inline
 	/// preview image is what you click to browse, not a separate button).
-	/// Setting <see cref="LineEdit.Text"/> directly doesn't raise
+	/// Setting <see cref="TexturePreviewEdit.Text"/> directly doesn't raise
 	/// <c>TextChanged</c> (a plain Godot behavior already relied on
 	/// elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s own silent
 	/// setter) - so the callback also calls <see cref="ApplyRealTimeTexture"/>
 	/// and <see cref="UpdateTexturePreview"/> itself, exactly reproducing
 	/// what typing the name by hand would have done.
 	/// </summary>
-	private void BrowseTexture(LineEdit edit, TextureButton preview, Func<Snapshot, string> original, Action<Sector, string> setter)
+	private void BrowseTexture(TexturePreviewEdit control, Func<Snapshot, string> original, Action<Sector, string> setter)
 	{
 		_textureBrowserDialog ??= CreateTextureBrowserDialog();
-		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: true, edit.Text, name =>
+		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: true, control.Text, name =>
 		{
-			edit.Text = name;
+			control.Text = name;
 			ApplyRealTimeTexture(name, original, setter);
-			UpdateTexturePreview(preview, name);
+			UpdateTexturePreview(control, name);
 		});
 	}
 
@@ -559,7 +556,8 @@ public partial class SectorEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// Blank/mixed text shows the shared <see cref="PlaceholderIcon"/>.
+	/// Blank/mixed text shows the shared placeholder (handled by
+	/// <see cref="TexturePreviewEdit"/> itself for a null texture).
 	/// Otherwise uses <see cref="TextureIconCache.GetOrDecodeFlatIcon"/> -
 	/// deliberately the eager variant, not just a read of whatever the
 	/// ambient warm cache already has: this dialog only ever needs at most
@@ -568,39 +566,14 @@ public partial class SectorEditDialog : AcceptDialog
 	/// own namespace-scanned seeding might never have enumerated at all
 	/// (see that method's remarks) - exactly the case of an existing
 	/// sector's own already-set texture never showing a thumbnail
-	/// otherwise.
+	/// otherwise. Placeholder-fallback/hover/square-aspect are all owned
+	/// by <see cref="TexturePreviewEdit"/> itself now - this only ever
+	/// decides *which* texture to hand it.
 	/// </summary>
-	private void UpdateTexturePreview(TextureButton preview, string text)
+	private void UpdateTexturePreview(TexturePreviewEdit control, string text)
 	{
 		var trimmed = text.Trim();
-		preview.TextureNormal = trimmed.Length == 0 ? PlaceholderIcon.Instance : _textureIconCache?.GetOrDecodeFlatIcon(trimmed) ?? PlaceholderIcon.Instance;
-	}
-
-	/// <summary>
-	/// Godot's container layout has no built-in "stay square while filling
-	/// available width" - <c>size_flags_horizontal = Fill|Expand</c> (set
-	/// in the scene) makes the button claim its column's full width, but
-	/// nothing makes its height follow along. Reacting to <see cref="Control.Resized"/>
-	/// and pinning <see cref="Control.CustomMinimumSize"/>'s height to
-	/// match the current width keeps it square at whatever size the
-	/// surrounding layout actually gives it - stable rather than
-	/// oscillating, since changing a preview's height here never changes
-	/// its own or any sibling's width in this vertical stack.
-	/// </summary>
-	private static void KeepSquare(TextureButton preview)
-	{
-		var width = preview.Size.X;
-		if (width > 0 && !Mathf.IsEqualApprox(preview.CustomMinimumSize.Y, width))
-		{
-			preview.CustomMinimumSize = new Vector2(preview.CustomMinimumSize.X, width);
-		}
-	}
-
-	/// <summary>A pointing-hand cursor (set in the scene, <c>MouseDefaultCursorShape</c>) plus a slight brighten on hover - both together signal "clickable" without needing a custom hover texture, which a decoded texture preview doesn't have one of.</summary>
-	private static void WireHoverHighlight(TextureButton preview)
-	{
-		preview.MouseEntered += () => preview.Modulate = new Color(1.3f, 1.3f, 1.3f);
-		preview.MouseExited += () => preview.Modulate = Colors.White;
+		control.SetPreviewTexture(trimmed.Length == 0 ? null : _textureIconCache?.GetOrDecodeFlatIcon(trimmed));
 	}
 
 	private void UpdateSpecialNameLabel()

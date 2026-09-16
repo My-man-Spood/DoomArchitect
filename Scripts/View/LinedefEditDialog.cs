@@ -22,17 +22,39 @@ using Godot;
 /// **The dynamic argument system** (verified against
 /// <c>LinedefEditFormUDMF.ArgumentsControl</c>, not guessed): a *fixed* 5
 /// argument rows (never dynamically added/removed) - each row pairs a
-/// <see cref="Label"/> with *both* a <see cref="StepperLineEdit"/> (plain
-/// numeric) and an <see cref="OptionButton"/> (enum dropdown), toggling
-/// which is <see cref="Control.Visible"/> based on whether the currently
-/// typed action's <see cref="LinedefArgumentInfo.EnumOptions"/> is set -
-/// this project's own established "always-present, toggle Visible" idiom
-/// (e.g. <see cref="MapTagsEditor"/>'s Remove button) rather than
-/// literally adding/removing controls. An unused slot (the action's own
-/// <c>argN</c> block doesn't exist in the <c>.cfg</c>) shows a generic
-/// disabled "Argument N" placeholder, matching UDB's real behavior of
-/// never hiding a slot outright. Recomputed on <see cref="_actionEdit"/>'s
-/// own <c>TextChanged</c>, mirroring how <see cref="SectorEditDialog"/>'s
+/// clickable label (<see cref="ArgRow.LabelButton"/>) with *both* a
+/// <see cref="StepperLineEdit"/> (plain numeric) and an
+/// <see cref="OptionButton"/> (enum dropdown), toggling which is
+/// <see cref="Control.Visible"/> - this project's own established
+/// "always-present, toggle Visible" idiom (e.g. <see cref="MapTagsEditor"/>'s
+/// Remove button) rather than literally adding/removing controls. Default
+/// view is decided by whether the currently typed action's
+/// <see cref="LinedefArgumentInfo.EnumOptions"/> is set; clicking the
+/// label manually flips it (see <see cref="ToggleArgView"/>), a deliberate
+/// adaptation of UDB's real <c>ArgumentBox</c> - UDB's own real control is
+/// a single WinForms *editable* combo box (<c>ComboBoxStyle.DropDown</c>),
+/// so typing any raw integer always works even for an enum-backed
+/// argument (confirmed directly in <c>ArgumentBox.cs</c>/
+/// <c>EnumOptionHandler.cs</c> - an unrecognized typed value just becomes
+/// a synthesized one-off enum entry showing that raw number). Godot has no
+/// equivalent editable-combo control, so this project reproduces the same
+/// end capability (type any exact number, even for an enum-backed arg)
+/// via two separate purpose-built controls and a manual switch between
+/// them instead of one hybrid control - same real capability, different
+/// control shape for this project's stack, flagged here per this
+/// project's own "UDB is the north star" convention rather than left
+/// silent. The label is only clickable when the argument actually has
+/// enum options at all (<see cref="ArgRow.LabelButton"/>'s own
+/// <c>Disabled</c> state); manually toggling resets back to the default
+/// enum view whenever the action itself changes (<see cref="UpdateActionUi"/>
+/// unconditionally re-derives both controls' <c>Visible</c> state every
+/// time it runs), since a different action's own arg slot is a genuinely
+/// different argument, not a continuation of whatever view the user had
+/// picked before. An unused slot (the action's own <c>argN</c> block
+/// doesn't exist in the <c>.cfg</c>) shows a generic disabled "Argument N"
+/// placeholder, matching UDB's real behavior of never hiding a slot
+/// outright. Recomputed on <see cref="_actionEdit"/>'s own
+/// <c>TextChanged</c>, mirroring how <see cref="SectorEditDialog"/>'s
 /// <c>_specialEdit.TextChanged</c> already drives
 /// <c>UpdateSpecialNameLabel</c>. A blank/unparsable/mixed-across-
 /// selection action field falls back to all 5 slots showing the generic
@@ -56,9 +78,10 @@ using Godot;
 /// real-time, like Sector's own height/texture fields - plus the shared,
 /// non-per-part <c>light</c>/<c>lightabsolute</c> pair, OK-only) and three
 /// per-texture-part groups (Upper/Middle/Lower), each with a real-time
-/// texture picker (reusing <see cref="TextureBrowserDialog"/> in wall
-/// mode, exactly like <see cref="SectorEditDialog"/>'s own flat-mode
-/// usage) plus OK-only per-part offset/scale/light-override fields -
+/// <see cref="TexturePreviewEdit"/> (reusing <see cref="TextureBrowserDialog"/>
+/// in wall mode, exactly like <see cref="SectorEditDialog"/>'s own flat-mode
+/// usage of the same shared control) plus OK-only per-part offset/scale/
+/// light-override fields -
 /// <see cref="PartDefs"/> is the single source of truth for the real,
 /// genuinely distinct UDMF field-name suffixes (<c>_top</c>/<c>_mid</c>/
 /// <c>_bottom</c>) backing those three groups, verified directly against
@@ -89,14 +112,14 @@ public partial class LinedefEditDialog : AcceptDialog
 		IReadOnlyDictionary<string, bool> Flags, IReadOnlyDictionary<string, bool> Activations,
 		SideSnapshot Front, SideSnapshot Back);
 
-	private sealed record ArgRow(Label Label, StepperLineEdit NumberEdit, OptionButton EnumEdit);
+	private sealed record ArgRow(Button LabelButton, StepperLineEdit NumberEdit, OptionButton EnumEdit);
 
 	private sealed record PartSnapshot(double OffsetX, double OffsetY, double ScaleX, double ScaleY, long Light, bool LightAbsolute);
 
 	private sealed record SideSnapshot(int SectorIndex, int OffsetX, int OffsetY, long Light, bool LightAbsolute, string[] Textures, PartSnapshot[] Parts);
 
 	private sealed record PartControls(
-		TextureButton Preview, LineEdit TextureEdit, StepperLineEdit OffsetXEdit, StepperLineEdit OffsetYEdit,
+		TexturePreviewEdit Texture, StepperLineEdit OffsetXEdit, StepperLineEdit OffsetYEdit,
 		StepperLineEdit ScaleXEdit, StepperLineEdit ScaleYEdit, StepperLineEdit LightEdit, CheckBox LightAbsoluteCheck);
 
 	private sealed record SideControls(
@@ -167,9 +190,9 @@ public partial class LinedefEditDialog : AcceptDialog
 		_argRows = new ArgRow[5];
 		for (var i = 0; i < 5; i++)
 		{
-			var rowPath = $"Container/Tabs/Properties/VboxContainer/ActionBox/Content/Arg{i}Row";
+			var rowPath = $"Container/Tabs/Properties/VboxContainer/ActionBox/Content/ArgsGrid/Arg{i}Row";
 			_argRows[i] = new ArgRow(
-				GetNode<Label>($"{rowPath}/ArgLabel"),
+				GetNode<Button>($"{rowPath}/ArgLabel"),
 				GetNode<StepperLineEdit>($"{rowPath}/ArgNumberEdit"),
 				GetNode<OptionButton>($"{rowPath}/ArgEnumEdit"));
 		}
@@ -190,6 +213,20 @@ public partial class LinedefEditDialog : AcceptDialog
 			var slot = i;
 			_argRows[slot].NumberEdit.TextChanged += _ => _touchedArgs.Add(slot);
 			_argRows[slot].EnumEdit.ItemSelected += _ => _touchedArgs.Add(slot);
+			_argRows[slot].LabelButton.Pressed += () => ToggleArgView(slot);
+
+			// Godot's own theme-default "disabled" font color (used here purely
+			// to block clicks on a non-toggleable label, not to signal "this
+			// argument is invalid") reads far too dim to comfortably read a
+			// perfectly normal, in-use argument's own title - override it to a
+			// gentler dim than the theme default. Needs enough contrast against
+			// the fully-bright, actually-clickable case to still read as "not
+			// interactive" at a glance (0.85 turned out too close to full
+			// brightness for that), while staying well short of the theme
+			// default's much heavier dimming - distinct from (and stacking
+			// under) the separate Modulate-based dimming UpdateActionUi already
+			// applies for a genuinely *unused* slot.
+			_argRows[slot].LabelButton.AddThemeColorOverride("font_disabled_color", new Color(1, 1, 1, 0.6f));
 		}
 
 		WireSide(_front, l => l.Front, s => s.Front);
@@ -210,7 +247,7 @@ public partial class LinedefEditDialog : AcceptDialog
 		{
 			foreach (var part in controls.Parts)
 			{
-				UpdateTexturePreview(part.Preview, part.TextureEdit.Text);
+				UpdateTexturePreview(part.Texture, part.Texture.Text);
 			}
 		}
 	}
@@ -221,7 +258,7 @@ public partial class LinedefEditDialog : AcceptDialog
 	private SideControls LoadSideControls(string side)
 	{
 		var general = $"Container/Tabs/{side}/VBoxContainer/GeneralBox/Content";
-		var controls = new SideControls(
+		return new SideControls(
 			GetNode<Control>($"Container/Tabs/{side}"),
 			GetNode<Label>($"{general}/SectorRow/{side}SectorValueLabel"),
 			GetNode<StepperLineEdit>($"{general}/OffsetRow/{side}OffsetXEdit"),
@@ -229,14 +266,6 @@ public partial class LinedefEditDialog : AcceptDialog
 			GetNode<StepperLineEdit>($"{general}/LightRow/{side}LightEdit"),
 			GetNode<CheckBox>($"{general}/LightRow/{side}LightAbsoluteCheck"),
 			PartDefs.Select(def => LoadPartControls(side, def.BoxSuffix, def.FieldPrefix)).ToArray());
-
-		foreach (var part in controls.Parts)
-		{
-			part.Preview.Resized += () => KeepSquare(part.Preview);
-			WireHoverHighlight(part.Preview);
-		}
-
-		return controls;
 	}
 
 	private PartControls LoadPartControls(string side, string boxSuffix, string fieldPrefix)
@@ -244,8 +273,7 @@ public partial class LinedefEditDialog : AcceptDialog
 		var content = $"Container/Tabs/{side}/VBoxContainer/PartsRow/{side}{boxSuffix}Box/Content";
 		var prefix = $"{side}{fieldPrefix}";
 		return new PartControls(
-			GetNode<TextureButton>($"{content}/TextureRow/{prefix}TexturePreview"),
-			GetNode<LineEdit>($"{content}/TextureRow/{prefix}TextureEdit"),
+			GetNode<TexturePreviewEdit>($"{content}/{prefix}TexturePreviewEdit"),
 			GetNode<StepperLineEdit>($"{content}/OffsetRow/{prefix}OffsetXEdit"),
 			GetNode<StepperLineEdit>($"{content}/OffsetRow/{prefix}OffsetYEdit"),
 			GetNode<StepperLineEdit>($"{content}/ScaleRow/{prefix}ScaleXEdit"),
@@ -266,12 +294,12 @@ public partial class LinedefEditDialog : AcceptDialog
 			var part = controls.Parts[i];
 			var partIndex = i;
 
-			part.TextureEdit.TextChanged += text =>
+			part.Texture.TextChanged += text =>
 			{
 				ApplyRealTimeSideTexture(getSide, getSnapshot, partIndex, text);
-				UpdateTexturePreview(part.Preview, text);
+				UpdateTexturePreview(part.Texture, text);
 			};
-			part.Preview.Pressed += () => BrowseSideTexture(getSide, getSnapshot, part, partIndex);
+			part.Texture.PreviewPressed += () => BrowseSideTexture(getSide, getSnapshot, part, partIndex);
 			part.LightAbsoluteCheck.Toggled += _ => _touchedCheckBoxes.Add(part.LightAbsoluteCheck);
 		}
 	}
@@ -387,9 +415,9 @@ public partial class LinedefEditDialog : AcceptDialog
 			var partIndex = i;
 
 			_suppressLiveApply = true;
-			part.TextureEdit.Text = SharedOrBlank(sideSnapshots.Select(s => s.Textures[partIndex]));
+			part.Texture.Text = SharedOrBlank(sideSnapshots.Select(s => s.Textures[partIndex]));
 			_suppressLiveApply = false;
-			UpdateTexturePreview(part.Preview, part.TextureEdit.Text);
+			UpdateTexturePreview(part.Texture, part.Texture.Text);
 
 			part.OffsetXEdit.Text = SharedOrBlank(sideSnapshots.Select(s => s.Parts[partIndex].OffsetX));
 			part.OffsetYEdit.Text = SharedOrBlank(sideSnapshots.Select(s => s.Parts[partIndex].OffsetY));
@@ -411,8 +439,7 @@ public partial class LinedefEditDialog : AcceptDialog
 
 		foreach (var part in controls.Parts)
 		{
-			part.TextureEdit.Editable = enabled;
-			part.Preview.Disabled = !enabled;
+			part.Texture.Editable = enabled;
 			part.OffsetXEdit.Editable = enabled;
 			part.OffsetYEdit.Editable = enabled;
 			part.ScaleXEdit.Editable = enabled;
@@ -466,11 +493,11 @@ public partial class LinedefEditDialog : AcceptDialog
 	private void BrowseSideTexture(Func<Linedef, Sidedef> getSide, Func<Snapshot, SideSnapshot> getSnapshot, PartControls part, int partIndex)
 	{
 		_textureBrowserDialog ??= CreateTextureBrowserDialog();
-		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: false, part.TextureEdit.Text, name =>
+		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: false, part.Texture.Text, name =>
 		{
-			part.TextureEdit.Text = name;
+			part.Texture.Text = name;
 			ApplyRealTimeSideTexture(getSide, getSnapshot, partIndex, name);
-			UpdateTexturePreview(part.Preview, name);
+			UpdateTexturePreview(part.Texture, name);
 		});
 	}
 
@@ -481,27 +508,11 @@ public partial class LinedefEditDialog : AcceptDialog
 		return dialog;
 	}
 
-	/// <summary>Wall-mode counterpart to <see cref="SectorEditDialog.UpdateTexturePreview"/> - uses <see cref="TextureIconCache.GetOrDecodeWallIcon"/> since every sidedef texture part is a wall texture, never a flat.</summary>
-	private void UpdateTexturePreview(TextureButton preview, string text)
+	/// <summary>Wall-mode counterpart to <see cref="SectorEditDialog.UpdateTexturePreview"/> - uses <see cref="TextureIconCache.GetOrDecodeWallIcon"/> since every sidedef texture part is a wall texture, never a flat. Decoding/placeholder-fallback/hover/square-aspect are all now owned by <see cref="TexturePreviewEdit"/> itself - this only ever decides *which* texture to hand it.</summary>
+	private void UpdateTexturePreview(TexturePreviewEdit control, string text)
 	{
 		var trimmed = text.Trim();
-		preview.TextureNormal = trimmed.Length == 0 ? PlaceholderIcon.Instance : _textureIconCache?.GetOrDecodeWallIcon(trimmed) ?? PlaceholderIcon.Instance;
-	}
-
-	/// <summary>Identical reasoning to <see cref="SectorEditDialog.KeepSquare"/> - Godot has no built-in "stay square while filling available width."</summary>
-	private static void KeepSquare(TextureButton preview)
-	{
-		var width = preview.Size.X;
-		if (width > 0 && !Mathf.IsEqualApprox(preview.CustomMinimumSize.Y, width))
-		{
-			preview.CustomMinimumSize = new Vector2(preview.CustomMinimumSize.X, width);
-		}
-	}
-
-	private static void WireHoverHighlight(TextureButton preview)
-	{
-		preview.MouseEntered += () => preview.Modulate = new Color(1.3f, 1.3f, 1.3f);
-		preview.MouseExited += () => preview.Modulate = Colors.White;
+		control.SetPreviewTexture(trimmed.Length == 0 ? null : _textureIconCache?.GetOrDecodeWallIcon(trimmed));
 	}
 
 	/// <summary>
@@ -526,8 +537,10 @@ public partial class LinedefEditDialog : AcceptDialog
 			var row = _argRows[i];
 			var isEnum = info.EnumOptions != null;
 
-			row.Label.Text = info.Title;
-			row.Label.Modulate = info.Used ? Colors.White : new Color(1, 1, 1, 0.5f);
+			row.LabelButton.Text = info.Title;
+			row.LabelButton.Modulate = info.Used ? Colors.White : new Color(1, 1, 1, 0.5f);
+			row.LabelButton.Disabled = !isEnum;
+			row.LabelButton.MouseDefaultCursorShape = isEnum ? Control.CursorShape.PointingHand : Control.CursorShape.Arrow;
 			row.NumberEdit.Visible = !isEnum;
 			row.EnumEdit.Visible = isEnum;
 			row.NumberEdit.Editable = info.Used;
@@ -587,10 +600,81 @@ public partial class LinedefEditDialog : AcceptDialog
 		}
 	}
 
+	/// <summary>
+	/// Manually flips one argument row between its numeric and enum view -
+	/// see this class's own remarks for why this exists at all (Godot has
+	/// no editable-combo-box equivalent to UDB's real <c>ArgumentBox</c>).
+	/// A no-op when the argument has no enum options to toggle to at all
+	/// (<see cref="ArgRow.LabelButton"/> is disabled in that case, so this
+	/// should never actually fire then, but the plain-numeric-only guard
+	/// stays here too as a direct safety net). Carries the value across
+	/// the switch rather than resetting it: enum-to-number copies the
+	/// exact currently-selected value (blank if nothing's selected, i.e.
+	/// a mixed/blank multi-select state - never a fabricated zero);
+	/// number-to-enum snaps to the *nearest* real enum value rather than
+	/// requiring an exact match, since the whole point of allowing a typed
+	/// number is that it may not be one of the named options.
+	/// </summary>
+	private void ToggleArgView(int slot)
+	{
+		var info = _currentArgInfos[slot];
+		if (info.EnumOptions == null) return;
+
+		var row = _argRows[slot];
+		if (row.EnumEdit.Visible)
+		{
+			var selected = row.EnumEdit.Selected;
+			row.NumberEdit.Text = selected >= 0 ? row.EnumEdit.GetItemMetadata(selected).AsInt64().ToString(CultureInfo.InvariantCulture) : "";
+			row.NumberEdit.Visible = true;
+			row.EnumEdit.Visible = false;
+		}
+		else
+		{
+			var typed = NumericFieldExpression.Resolve(row.NumberEdit.Text, 0.0);
+			if (typed.HasValue)
+			{
+				var nearestIndex = FindNearestEnumIndex(row.EnumEdit, (long)Math.Round(typed.Value));
+				if (nearestIndex >= 0) row.EnumEdit.Selected = nearestIndex;
+			}
+
+			row.EnumEdit.Visible = true;
+			row.NumberEdit.Visible = false;
+		}
+	}
+
+	private static int FindNearestEnumIndex(OptionButton enumEdit, long value)
+	{
+		var bestIndex = -1;
+		var bestDistance = long.MaxValue;
+
+		for (var idx = 0; idx < enumEdit.ItemCount; idx++)
+		{
+			var distance = Math.Abs(enumEdit.GetItemMetadata(idx).AsInt64() - value);
+			if (distance >= bestDistance) continue;
+
+			bestDistance = distance;
+			bestIndex = idx;
+		}
+
+		return bestIndex;
+	}
+
+	/// <summary>
+	/// Setting <see cref="LineEdit.Text"/> directly doesn't raise
+	/// <c>TextChanged</c> (the same plain Godot behavior already relied on
+	/// elsewhere, e.g. <see cref="SectorEditDialog.BrowseTexture"/>) - so
+	/// the callback also calls <see cref="UpdateActionUi"/> itself,
+	/// exactly reproducing what typing the action number by hand would
+	/// have done (relabeling the 5 argument slots, in particular).
+	/// </summary>
 	private void BrowseAction()
 	{
 		_actionBrowserDialog ??= CreateActionBrowserDialog();
-		_actionBrowserDialog.Browse(_gameConfiguration, _actionEdit.Text, number => _actionEdit.Text = number);
+		_actionBrowserDialog.Browse(_gameConfiguration, _actionEdit.Text, number =>
+		{
+			_actionEdit.Text = number;
+			UpdateActionUi();
+		});
 	}
 
 	private LinedefActionBrowserDialog CreateActionBrowserDialog()
@@ -672,7 +756,6 @@ public partial class LinedefEditDialog : AcceptDialog
 	private void OnConfirmed()
 	{
 		var commands = new List<ICommand>();
-		var argInfos = _currentArgInfos;
 
 		foreach (var linedef in _linedefs)
 		{
@@ -689,7 +772,11 @@ public partial class LinedefEditDialog : AcceptDialog
 				var row = _argRows[i];
 				long newValue;
 
-				if (argInfos[i].EnumOptions != null)
+				// Reads whichever control is *currently visible*, not whether the
+				// argument is statically enum-capable - a manual toggle (see
+				// ToggleArgView) can put an enum-backed argument into number view,
+				// and a typed custom value there must not be silently ignored.
+				if (row.EnumEdit.Visible)
 				{
 					if (!_touchedArgs.Contains(i)) continue;
 					newValue = row.EnumEdit.GetItemMetadata(row.EnumEdit.Selected).AsInt64();

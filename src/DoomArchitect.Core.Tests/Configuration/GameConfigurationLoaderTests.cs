@@ -314,7 +314,7 @@ public class GameConfigurationLoaderTests
         Assert.Null(doorRaise.Args[0].EnumOptions);
         Assert.True(doorRaise.Args[1].Used);
         Assert.NotNull(doorRaise.Args[1].EnumOptions);
-        Assert.Contains(doorRaise.Args[1].EnumOptions!, o => o.Value == 16 && o.Title == "Slow");
+        Assert.Contains(doorRaise.Args[1].EnumOptions!, o => o.Value == 16 && o.Title == "16: Slow");
         Assert.False(doorRaise.Args[4].Used);
     }
 
