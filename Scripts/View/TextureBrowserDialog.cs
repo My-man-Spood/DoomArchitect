@@ -15,6 +15,19 @@ using Godot;
 /// confirms and closes exactly like OK - matching UDB's real interaction
 /// model precisely (verified against source, not guessed).
 ///
+/// <see cref="Browse"/>'s <c>flats</c> parameter mirrors UDB's own real
+/// fixed split (its <c>FlatSelectorControl</c> always browses flats,
+/// <c>TextureSelectorControl</c> always browses textures - a Sector's
+/// Floor/Ceiling vs. a Linedef's wall-texture fields, never varying per
+/// map). <c>mixTexturesAndFlats</c> is the separate, genuinely
+/// game-configuration-dependent axis - UDB's real <c>mixtexturesflats</c>
+/// setting (see <see cref="DoomArchitect.Core.Configuration.IGameConfiguration.MixTexturesAndFlats"/>):
+/// when true, both the flats and textures pickers additionally offer the
+/// *other* namespace's names, since GZDoom/ZDoom-family configs' own real
+/// texture manager doesn't distinguish them for either field; when false
+/// (vanilla Doom), each picker stays restricted to its own namespace,
+/// exactly as it always did before this parameter existed.
+///
 /// Never decodes anything itself - every icon comes from the ambient
 /// <see cref="TextureIconCache"/>, which starts warming the moment a map
 /// loads (see <c>MapView</c>), long before this dialog is ever opened. A
@@ -35,6 +48,7 @@ public partial class TextureBrowserDialog : AcceptDialog
 	private IReadOnlyList<NamedResource> _resources = Array.Empty<NamedResource>();
 	private TextureIconCache _icons;
 	private bool _flats;
+	private bool _mixTexturesAndFlats;
 	private Action<string> _onSelected;
 	private List<string> _displayedNames = new();
 
@@ -52,12 +66,15 @@ public partial class TextureBrowserDialog : AcceptDialog
 		Confirmed += OnConfirmed;
 	}
 
-	public void Browse(TextureSet textures, IReadOnlyList<NamedResource> resources, TextureIconCache icons, bool flats, string currentName, Action<string> onSelected)
+	public void Browse(
+		TextureSet textures, IReadOnlyList<NamedResource> resources, TextureIconCache icons,
+		bool flats, bool mixTexturesAndFlats, string currentName, Action<string> onSelected)
 	{
 		_textures = textures;
 		_resources = resources;
 		_icons = icons;
 		_flats = flats;
+		_mixTexturesAndFlats = mixTexturesAndFlats;
 		_onSelected = onSelected;
 
 		PopulateTree();
@@ -102,13 +119,19 @@ public partial class TextureBrowserDialog : AcceptDialog
 	private IReadOnlyList<string> GetBaseNames()
 	{
 		var selected = _tree.GetSelected();
-		if (selected == null || selected == _allNode)
-		{
-			return _flats ? _textures.GetFlatNames() : _textures.GetWallTextureNames();
-		}
+		var resource = selected == null || selected == _allNode ? null : _resourceByTreeItem[selected].Container;
 
-		var resource = _resourceByTreeItem[selected].Container;
-		return _flats ? _textures.GetFlatNames(resource) : _textures.GetWallTextureNames(resource);
+		var ownNames = _flats
+			? (resource == null ? _textures.GetFlatNames() : _textures.GetFlatNames(resource))
+			: (resource == null ? _textures.GetWallTextureNames() : _textures.GetWallTextureNames(resource));
+
+		if (!_mixTexturesAndFlats) return ownNames;
+
+		var otherNames = _flats
+			? (resource == null ? _textures.GetWallTextureNames() : _textures.GetWallTextureNames(resource))
+			: (resource == null ? _textures.GetFlatNames() : _textures.GetFlatNames(resource));
+
+		return ownNames.Concat(otherNames).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 	}
 
 	private void RefreshGalleryList()
@@ -127,17 +150,25 @@ public partial class TextureBrowserDialog : AcceptDialog
 		}
 	}
 
+	/// <summary>
+	/// Case-insensitive on purpose: a map's stored texture name and the
+	/// resource's own real lump/directory casing can legitimately differ
+	/// (same reasoning as <see cref="TextureIconCache"/>'s own
+	/// case-insensitive caches), and an exact-case miss here silently
+	/// leaves the current selection un-highlighted with no visible error.
+	/// </summary>
 	private void SelectName(string name)
 	{
-		var index = _displayedNames.IndexOf(name);
+		var index = _displayedNames.FindIndex(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 		if (index < 0) return;
 
 		_gallery.Select(index);
 		_gallery.EnsureCurrentIsVisible();
 	}
 
-	private ImageTexture GetIcon(string name) =>
-		(_flats ? _icons.GetFlatIcon(name) : _icons.GetWallIcon(name)) ?? PlaceholderIcon.Instance;
+	private ImageTexture ResolveIcon(string name) => _icons.GetIcon(name, preferFlat: _flats, _mixTexturesAndFlats);
+
+	private ImageTexture GetIcon(string name) => ResolveIcon(name) ?? PlaceholderIcon.Instance;
 
 	/// <summary>Re-checks every currently displayed name each frame and swaps in the real icon once the ambient <see cref="TextureIconCache"/> finishes it - this dialog never triggers decoding, only observes it.</summary>
 	public override void _Process(double delta)
@@ -146,7 +177,7 @@ public partial class TextureBrowserDialog : AcceptDialog
 
 		for (var i = 0; i < _displayedNames.Count; i++)
 		{
-			var icon = _flats ? _icons.GetFlatIcon(_displayedNames[i]) : _icons.GetWallIcon(_displayedNames[i]);
+			var icon = ResolveIcon(_displayedNames[i]);
 			if (icon != null && _gallery.GetItemIcon(i) != icon)
 			{
 				_gallery.SetItemIcon(i, icon);

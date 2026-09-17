@@ -124,6 +124,7 @@ public partial class LinedefEditDialog : AcceptDialog
 	private IReadOnlyList<Linedef> _linedefs = Array.Empty<Linedef>();
 	private Dictionary<Linedef, Snapshot> _snapshots = new();
 	private MapData _map;
+	private IGameConfiguration _gameConfiguration;
 	private UndoStack _undoStack;
 	private TextureSet _textureSet;
 	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
@@ -242,6 +243,7 @@ public partial class LinedefEditDialog : AcceptDialog
 	{
 		_linedefs = linedefs;
 		_map = map;
+		_gameConfiguration = gameConfiguration;
 		_undoStack = undoStack;
 		_onLiveChange = onLiveChange;
 		_textureSet = textureSet;
@@ -397,15 +399,23 @@ public partial class LinedefEditDialog : AcceptDialog
 		_onLiveChange?.Invoke();
 	}
 
+	/// <summary>
+	/// Wall-textures mode (real UDB's own <c>TextureSelectorControl</c>),
+	/// plus the current game configuration's own real <c>mixtexturesflats</c>
+	/// setting (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) - see
+	/// <see cref="SectorEditDialog.BrowseTexture"/>'s matching remarks.
+	/// </summary>
 	private void BrowseSideTexture(Func<Linedef, Sidedef> getSide, Func<Snapshot, SideSnapshot> getSnapshot, PartControls part, int partIndex)
 	{
 		_textureBrowserDialog ??= CreateTextureBrowserDialog();
-		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: false, part.Texture.Text, name =>
-		{
-			part.Texture.Text = name;
-			ApplyRealTimeSideTexture(getSide, getSnapshot, partIndex, name);
-			UpdateTexturePreview(part.Texture, name);
-		});
+		_textureBrowserDialog.Browse(
+			_textureSet, _namedResources, _textureIconCache, flats: false, _gameConfiguration?.MixTexturesAndFlats ?? false,
+			part.Texture.Text, name =>
+			{
+				part.Texture.Text = name;
+				ApplyRealTimeSideTexture(getSide, getSnapshot, partIndex, name);
+				UpdateTexturePreview(part.Texture, name);
+			});
 	}
 
 	private TextureBrowserDialog CreateTextureBrowserDialog()
@@ -415,11 +425,13 @@ public partial class LinedefEditDialog : AcceptDialog
 		return dialog;
 	}
 
-	/// <summary>Wall-mode counterpart to <see cref="SectorEditDialog.UpdateTexturePreview"/> - uses <see cref="TextureIconCache.GetOrDecodeWallIcon"/> since every sidedef texture part is a wall texture, never a flat. Decoding/placeholder-fallback/hover/square-aspect are all now owned by <see cref="TexturePreviewEdit"/> itself - this only ever decides *which* texture to hand it.</summary>
+	/// <summary>Wall-mode counterpart to <see cref="SectorEditDialog.UpdateTexturePreview"/> - a sidedef texture part's own native namespace is wall textures, but still honors <see cref="IGameConfiguration.MixTexturesAndFlats"/> the same way <see cref="BrowseSideTexture"/> does. Decoding/placeholder-fallback/hover/square-aspect are all now owned by <see cref="TexturePreviewEdit"/> itself - this only ever decides *which* texture to hand it.</summary>
 	private void UpdateTexturePreview(TexturePreviewEdit control, string text)
 	{
 		var trimmed = text.Trim();
-		control.SetPreviewTexture(trimmed.Length == 0 ? null : _textureIconCache?.GetOrDecodeWallIcon(trimmed));
+		control.SetPreviewTexture(trimmed.Length == 0
+			? null
+			: _textureIconCache?.GetOrDecodeIcon(trimmed, preferFlat: false, _gameConfiguration?.MixTexturesAndFlats ?? false));
 	}
 
 	/// <summary>

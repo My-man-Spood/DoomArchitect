@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Map;
@@ -21,17 +22,44 @@ public partial class MainMenuBar : MenuBar
 	private LinedefEditDialog _linedefEditDialog;
 	private ThingEditDialog _thingEditDialog;
 	private AcceptDialog _errorDialog;
+	private ConfirmationDialog _discardChangesDialog;
+
+	// Which File-menu action the discard-unsaved-changes prompt should
+	// actually perform once confirmed - set right before showing it.
+	private Action _pendingDiscardAction;
 
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
 	{
 		_openMapMenu = openMapMenu;
 		_overlay = overlay;
+		_openMapMenu.MapSaved += () => _overlay.UndoStack?.MarkSaved();
 
 		var fileMenu = GetNode<PopupMenu>("File");
-		fileMenu.AddItem("Open Map...", 0);
+		fileMenu.AddItem("New Map...", 0);
+		fileMenu.AddItem("Open Map...", 1);
+		fileMenu.AddItem("Save Map", 2);
+		fileMenu.AddItem("Save Map As...", 3);
+		fileMenu.AddItem("Save Map Into...", 4);
 		fileMenu.IdPressed += id =>
 		{
-			if (id == 0) _openMapMenu.ShowOpenFileDialog();
+			switch (id)
+			{
+				case 0:
+					RunWithDiscardConfirmationIfDirty(_openMapMenu.ShowNewMapDialog);
+					break;
+				case 1:
+					RunWithDiscardConfirmationIfDirty(_openMapMenu.ShowOpenFileDialog);
+					break;
+				case 2:
+					_openMapMenu.SaveMap();
+					break;
+				case 3:
+					_openMapMenu.SaveMapAs();
+					break;
+				case 4:
+					_openMapMenu.SaveMapInto();
+					break;
+			}
 		};
 
 		var editMenu = GetNode<PopupMenu>("Edit");
@@ -169,6 +197,39 @@ public partial class MainMenuBar : MenuBar
 	private AcceptDialog CreateErrorDialog()
 	{
 		var dialog = new AcceptDialog { Title = "Error" };
+		AddChild(dialog);
+		return dialog;
+	}
+
+	/// <summary>
+	/// Runs <paramref name="action"/> immediately if the undo stack has no
+	/// unsaved changes; otherwise asks first - matches UDB's own real
+	/// <c>AskSaveMap</c> guard on New Map/Open Map. <see cref="MapOverlay.UndoStack"/>
+	/// is null before the very first map ever loads, which reads as "not
+	/// dirty" (nothing to lose yet).
+	/// </summary>
+	private void RunWithDiscardConfirmationIfDirty(Action action)
+	{
+		if (_overlay.UndoStack?.IsDirty != true)
+		{
+			action();
+			return;
+		}
+
+		_discardChangesDialog ??= CreateDiscardChangesDialog();
+		_pendingDiscardAction = action;
+		_discardChangesDialog.PopupCentered();
+	}
+
+	private ConfirmationDialog CreateDiscardChangesDialog()
+	{
+		var dialog = new ConfirmationDialog
+		{
+			Title = "Discard Unsaved Changes?",
+			DialogText = "This map has unsaved changes. Discard them?",
+			Exclusive = false,
+		};
+		dialog.Confirmed += () => _pendingDiscardAction?.Invoke();
 		AddChild(dialog);
 		return dialog;
 	}

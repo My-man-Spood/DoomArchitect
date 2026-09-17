@@ -216,8 +216,32 @@ file_mode = 0
 access = 2
 filters = PackedStringArray("*.wad ; Doom WAD files")
 
+[node name="SaveFileDialog" type="FileDialog" parent="UI/OpenMapMenu"]
+title = "Save Map As"
+initial_position = 1
+size = Vector2i(640, 480)
+file_mode = 4
+access = 2
+filters = PackedStringArray("*.wad ; Doom WAD files")
+
+[node name="SaveIntoFileDialog" type="FileDialog" parent="UI/OpenMapMenu"]
+title = "Save Map Into"
+initial_position = 1
+size = Vector2i(640, 480)
+file_mode = 4
+access = 2
+filters = PackedStringArray("*.wad ; Doom WAD files")
+
 [node name="ErrorDialog" type="AcceptDialog" parent="UI/OpenMapMenu" unique_id=549228101]
 title = "Failed to Load Map"
+initial_position = 1
+
+[node name="OverwriteConfirmDialog" type="ConfirmationDialog" parent="UI/OpenMapMenu"]
+title = "Replace Existing Map?"
+initial_position = 1
+
+[node name="MapCollisionConfirmDialog" type="ConfirmationDialog" parent="UI/OpenMapMenu"]
+title = "Map already exists!"
 initial_position = 1
 
 [node name="StatusBar" type="Label" parent="UI" unique_id=1585943263]

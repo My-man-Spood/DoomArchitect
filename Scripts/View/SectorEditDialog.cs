@@ -502,11 +502,17 @@ public partial class SectorEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// Opens the shared texture browser in Flats mode (both fields here are
-	/// flats, never wall textures) - the click target is the thumbnail
-	/// itself, matching UDB's real <c>ImageSelectorControl</c> (its inline
-	/// preview image is what you click to browse, not a separate button).
-	/// Setting <see cref="TexturePreviewEdit.Text"/> directly doesn't raise
+	/// Opens the shared texture browser in flats mode (both fields here
+	/// are flats first - real UDB's own <c>FlatSelectorControl</c>), plus
+	/// the current game configuration's own real <c>mixtexturesflats</c>
+	/// setting (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) -
+	/// true for GZDoom/ZDoom-family configs, so the browser also offers
+	/// wall textures there, since that engine's own texture manager
+	/// doesn't distinguish them for a sector's Floor/Ceiling either - the
+	/// click target is the thumbnail itself, matching UDB's real
+	/// <c>ImageSelectorControl</c> (its inline preview image is what you
+	/// click to browse, not a separate button). Setting
+	/// <see cref="TexturePreviewEdit.Text"/> directly doesn't raise
 	/// <c>TextChanged</c> (a plain Godot behavior already relied on
 	/// elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s own silent
 	/// setter) - so the callback also calls <see cref="ApplyRealTimeTexture"/>
@@ -516,12 +522,14 @@ public partial class SectorEditDialog : AcceptDialog
 	private void BrowseTexture(TexturePreviewEdit control, Func<Snapshot, string> original, Action<Sector, string> setter)
 	{
 		_textureBrowserDialog ??= CreateTextureBrowserDialog();
-		_textureBrowserDialog.Browse(_textureSet, _namedResources, _textureIconCache, flats: true, control.Text, name =>
-		{
-			control.Text = name;
-			ApplyRealTimeTexture(name, original, setter);
-			UpdateTexturePreview(control, name);
-		});
+		_textureBrowserDialog.Browse(
+			_textureSet, _namedResources, _textureIconCache, flats: true, _gameConfiguration?.MixTexturesAndFlats ?? false,
+			control.Text, name =>
+			{
+				control.Text = name;
+				ApplyRealTimeTexture(name, original, setter);
+				UpdateTexturePreview(control, name);
+			});
 	}
 
 	private TextureBrowserDialog CreateTextureBrowserDialog()
@@ -558,22 +566,26 @@ public partial class SectorEditDialog : AcceptDialog
 	/// <summary>
 	/// Blank/mixed text shows the shared placeholder (handled by
 	/// <see cref="TexturePreviewEdit"/> itself for a null texture).
-	/// Otherwise uses <see cref="TextureIconCache.GetOrDecodeFlatIcon"/> -
+	/// Otherwise uses <see cref="TextureIconCache.GetOrDecodeIcon"/> -
 	/// deliberately the eager variant, not just a read of whatever the
 	/// ambient warm cache already has: this dialog only ever needs at most
 	/// two images at once, cheap enough to decode on the spot, unlike the
-	/// picker's full gallery. This also covers a name the ambient cache's
-	/// own namespace-scanned seeding might never have enumerated at all
-	/// (see that method's remarks) - exactly the case of an existing
-	/// sector's own already-set texture never showing a thumbnail
-	/// otherwise. Placeholder-fallback/hover/square-aspect are all owned
-	/// by <see cref="TexturePreviewEdit"/> itself now - this only ever
+	/// picker's full gallery. Honors <see cref="IGameConfiguration.MixTexturesAndFlats"/>
+	/// the same way <see cref="BrowseTexture"/> does: for a GZDoom/ZDoom-
+	/// family configuration, a sector's Floor/Ceiling can legitimately be
+	/// a wall texture, and a flat-only lookup would silently show the
+	/// placeholder for one - exactly the case of an existing sector's own
+	/// already-set texture never showing a thumbnail otherwise.
+	/// Placeholder-fallback/hover/square-aspect are all owned by
+	/// <see cref="TexturePreviewEdit"/> itself now - this only ever
 	/// decides *which* texture to hand it.
 	/// </summary>
 	private void UpdateTexturePreview(TexturePreviewEdit control, string text)
 	{
 		var trimmed = text.Trim();
-		control.SetPreviewTexture(trimmed.Length == 0 ? null : _textureIconCache?.GetOrDecodeFlatIcon(trimmed));
+		control.SetPreviewTexture(trimmed.Length == 0
+			? null
+			: _textureIconCache?.GetOrDecodeIcon(trimmed, preferFlat: true, _gameConfiguration?.MixTexturesAndFlats ?? false));
 	}
 
 	private void UpdateSpecialNameLabel()

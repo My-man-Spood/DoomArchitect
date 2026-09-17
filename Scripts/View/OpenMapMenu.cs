@@ -44,12 +44,20 @@ public partial class OpenMapMenu : PanelContainer
 	public event Action<MapData, TextureSet, IGameConfiguration, IReadOnlyList<NamedResource>> MapLoaded;
 	public event Action<TextureSet, IGameConfiguration, IReadOnlyList<NamedResource>> MapResourcesChanged;
 
+	/// <summary>Fired after a successful Save/Save As/Save Into - lets <see cref="MainMenuBar"/> mark the undo stack clean without this class needing to know about it.</summary>
+	public event Action MapSaved;
+
 	private readonly record struct MapEntry(string Name, bool IsUdmf);
 
 	private FileDialog _fileDialog;
+	private FileDialog _saveFileDialog;
+	private FileDialog _saveIntoFileDialog;
 	private AcceptDialog _errorDialog;
+	private ConfirmationDialog _overwriteConfirmDialog;
+	private ConfirmationDialog _mapCollisionConfirmDialog;
 	private MapSelectDialog _mapSelectDialog;
 	private MapOptionsDialog _mapOptionsDialog;
+	private NewMapDialog _newMapDialog;
 
 	private WadFile _pendingWad;
 	private string _pendingWadPath;
@@ -57,6 +65,8 @@ public partial class OpenMapMenu : PanelContainer
 	private string _pendingFileName;
 	private MapData _pendingMapData;
 	private string _pendingMapName;
+	private string _pendingNamespace;
+	private IReadOnlyList<UdmfBlock> _pendingUnknownBlocks;
 	private bool _isRevisitingCurrentMap;
 
 	// The map actually loaded and displayed right now - distinct from the
@@ -68,16 +78,40 @@ public partial class OpenMapMenu : PanelContainer
 	private string _currentWadPath;
 	private string _currentMapName;
 	private MapData _currentMapData;
+	private string _currentNamespace;
+	private IReadOnlyList<UdmfBlock> _currentUnknownBlocks;
+
+	// The chosen Save As destination while the "this file already exists"
+	// confirmation is showing - set by OnSaveFileSelected, consumed (and
+	// cleared) by OnOverwriteConfirmed.
+	private string _pendingSavePath;
+
+	// The chosen Save Into destination/target-file lumps while the "this
+	// file already contains a map with this name" confirmation is showing -
+	// set by OnSaveIntoFileSelected, consumed (and cleared) by
+	// OnMapCollisionConfirmed.
+	private string _pendingSaveIntoPath;
+	private IReadOnlyList<WadLump> _pendingSaveIntoOriginalLumps;
 
 	public override void _Ready()
 	{
 		_fileDialog = GetNode<FileDialog>("FileDialog");
+		_saveFileDialog = GetNode<FileDialog>("SaveFileDialog");
+		_saveIntoFileDialog = GetNode<FileDialog>("SaveIntoFileDialog");
 		_errorDialog = GetNode<AcceptDialog>("ErrorDialog");
+		_overwriteConfirmDialog = GetNode<ConfirmationDialog>("OverwriteConfirmDialog");
+		_mapCollisionConfirmDialog = GetNode<ConfirmationDialog>("MapCollisionConfirmDialog");
 		// Godot only allows one *exclusive* child window per parent window
-		// at a time - this can legitimately need to show while the Map
+		// at a time - these can legitimately need to show while the Map
 		// Options dialog (itself exclusive) is already open.
 		_errorDialog.Exclusive = false;
+		_overwriteConfirmDialog.Exclusive = false;
+		_mapCollisionConfirmDialog.Exclusive = false;
 		_fileDialog.FileSelected += OnFileSelected;
+		_saveFileDialog.FileSelected += OnSaveFileSelected;
+		_saveIntoFileDialog.FileSelected += OnSaveIntoFileSelected;
+		_overwriteConfirmDialog.Confirmed += OnOverwriteConfirmed;
+		_mapCollisionConfirmDialog.Confirmed += OnMapCollisionConfirmed;
 
 		_mapSelectDialog = GD.Load<PackedScene>("res://Scenes/UI/MapSelectDialog.tscn").Instantiate<MapSelectDialog>();
 		_mapSelectDialog.MapActivated += index =>
@@ -90,6 +124,10 @@ public partial class OpenMapMenu : PanelContainer
 		_mapOptionsDialog = GD.Load<PackedScene>("res://Scenes/UI/MapOptionsDialog.tscn").Instantiate<MapOptionsDialog>();
 		_mapOptionsDialog.Confirmed += OnMapOptionsConfirmed;
 		AddChild(_mapOptionsDialog);
+
+		_newMapDialog = GD.Load<PackedScene>("res://Scenes/UI/NewMapDialog.tscn").Instantiate<NewMapDialog>();
+		_newMapDialog.MapNameEntered += OnNewMapNameEntered;
+		AddChild(_newMapDialog);
 	}
 
 	public void ShowOpenFileDialog() => _fileDialog.PopupCentered();
@@ -147,11 +185,15 @@ public partial class OpenMapMenu : PanelContainer
 			{
 				var document = UdmfReader.Read(_pendingWad.ReadMapTextMap(map.Name));
 				_pendingMapData = document.Map;
+				_pendingNamespace = document.Namespace;
+				_pendingUnknownBlocks = document.UnknownBlocks;
 			}
 			else
 			{
 				var (mapData, _) = ClassicMapReader.Read(_pendingWad, map.Name);
 				_pendingMapData = mapData;
+				_pendingNamespace = null;
+				_pendingUnknownBlocks = null;
 			}
 
 			_pendingMapName = map.Name;
@@ -186,6 +228,29 @@ public partial class OpenMapMenu : PanelContainer
 		_isRevisitingCurrentMap = true;
 
 		ShowMapOptionsDialog(_currentMapData, _currentWadPath, _currentMapName, Path.GetFileName(_currentWadPath));
+	}
+
+	/// <summary>
+	/// Starts the New Map flow: prompts for a map-slot name first (per this
+	/// project's own scope choice - UDB itself silently defaults to
+	/// "MAP01"), then reuses the same Map Options (game config + resources)
+	/// dialog Open Map already shows, with no backing WAD/file at all - a
+	/// brand-new map exists only in memory until the first Save.
+	/// </summary>
+	public void ShowNewMapDialog() => _newMapDialog.PopupWithDefault("MAP01");
+
+	private void OnNewMapNameEntered(string mapName)
+	{
+		_pendingWad = null;
+		_pendingWadPath = null;
+		_pendingFileName = null;
+		_pendingMapData = new MapData();
+		_pendingMapName = mapName;
+		_pendingNamespace = null;
+		_pendingUnknownBlocks = null;
+		_isRevisitingCurrentMap = false;
+
+		ShowMapOptionsDialog(_pendingMapData, null, mapName, null);
 	}
 
 	private void ShowMapOptionsDialog(MapData mapData, string wadPath, string mapName, string fileNameHint)
@@ -241,11 +306,15 @@ public partial class OpenMapMenu : PanelContainer
 			{
 				var document = UdmfReader.Read(wad.ReadMapTextMap(match.Name));
 				mapData = document.Map;
+				_pendingNamespace = document.Namespace;
+				_pendingUnknownBlocks = document.UnknownBlocks;
 			}
 			else
 			{
 				var (data, _) = ClassicMapReader.Read(wad, match.Name);
 				mapData = data;
+				_pendingNamespace = null;
+				_pendingUnknownBlocks = null;
 			}
 
 			_pendingWad = wad;
@@ -270,13 +339,18 @@ public partial class OpenMapMenu : PanelContainer
 
 		var kind = _mapOptionsDialog.GetGameConfiguration();
 		var resourcePaths = _mapOptionsDialog.GetResourcePaths();
-		var resourceContainers = _mapOptionsDialog.GetResourceContainers().Append<IResourceContainer>(_pendingWad).ToList();
+		var resourceContainers = _mapOptionsDialog.GetResourceContainers().ToList();
+		// A brand-new map (New Map) has no backing WAD of its own yet to
+		// append as a resource container - nothing to add in that case.
+		if (_pendingWad != null) resourceContainers.Add(_pendingWad);
 		var textures = TextureSet.Load(new ResourceSet(resourceContainers));
 		var gameConfiguration = GameConfigurations.Get(kind);
 
 		// Paired up in the same order the containers were appended above -
-		// the map's own file (no saved path entry of its own) always last.
-		var namedResources = resourcePaths.Append(_pendingWadPath)
+		// the map's own file (no saved path entry of its own) always last,
+		// skipped entirely when there's no file yet.
+		var resourcePathsForNamedResources = _pendingWad != null ? resourcePaths.Append(_pendingWadPath) : resourcePaths;
+		var namedResources = resourcePathsForNamedResources
 			.Zip(resourceContainers, (path, container) => new NamedResource(Path.GetFileName(path), container))
 			.ToList();
 
@@ -291,15 +365,212 @@ public partial class OpenMapMenu : PanelContainer
 			_currentWadPath = _pendingWadPath;
 			_currentMapName = _pendingMapName;
 			_currentMapData = _pendingMapData;
+			_currentNamespace = _pendingNamespace ?? DefaultNamespaceFor(kind);
+			_currentUnknownBlocks = _pendingUnknownBlocks ?? Array.Empty<UdmfBlock>();
 		}
 
-		var mapSettings = MapSettingsFile.Load(_pendingWadPath).WithMapSettings(_pendingMapName, kind, resourcePaths);
-		MapSettingsFile.Save(_pendingWadPath, mapSettings);
+		// A brand-new map has no WAD path to key .dbs settings off of yet -
+		// that persistence only starts to make sense once it's been saved
+		// somewhere for the first time.
+		if (_pendingWadPath != null)
+		{
+			var mapSettings = MapSettingsFile.Load(_pendingWadPath).WithMapSettings(_pendingMapName, kind, resourcePaths);
+			MapSettingsFile.Save(_pendingWadPath, mapSettings);
+		}
 
 		var appSettings = AppSettingsFile.Load().WithDefaultResources(kind, resourcePaths);
 		AppSettingsFile.Save(appSettings);
 
 		_pendingMapData = null;
+	}
+
+	/// <summary>
+	/// The real UDMF namespace string to declare for a map that has none of
+	/// its own yet (a brand-new map, or one upgraded from classic binary
+	/// format on save) - "zdoom" for this project's one UDMF-native
+	/// configuration, "doom" (the vanilla UDMF namespace, also
+	/// <see cref="UdmfReader"/>'s own missing-namespace default) otherwise.
+	/// </summary>
+	private static string DefaultNamespaceFor(GameConfigurationKind kind) =>
+		kind == GameConfigurationKind.GZDoomDoom2UDMF ? "zdoom" : "doom";
+
+	/// <summary>
+	/// Saves the current map - reuses <see cref="_currentWadPath"/> if this
+	/// map has one already, otherwise redirects to <see cref="SaveMapAs"/>,
+	/// matching UDB's own real Save/SaveAs split exactly.
+	/// </summary>
+	public void SaveMap()
+	{
+		if (_currentMapData == null)
+		{
+			ShowError("No map is currently loaded.");
+			return;
+		}
+
+		if (_currentWadPath == null)
+		{
+			SaveMapAs();
+			return;
+		}
+
+		WriteMapToFile(_currentWadPath, _currentWad?.Lumps);
+	}
+
+	public void SaveMapAs()
+	{
+		if (_currentMapData == null)
+		{
+			ShowError("No map is currently loaded.");
+			return;
+		}
+
+		_saveFileDialog.PopupCentered();
+	}
+
+	/// <summary>
+	/// Matches UDB's own real "Save As" semantics exactly, verified
+	/// directly against its source (<c>MapManager.SaveMap</c>,
+	/// <c>SavePurpose.AsNewFile</c>): the rebuilt destination's non-map
+	/// lumps (PNAMES/TEXTURE1-2, patches, flats, anything else bundled in
+	/// the PWAD) always come from the *source* - the file the currently-
+	/// open map is already associated with (<see cref="_currentWad"/>) -
+	/// via a real <c>File.Copy(filepathname, newfilepathname, true)</c> in
+	/// UDB's own code before it ever touches the target. Whatever already
+	/// sits at the chosen destination path is irrelevant and gets fully
+	/// discarded (after this project's own single-<c>.bak</c> backup, a
+	/// simpler stand-in for UDB's real 3-level rotation) - never read,
+	/// never merged into. Contrast with <see cref="SaveMapInto"/>, UDB's
+	/// distinct, separate action for the opposite behavior (appending into
+	/// another WAD's own other maps/resources).
+	/// </summary>
+	private void OnSaveFileSelected(string path)
+	{
+		if (File.Exists(path))
+		{
+			_pendingSavePath = path;
+			_overwriteConfirmDialog.DialogText = $"'{Path.GetFileName(path)}' already exists. Overwrite it?";
+			_overwriteConfirmDialog.PopupCentered();
+			return;
+		}
+
+		WriteMapToFile(path, _currentWad?.Lumps);
+	}
+
+	private void OnOverwriteConfirmed()
+	{
+		WriteMapToFile(_pendingSavePath, _currentWad?.Lumps);
+		_pendingSavePath = null;
+	}
+
+	/// <summary>
+	/// Saves the current map into a (usually different, possibly brand-new)
+	/// WAD without touching that WAD's own other maps/resources - UDB's own
+	/// real "Save Map Into" (<c>SavePurpose.IntoFile</c>), the mirror image
+	/// of <see cref="SaveMapAs"/>: here the rebuilt destination's non-map
+	/// lumps come from the *target* file's own pre-existing content (if
+	/// any), preserved and merged into rather than discarded - so saving
+	/// into a WAD that already has other maps (or its own shared
+	/// PNAMES/TEXTURE1-2/patches/flats) leaves all of that alone, only
+	/// touching this map's own lump group. Verified directly against UDB's
+	/// source: like <see cref="SaveMapAs"/>, this still switches the
+	/// currently-open map's own file association to the target afterward
+	/// (not left pointing at the original source file) - UDB's real
+	/// <c>filepathname</c> reassignment in <c>MapManager.SaveMap</c> isn't
+	/// conditioned on <c>SavePurpose.IntoFile</c> at all, only on
+	/// <c>Testing</c>/<c>Autosave</c>, so this matches that exactly rather
+	/// than guessing a "nicer" behavior UDB doesn't actually have.
+	/// </summary>
+	public void SaveMapInto()
+	{
+		if (_currentMapData == null)
+		{
+			ShowError("No map is currently loaded.");
+			return;
+		}
+
+		_saveIntoFileDialog.PopupCentered();
+	}
+
+	/// <summary>
+	/// Warns only on a real same-map-name collision within the target,
+	/// matching UDB's own real prompt exactly ("Target file already
+	/// contains map "X" - Do you want to replace it?") - a target with no
+	/// maps at all, or with other differently-named maps, is always safe
+	/// to append into silently, no prompt at all (matches UDB's own real
+	/// <c>FindAndRemoveMap</c> short-circuit).
+	/// </summary>
+	private void OnSaveIntoFileSelected(string path)
+	{
+		IReadOnlyList<WadLump> originalLumps = null;
+
+		if (File.Exists(path))
+		{
+			WadFile existing;
+			try
+			{
+				existing = WadFile.Read(path);
+			}
+			catch (Exception ex)
+			{
+				ShowError(ex.Message);
+				return;
+			}
+
+			var alreadyHasThisMap = existing.FindUdmfMapNames().Concat(existing.FindClassicMapNames())
+				.Any(name => string.Equals(name, _currentMapName, StringComparison.OrdinalIgnoreCase));
+
+			if (alreadyHasThisMap)
+			{
+				_pendingSaveIntoPath = path;
+				_pendingSaveIntoOriginalLumps = existing.Lumps;
+				_mapCollisionConfirmDialog.DialogText =
+					$"Target file already contains map \"{_currentMapName}\"\nDo you want to replace it?";
+				_mapCollisionConfirmDialog.PopupCentered();
+				return;
+			}
+
+			originalLumps = existing.Lumps;
+		}
+
+		WriteMapToFile(path, originalLumps);
+	}
+
+	private void OnMapCollisionConfirmed()
+	{
+		WriteMapToFile(_pendingSaveIntoPath, _pendingSaveIntoOriginalLumps);
+		_pendingSaveIntoPath = null;
+		_pendingSaveIntoOriginalLumps = null;
+	}
+
+	/// <summary>
+	/// The actual on-disk write shared by Save, Save As, and Save Into: builds the
+	/// UDMF text for the current map, splices it into
+	/// <paramref name="originalLumps"/> (or starts a fresh file if null),
+	/// backs up any file it's about to overwrite, then writes the result -
+	/// only ever a full-rebuild of the target WAD, matching
+	/// <see cref="MapFileSaver"/>/<see cref="WadWriter"/>'s own real
+	/// approach (mirroring UDB's own, cited in their own source as a fix
+	/// for GitHub issue #531).
+	/// </summary>
+	private void WriteMapToFile(string path, IReadOnlyList<WadLump> originalLumps)
+	{
+		try
+		{
+			var document = new UdmfDocument(_currentMapData, _currentNamespace, _currentUnknownBlocks, Array.Empty<string>());
+			var bytes = MapFileSaver.SaveUdmfMap(originalLumps, document, _currentMapName);
+
+			if (File.Exists(path)) File.Move(path, path + ".bak", overwrite: true);
+			File.WriteAllBytes(path, bytes);
+
+			_currentWad = WadFile.Read(path);
+			_currentWadPath = path;
+
+			MapSaved?.Invoke();
+		}
+		catch (Exception ex)
+		{
+			ShowError(ex.Message);
+		}
 	}
 
 	private void ShowError(string message)

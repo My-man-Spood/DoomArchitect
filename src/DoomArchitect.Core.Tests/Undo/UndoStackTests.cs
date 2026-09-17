@@ -166,4 +166,97 @@ public class UndoStackTests
         Assert.Equal(new Vector2(0, 0), a.Position);
         Assert.Equal(new Vector2(100, 100), b.Position);
     }
+
+    [Fact]
+    public void IsDirty_OnAFreshStack_IsFalse()
+    {
+        var stack = new UndoStack();
+
+        Assert.False(stack.IsDirty);
+    }
+
+    [Fact]
+    public void IsDirty_AfterExecute_IsTrue()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+
+        Assert.True(stack.IsDirty);
+    }
+
+    [Fact]
+    public void IsDirty_AfterRecord_IsTrue()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        map.MoveVertex(vertex, new Vector2(10, 10));
+        var stack = new UndoStack();
+
+        stack.Record(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+
+        Assert.True(stack.IsDirty);
+    }
+
+    [Fact]
+    public void MarkSaved_ClearsIsDirty()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+
+        stack.MarkSaved();
+
+        Assert.False(stack.IsDirty);
+    }
+
+    [Fact]
+    public void MarkSaved_ThenFurtherEdit_IsDirtyAgain()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+        stack.MarkSaved();
+
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(10, 10), new Vector2(20, 20)));
+
+        Assert.True(stack.IsDirty);
+    }
+
+    [Fact]
+    public void Undo_BackToExactlyTheSavedVersion_ClearsIsDirtyAgain()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+        stack.MarkSaved();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(10, 10), new Vector2(20, 20)));
+        Assert.True(stack.IsDirty);
+
+        stack.Undo();
+
+        Assert.False(stack.IsDirty);
+    }
+
+    [Fact]
+    public void Redo_PastTheSavedVersion_ReDirtiesIt()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+        stack.MarkSaved();
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(10, 10), new Vector2(20, 20)));
+        stack.Undo();
+        Assert.False(stack.IsDirty);
+
+        stack.Redo();
+
+        Assert.True(stack.IsDirty);
+    }
 }

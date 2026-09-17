@@ -97,6 +97,20 @@ public interface IGameConfiguration
 
     /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones the way UDB's real damage-type combo does.</summary>
     IReadOnlyList<string> GetDamageTypes();
+
+    /// <summary>
+    /// UDB's real <c>mixtexturesflats</c> <c>.cfg</c> setting, verified
+    /// directly against its source: when true, a Sector's Floor/Ceiling
+    /// texture picker (real UDB's <c>FlatSelectorControl</c>) and a
+    /// Linedef's wall-texture picker (<c>TextureSelectorControl</c>) each
+    /// also offer the *other* namespace's names, since the engine's own
+    /// texture manager doesn't actually distinguish them for either field
+    /// - true for the ZDoom/GZDoom-family configs (inherited from
+    /// <c>ZDoom_common.cfg</c>), false for vanilla Doom (matching
+    /// <c>Doom_common.cfg</c>'s own explicit <c>false</c>, also this
+    /// setting's real default when a <c>.cfg</c> doesn't set it at all).
+    /// </summary>
+    bool MixTexturesAndFlats { get; }
 }
 
 public enum GameConfigurationKind

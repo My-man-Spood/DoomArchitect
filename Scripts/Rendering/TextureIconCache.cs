@@ -32,6 +32,21 @@ public sealed class TextureIconCache
     private readonly Dictionary<string, ImageTexture> _wallIcons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture> _flatIcons = new(StringComparer.OrdinalIgnoreCase);
     private readonly Queue<(bool IsFlat, string Name)> _pending = new();
+
+    /// <summary>
+    /// Every name <see cref="SeedAll"/> enumerated as a flat - tracked
+    /// separately from which cache a name has actually been decoded into,
+    /// since a still-pending name isn't a key in either
+    /// <see cref="_flatIcons"/>/<see cref="_wallIcons"/> yet. Backs
+    /// <see cref="IsFlat"/>, the only reliable way to tell which decode
+    /// path resolves a name whose kind isn't already known by the caller -
+    /// e.g. a sector's own Floor/Ceiling field, which GZDoom's real
+    /// unified texture manager lets reference either a flat or a
+    /// (composited or PK3-folder) wall texture, unlike classic Doom's
+    /// strict namespace separation.
+    /// </summary>
+    private readonly HashSet<string> _flatNames = new(StringComparer.OrdinalIgnoreCase);
+
     private TextureSet _textures;
 
     /// <summary>How many names were queued by the most recent <see cref="SeedAll"/> - a status display's denominator.</summary>
@@ -47,12 +62,20 @@ public sealed class TextureIconCache
         _wallIcons.Clear();
         _flatIcons.Clear();
         _pending.Clear();
+        _flatNames.Clear();
 
         foreach (var name in textures.GetWallTextureNames()) _pending.Enqueue((false, name));
-        foreach (var name in textures.GetFlatNames()) _pending.Enqueue((true, name));
+        foreach (var name in textures.GetFlatNames())
+        {
+            _pending.Enqueue((true, name));
+            _flatNames.Add(name);
+        }
 
         TotalCount = _pending.Count;
     }
+
+    /// <summary>Whether <paramref name="name"/> is enumerable as a flat (as opposed to a wall texture) - see the remarks on <see cref="_flatNames"/>.</summary>
+    public bool IsFlat(string name) => _flatNames.Contains(name);
 
     /// <summary>Decodes up to <paramref name="count"/> pending names - call once per frame from a live map's own update loop.</summary>
     public void ProcessBudget(int count)
@@ -70,6 +93,35 @@ public sealed class TextureIconCache
     public ImageTexture GetWallIcon(string name) => _wallIcons.GetValueOrDefault(name);
 
     public ImageTexture GetFlatIcon(string name) => _flatIcons.GetValueOrDefault(name);
+
+    /// <summary>
+    /// Resolves a texture-name field's icon honoring UDB's real
+    /// <c>mixtexturesflats</c> game-configuration setting (see
+    /// <see cref="DoomArchitect.Core.Configuration.IGameConfiguration.MixTexturesAndFlats"/>).
+    /// <paramref name="preferFlat"/> is the field's own fixed native
+    /// namespace (true for a Sector's Floor/Ceiling, false for a
+    /// Linedef's wall-texture parts - never varies per map/config, unlike
+    /// <paramref name="mixTexturesAndFlats"/>). When mixing is disabled
+    /// this is exactly <see cref="GetFlatIcon"/>/<see cref="GetWallIcon"/>
+    /// on the field's own namespace; when enabled, whichever namespace
+    /// actually enumerates the name wins (<see cref="IsFlat"/>) regardless
+    /// of the field's own native one - mirroring UDB's own real load-time
+    /// cross-merge of its <c>flats</c>/<c>textures</c> dictionaries when
+    /// mixing is on, where a mixed lookup no longer cares which
+    /// dictionary a name originally came from.
+    /// </summary>
+    public ImageTexture GetIcon(string name, bool preferFlat, bool mixTexturesAndFlats)
+    {
+        if (!mixTexturesAndFlats) return preferFlat ? GetFlatIcon(name) : GetWallIcon(name);
+        return IsFlat(name) ? GetFlatIcon(name) : GetWallIcon(name);
+    }
+
+    /// <summary>Like <see cref="GetIcon"/>, but decodes immediately - see <see cref="GetOrDecodeFlatIcon"/>/<see cref="GetOrDecodeWallIcon"/>'s own remarks for why that matters for a property dialog's inline preview.</summary>
+    public ImageTexture GetOrDecodeIcon(string name, bool preferFlat, bool mixTexturesAndFlats)
+    {
+        if (!mixTexturesAndFlats) return preferFlat ? GetOrDecodeFlatIcon(name) : GetOrDecodeWallIcon(name);
+        return IsFlat(name) ? GetOrDecodeFlatIcon(name) : GetOrDecodeWallIcon(name);
+    }
 
     /// <summary>
     /// Like <see cref="GetFlatIcon"/>, but decodes immediately (bypassing

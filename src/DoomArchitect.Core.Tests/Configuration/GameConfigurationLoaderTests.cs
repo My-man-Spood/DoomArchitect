@@ -264,6 +264,31 @@ public class GameConfigurationLoaderTests
         Assert.Empty(doom.GetSectorFlags());
     }
 
+    /// <summary>
+    /// Matches UDB's own real <c>Doom_common.cfg</c>, which sets
+    /// <c>mixtexturesflats = false;</c> explicitly - also this setting's
+    /// real default when a <c>.cfg</c> doesn't set it at all, so Doom2
+    /// (which doesn't set it either) gets the same false value the same way.
+    /// </summary>
+    [Theory]
+    [InlineData(GameConfigurationKind.Doom)]
+    [InlineData(GameConfigurationKind.Doom2)]
+    public void VanillaConfigs_MixTexturesAndFlats_IsFalse(GameConfigurationKind kind)
+    {
+        var configuration = GameConfigurations.Get(kind);
+
+        Assert.False(configuration.MixTexturesAndFlats);
+    }
+
+    /// <summary>Matches UDB's real <c>ZDoom_common.cfg</c> (which every GZDoom-family config includes), where <c>mixtexturesflats = true;</c>.</summary>
+    [Fact]
+    public void GZDoomDoom2UDMF_MixTexturesAndFlats_IsTrue()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        Assert.True(gzdoom.MixTexturesAndFlats);
+    }
+
     [Fact]
     public void GZDoomDoom2UDMF_GetDamageTypes_ReturnsAllTwentyRealGZDoomDamageTypes()
     {

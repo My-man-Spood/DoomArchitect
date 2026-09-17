@@ -1714,37 +1714,111 @@ file just tracks what's built and what's next.
       sector lighting is already done, see above), shader effects,
       anything that leans on Godot's own renderer being live in the 2D
       view too
-- [ ] Saving maps - `UdmfWriter` (`Core.IO`) is fully built and tested
-      (see the Map I/O section above) but has exactly zero callers outside
-      `UdmfWriterTests` - no "Save"/"Save As" menu item exists at all
-      (`MainMenuBar`'s File menu has only "Open Map...") and `WadFile` is
-      read-only (no `Write`/lump-replacement capability, no `WadWriter`
-      class anywhere in `Core.IO`). `MapData` also has no document-level
-      "unsaved changes" concept yet - only the per-element `NeedsRebuild`/
-      `NeedsUpdate` render-cache flags, which aren't the same thing and
-      get cleared every frame regardless of whether anything was actually
-      saved. Needs, in rough order: a `WadWriter` (or a real WAD's own
-      lump-splice-in-place capability) to actually get `UdmfWriter`'s
-      output back into a `.wad` file; a document-dirty flag/event
-      `UndoStack` can drive (every `Execute`/`Record` marks dirty, a save
-      clears it); the actual File menu items.
-- [ ] Creating new maps - no "New Map" item exists in `MainMenuBar`/
-      `OpenMapMenu` either. `MapData`'s own parameterless constructor
-      already produces a fully valid empty map (empty vertex/linedef/
-      sector/thing lists) - `new MapData()` works today, it's just never
-      called from the App layer outside tests. Most of the real work is
-      already built and reusable: `OpenMapMenu.ShowMapOptionsDialog`/
-      `MapOptionsDialog`/`PopulateMapOptionsDialogDefaults` already do the
-      "pick a game configuration + resources, confirm" step a New Map
-      flow needs (UDB's own New Map wizard is the same shape) - a New Map
-      path would branch at the point `OnMapOptionsConfirmed` currently
-      calls `WadFile.Read`/the UDMF or classic reader, calling
-      `new MapData()` instead and skipping straight to firing
-      `MapLoaded`. What's missing: any "which WAD (new or existing) and
-      what map-lump name" picker - `MapSelectDialog` only ever picks
-      *among* a WAD's existing maps, nothing today lets a user name a
-      fresh one - and this also depends on the "Saving maps" entry above
-      existing at all, since a newly created map is unsaved by definition.
+- [x] Saving maps / Creating new maps - done together 2026-09-16, planned
+      against UDB's own real `MapManager.SaveMap`/`General.NewMap` source
+      first (not guessed). New Core: `IO/WadWriter.cs` (mirrors
+      `WadFile.Read`'s own format exactly, always a fresh full rebuild -
+      matches UDB's own real approach, which cites GitHub issue #531 for
+      why it never patches a WAD in place) and `IO/MapFileSaver.cs`
+      (`BuildLumpsForSave`/`SaveUdmfMap`, the mirror image of
+      `MapFileLoader`) - splices a fresh `TEXTMAP` into whatever a target
+      WAD already has: replaces just `TEXTMAP` in an existing UDMF group
+      (preserving `BEHAVIOR`/`ZNODES`/etc. byte-for-byte), removes an
+      existing *classic* group wholesale and replaces it with a fresh UDMF
+      one (saving a classic-format map is a deliberate upgrade-to-UDMF,
+      since `UdmfWriter` is this project's only write path), or appends a
+      fresh group if the map isn't present at all. `Undo/UndoStack.cs`
+      gained real document-dirty tracking (`IsDirty`/`MarkSaved`) - each
+      undo-stack entry is stamped with a permanent version id (not a
+      simple counter) so undoing back to exactly the last-saved point
+      correctly reads as clean again, and redoing past it re-dirties it.
+      App layer: `OpenMapMenu.SaveMap`/`SaveMapAs`/`SaveMapInto` (Save
+      reuses the already-open file; Save As and Save Into were both
+      re-verified directly against UDB's real `MapManager.SaveMap`
+      *after* an initial wrong guess shipped and was caught by the user
+      hitting real data loss - Save As always rebuilds the destination
+      from the *source* map's own resources, discarding whatever
+      previously sat at the destination (UDB's own real
+      `SavePurpose.AsNewFile`, a literal `File.Copy` of the source before
+      ever touching the target); Save Into is the opposite, rebuilding
+      from the *target's* own pre-existing content and only touching this
+      map's own lump group, warning (UDB's own real prompt text) only on
+      an actual same-map-name collision inside the target
+      (`SavePurpose.IntoFile`) - both still switch the currently-open
+      map's own file association to the target afterward, matching UDB's
+      real `filepathname` reassignment exactly, which isn't conditioned
+      on save purpose at all), a single `.bak` rename backup before every
+      destination overwrite, and a new `MapSaved` event `MainMenuBar` uses
+      to call `UndoStack.MarkSaved()`. New `NewMapDialog` (prompts for a map-slot
+      name - per explicit user scope call, not UDB's own silent "MAP01"
+      default) feeds `OpenMapMenu.ShowNewMapDialog`, which reuses the
+      exact same Map Options (game config + resources) flow Open Map
+      already has, just with `_pendingWad == null` branches skipping the
+      WAD-as-resource-container append and `.dbs` persistence a brand-new,
+      unsaved map has nothing to key either of those on yet.
+      `MainMenuBar`'s File menu gained New Map.../Save Map/Save Map
+      As.../Save Map Into..., with New Map/Open Map gated behind a
+      "Discard unsaved changes?"
+      confirmation whenever `UndoStack.IsDirty`. A real design gap caught
+      and fixed before writing any code: preserving a loaded UDMF map's
+      own real `namespace`/unknown-blocks on save (tracked as
+      `_currentNamespace`/`_currentUnknownBlocks`, sourced from
+      `UdmfDocument` at load time, which the App layer had been silently
+      discarding down to just `MapData` until now); a map with no real
+      namespace yet (new, or upgraded from classic) defaults to `"zdoom"`
+      for this project's one UDMF-native game configuration, `"doom"`
+      otherwise (matching `UdmfReader`'s own missing-`namespace` default).
+      Test coverage: `WadWriterTests` (round-trip through the existing
+      `WadFile.Read` as oracle), `MapFileSaverTests` (all
+      `BuildLumpsForSave` branches, plus two realistic full round-trips -
+      a WAD with embedded PNAMES/TEXTURE2/patches/flats sitting alongside
+      the map's own classic and UDMF groups - decoded back through
+      `TextureSet` afterward, not just checked as raw bytes, added while
+      chasing the user-reported texture-loss bug above), `UndoStackTests`
+      additions for `IsDirty`/`MarkSaved` including the undo-to-exact-
+      saved-version and redo-past-it cases. Left explicitly out of scope:
+      UDB's real 3-level backup rotation/autosave (v1 does one `.bak`
+      rename), a real nodebuilder (`ZNODES`/`BLOCKMAP`/`REJECT` are
+      preserved-if-present, never regenerated - GZDoom rebuilds stale/
+      missing nodes at runtime), and UDB's real config-driven per-lump
+      `MapLumps` table (v1 hardcodes the known UDMF/classic lump-name sets
+      instead). Needs real manual verification in the actual Godot app -
+      open/edit/save/reopen, New Map/edit/Save As, Save Into onto both an
+      empty and an already-populated target WAD, the overwrite/collision
+      warnings, and the discard-changes prompt - none of which this
+      environment can drive itself.
+- [x] Texture browser flats/textures mixing, matching UDB's real
+      `mixtexturesflats` - done 2026-09-17. The Sector Floor/Ceiling
+      texture browser/preview only ever offered flats, and the Linedef
+      wall-texture browser/preview only ever offered wall textures - a
+      user report ("I can't find the currently-used texture in the
+      browser") traced to GZDoom's own real unified texture manager not
+      distinguishing the two for either field. First pass hardcoded
+      "sectors always show both, linedefs never do," unconditionally -
+      wrong, caught by the user asking whether it had actually been
+      checked against UDB (it hadn't). Re-verified directly against
+      `MapManager`/`DataManager`/the real `.cfg` files: UDB always keeps
+      the field-type split fixed (`FlatSelectorControl`/
+      `TextureSelectorControl`, i.e. Sector vs. Linedef, never varies) but
+      the *underlying collections* get cross-merged at load time only
+      when the active game configuration's own real `mixtexturesflats`
+      setting is true - true for the ZDoom/GZDoom-family configs
+      (inherited from `ZDoom_common.cfg`), false for vanilla Doom
+      (`Doom_common.cfg`'s own explicit `false`, also the real default
+      when a `.cfg` doesn't set it at all). New
+      `IGameConfiguration.MixTexturesAndFlats`, parsed from a real
+      `mixtexturesflats` `.cfg` key, `true` only in `GZDoomDoom2UDMF.cfg`.
+      `TextureBrowserDialog.Browse` gained an orthogonal
+      `mixTexturesAndFlats` parameter alongside its existing `flats` mode
+      bool (Sector still browses flats-first, Linedef still browses
+      textures-first - only whether the *other* namespace is also offered
+      changed); `TextureIconCache.GetIcon`/`GetOrDecodeIcon(name,
+      preferFlat, mixTexturesAndFlats)` resolve icons the same way. Also
+      fixed while there: `TextureBrowserDialog.SelectName` was an exact-
+      case `IndexOf`, silently failing to preselect/scroll to the current
+      selection on any casing mismatch between a map's stored texture
+      name and the resource's own real lump casing - now case-insensitive,
+      matching every other name lookup in this codebase.
 - [ ] Drawing mode (UDB's real "Draw Lines" mode - click to place new
       vertices, closing a loop auto-builds a sector on the enclosed side)
       - doesn't exist in any form yet. `EditMode` only has the 4

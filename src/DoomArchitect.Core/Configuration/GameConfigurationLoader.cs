@@ -26,7 +26,8 @@ public static class GameConfigurationLoader
             LoadFlagInfoDictionary(document.FindBlock("linedefflags")),
             LoadFlagInfoDictionary(document.FindBlock("linedefactivations")),
             LoadFlagInfoDictionary(document.FindBlock("thingflags")),
-            LoadDamageTypes(document));
+            LoadDamageTypes(document),
+            document.Find("mixtexturesflats")?.AsBool() ?? false);
     }
 
     private static Dictionary<int, ThingTypeInfo> LoadThingTypes(CfgBlock? thingTypes)
@@ -176,6 +177,7 @@ public static class GameConfigurationLoader
         private readonly Dictionary<string, SectorFlagInfo> _linedefActivations;
         private readonly Dictionary<string, SectorFlagInfo> _thingFlags;
         private readonly List<string> _damageTypes;
+        private readonly bool _mixTexturesAndFlats;
 
         public ParsedGameConfiguration(
             Dictionary<int, ThingTypeInfo> thingTypes,
@@ -185,7 +187,8 @@ public static class GameConfigurationLoader
             Dictionary<string, SectorFlagInfo> linedefFlags,
             Dictionary<string, SectorFlagInfo> linedefActivations,
             Dictionary<string, SectorFlagInfo> thingFlags,
-            List<string> damageTypes)
+            List<string> damageTypes,
+            bool mixTexturesAndFlats)
         {
             _thingTypes = thingTypes;
             _linedefActions = linedefActions;
@@ -195,6 +198,7 @@ public static class GameConfigurationLoader
             _linedefActivations = linedefActivations;
             _thingFlags = thingFlags;
             _damageTypes = damageTypes;
+            _mixTexturesAndFlats = mixTexturesAndFlats;
         }
 
         public ThingTypeInfo? GetThingType(int doomEdNum) => _thingTypes.GetValueOrDefault(doomEdNum);
@@ -218,5 +222,7 @@ public static class GameConfigurationLoader
         public IReadOnlyList<SectorFlagInfo> GetThingFlags() => _thingFlags.Values.ToList();
 
         public IReadOnlyList<string> GetDamageTypes() => _damageTypes;
+
+        public bool MixTexturesAndFlats => _mixTexturesAndFlats;
     }
 }
