@@ -947,4 +947,183 @@ public class MapDataTests
         Assert.Empty(map.Linedefs);
         Assert.Empty(map.Sectors);
     }
+
+    [Fact]
+    public void SplitLinedef_ShrinksTheOriginalToEndAtTheNewVertex()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, null, null);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.Same(a, linedef.Start);
+        Assert.Same(mid, linedef.End);
+        Assert.Same(mid, second.Start);
+        Assert.Same(b, second.End);
+    }
+
+    [Fact]
+    public void SplitLinedef_RewiresVertexAdjacencyCorrectly()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, null, null);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.Contains(linedef, a.Linedefs);
+        Assert.Contains(linedef, mid.Linedefs);
+        Assert.Contains(second, mid.Linedefs);
+        Assert.Contains(second, b.Linedefs);
+        Assert.DoesNotContain(linedef, b.Linedefs);
+        Assert.DoesNotContain(second, a.Linedefs);
+    }
+
+    [Fact]
+    public void SplitLinedef_DuplicatesLinedefFieldsOntoTheNewHalf()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, null, null);
+        linedef.Fields["special"] = new UniValue(UniversalType.Integer, 42L);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.Equal(42, second.Fields.GetInteger("special", 0));
+    }
+
+    [Fact]
+    public void SplitLinedef_DuplicatesBothSidedefsTexturesOffsetsAndFieldsUnchanged()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+        linedef.Front.OffsetX = 16;
+        linedef.Front.OffsetY = 8;
+        linedef.Front.Fields["light"] = new UniValue(UniversalType.Integer, 200L);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.NotNull(second.Front);
+        Assert.Equal("STARTAN2", second.Front!.MiddleTexture);
+        Assert.Equal(16, second.Front.OffsetX);
+        Assert.Equal(8, second.Front.OffsetY);
+        Assert.Equal(200, second.Front.Fields.GetInteger("light", 0));
+        Assert.Same(sector, second.Front.Sector);
+        Assert.Contains(second.Front, sector.Sidedefs);
+    }
+
+    [Fact]
+    public void SplitLinedef_OneSidedWall_LeavesTheNewHalfOneSidedToo()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.NotNull(second.Front);
+        Assert.Null(second.Back);
+    }
+
+    [Fact]
+    public void SplitLinedef_NeverTouchesThings()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, null, null);
+        var thing = map.CreateThing(new Vector2(50, 10), 1);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        map.SplitLinedef(linedef, mid);
+
+        Assert.Single(map.Things);
+        Assert.Same(thing, map.Things[0]);
+        Assert.Equal(new Vector2(50, 10), thing.Position);
+    }
+
+    [Fact]
+    public void AttachOrRetargetSidedef_NoSidedefOnThatSideYet_CreatesAFreshOneReferencingTheSector()
+    {
+        var map = new MapData();
+        var original = map.CreateSector(0, 128);
+        var target = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, original, null);
+
+        map.AttachOrRetargetSidedef(linedef, front: false, target);
+
+        Assert.NotNull(linedef.Back);
+        Assert.Same(target, linedef.Back!.Sector);
+        Assert.Contains(linedef.Back, target.Sidedefs);
+    }
+
+    [Fact]
+    public void AttachOrRetargetSidedef_MakingAOneSidedWallTwoSided_ClearsTheOppositeSidesMiddleTexture()
+    {
+        var map = new MapData();
+        var original = map.CreateSector(0, 128);
+        var target = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, original, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+
+        map.AttachOrRetargetSidedef(linedef, front: false, target);
+
+        Assert.Equal("-", linedef.Front.MiddleTexture);
+    }
+
+    [Fact]
+    public void AttachOrRetargetSidedef_AlreadyTwoSided_DoesNotTouchTheOppositeSidesMiddleTexture()
+    {
+        var map = new MapData();
+        var original = map.CreateSector(0, 128);
+        var other = map.CreateSector(0, 100);
+        var target = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, original, other);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+
+        map.AttachOrRetargetSidedef(linedef, front: false, target);
+
+        Assert.Equal("STARTAN2", linedef.Front.MiddleTexture);
+    }
+
+    [Fact]
+    public void AttachOrRetargetSidedef_SidedefAlreadyExistsOnThatSide_RePointsItInstead()
+    {
+        var map = new MapData();
+        var original = map.CreateSector(0, 128);
+        var other = map.CreateSector(0, 100);
+        var target = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, original, other);
+        var backSidedef = linedef.Back;
+
+        map.AttachOrRetargetSidedef(linedef, front: false, target);
+
+        Assert.Same(backSidedef, linedef.Back);
+        Assert.Same(target, linedef.Back!.Sector);
+        Assert.Contains(linedef.Back, target.Sidedefs);
+        Assert.DoesNotContain(backSidedef, other.Sidedefs);
+    }
 }

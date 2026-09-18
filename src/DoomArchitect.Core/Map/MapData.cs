@@ -94,6 +94,126 @@ public sealed class MapData
     public void RemoveSector(Sector sector) => _sectors.Remove(sector);
 
     /// <summary>
+    /// Inserts <paramref name="vertex"/> mid-<paramref name="linedef"/>,
+    /// mirroring UDB's real <c>Linedef.Split</c>: <paramref name="linedef"/>
+    /// shrinks in place to end at <paramref name="vertex"/>, and a brand-
+    /// new second half (from <paramref name="vertex"/> to the original
+    /// End) is returned. <paramref name="vertex"/> is assumed already
+    /// created and positioned exactly on the line - the caller's job,
+    /// matching this class's own "trusted internal invariant" style.
+    ///
+    /// Both the linedef's own <see cref="Linedef.Fields"/> and each
+    /// sidedef's textures/offsets/<see cref="UniFields"/> are duplicated
+    /// onto the new half unchanged - UDB's real <c>CopyXY</c>
+    /// <c>SplitLineBehavior</c> (one of its own real, supported modes,
+    /// just not its default <c>Interpolate</c>, which needs the split
+    /// texture's actual pixel width to recompute offsets - a lookup this
+    /// project's texture-agnostic Core layer deliberately has no access
+    /// to; see the Phase 2 plan's own remarks). Things are never touched
+    /// by a split, matching UDB's real behavior exactly.
+    /// </summary>
+    public Linedef SplitLinedef(Linedef linedef, Vertex vertex)
+    {
+        var originalEnd = linedef.End;
+        var newLinedef = new Linedef(vertex, originalEnd);
+
+        foreach (var (key, value) in linedef.Fields) newLinedef.Fields[key] = value;
+
+        if (linedef.Front != null)
+        {
+            var newSidedef = new Sidedef(linedef.Front.Sector, newLinedef);
+            CopySidedefProperties(linedef.Front, newSidedef);
+            newLinedef.Front = newSidedef;
+            linedef.Front.Sector.AddSidedef(newSidedef);
+        }
+
+        if (linedef.Back != null)
+        {
+            var newSidedef = new Sidedef(linedef.Back.Sector, newLinedef);
+            CopySidedefProperties(linedef.Back, newSidedef);
+            newLinedef.Back = newSidedef;
+            linedef.Back.Sector.AddSidedef(newSidedef);
+        }
+
+        originalEnd.RemoveLinedef(linedef);
+        originalEnd.AddLinedef(newLinedef);
+        vertex.AddLinedef(linedef);
+        vertex.AddLinedef(newLinedef);
+
+        linedef.End = vertex;
+        _linedefs.Add(newLinedef);
+
+        // The shrunk original's own wall mesh needs rebuilding to match
+        // its new, shorter length - it's an existing MeshInstance3D on
+        // the App side (no linedef *count* change to trigger a resync
+        // there), so it only gets rebuilt by the dirty-sector sweep;
+        // the new half gets its correct mesh for free when the App side
+        // notices the new Linedef and builds one from scratch.
+        if (linedef.Front != null) linedef.Front.Sector.NeedsRebuild = true;
+        if (linedef.Back != null) linedef.Back.Sector.NeedsRebuild = true;
+
+        return newLinedef;
+    }
+
+    private static void CopySidedefProperties(Sidedef from, Sidedef to)
+    {
+        to.UpperTexture = from.UpperTexture;
+        to.MiddleTexture = from.MiddleTexture;
+        to.LowerTexture = from.LowerTexture;
+        to.OffsetX = from.OffsetX;
+        to.OffsetY = from.OffsetY;
+        foreach (var (key, value) in from.Fields) to.Fields[key] = value;
+    }
+
+    /// <summary>
+    /// The <c>JoinSector</c>-equivalent primitive: attaches
+    /// <paramref name="linedef"/>'s <paramref name="front"/> (or back)
+    /// side to <paramref name="sector"/> - creating a fresh sidedef if
+    /// that side is currently one-sided (void), or re-pointing an
+    /// already-existing one at <paramref name="sector"/> instead (UDB's
+    /// own real dual behavior - see <see cref="Sidedef.Sector"/>'s own
+    /// remarks). When a fresh sidedef newly makes a one-sided linedef
+    /// two-sided, the *opposite* side's now-superfluous middle texture is
+    /// cleared, matching UDB's own real cleanup exactly (a one-sided
+    /// wall's middle texture has nothing to mean once there's a real
+    /// sector on both sides).
+    /// </summary>
+    public void AttachOrRetargetSidedef(Linedef linedef, bool front, Sector sector)
+    {
+        var existing = front ? linedef.Front : linedef.Back;
+
+        if (existing == null)
+        {
+            var sidedef = new Sidedef(sector, linedef);
+            sector.AddSidedef(sidedef);
+            if (front) linedef.Front = sidedef; else linedef.Back = sidedef;
+
+            var opposite = front ? linedef.Back : linedef.Front;
+            if (opposite != null)
+            {
+                opposite.MiddleTexture = "-";
+                // The opposite sidedef's own sector didn't change, but
+                // this linedef's wall mesh depends on *both* sides (a
+                // one-sided wall becoming a two-sided step) - dirtying
+                // it too is what makes RebuildWallMesh actually run for
+                // this linedef next frame (see sector's own NeedsRebuild
+                // dirty-sweep in MapView._Process).
+                opposite.Sector.NeedsRebuild = true;
+            }
+        }
+        else
+        {
+            var previousSector = existing.Sector;
+            existing.Sector.RemoveSidedef(existing);
+            existing.Sector = sector;
+            sector.AddSidedef(existing);
+            previousSector.NeedsRebuild = true;
+        }
+
+        sector.NeedsRebuild = true;
+    }
+
+    /// <summary>
     /// Moves a vertex, dirtying only the sectors of linedefs touching it -
     /// never the rest of the map.
     /// </summary>

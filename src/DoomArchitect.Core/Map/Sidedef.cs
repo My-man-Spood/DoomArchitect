@@ -8,7 +8,19 @@ public sealed class Sidedef
         Linedef = linedef;
     }
 
-    public Sector Sector { get; }
+    /// <summary>
+    /// Settable (not just constructor-assigned) so <see cref="MapData.AttachOrRetargetSidedef"/>
+    /// can re-point an already-existing sidedef at a different sector -
+    /// UDB's own real <c>JoinSector</c> behavior when a linedef being
+    /// joined already has a sidedef on the target side (e.g. a linedef
+    /// shared between the map's own void-side and a newly drawn sector
+    /// that turns out to actually border an existing one). Caller is
+    /// responsible for the matching <see cref="Sector.RemoveSidedef"/>/
+    /// <see cref="Sector.AddSidedef"/> bookkeeping - this alone doesn't
+    /// touch either sector's own sidedef list.
+    /// </summary>
+    public Sector Sector { get; internal set; }
+
     public Linedef Linedef { get; }
     public string UpperTexture { get; set; } = "-";
     public string MiddleTexture { get; set; } = "-";

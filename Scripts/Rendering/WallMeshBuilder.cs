@@ -20,10 +20,23 @@ public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<strin
 
 /// <summary>
 /// Turns a linedef's wall segments (Core.Geometry.LinedefWallBuilder -
-/// pure math, no Godot) into an actual Godot mesh, each quad genuinely
-/// double-sided via <see cref="DoubleSidedMesh"/> - a wall isn't tracked
-/// as "front-facing" only, it should look correct from whichever side
-/// you're actually standing on.
+/// pure math, no Godot) into an actual Godot mesh - each quad single-
+/// sided, wound so its outward face (and generated normal) points into
+/// whichever <see cref="Sidedef.Sector"/> that quad's own <see cref="WallSegment.Side"/>
+/// belongs to, matching UDB's own real single-sided-per-face wall
+/// rendering. Not double-sided the way <c>SectorMeshBuilder</c>'s
+/// floor/ceiling meshes deliberately still are: a two-sided linedef's
+/// masked middle can carry two genuinely *different* textures at the
+/// exact same 3D position (front's own vs back's own) - <see cref="DoubleSidedMesh"/>
+/// would draw both, double-sided, coincident, and which one actually
+/// wins each pixel becomes undefined/z-fighting; a real one-sided
+/// texture (<see cref="Sidedef.IsFront"/> either way, nothing coincident
+/// to conflict with) still renders correctly single-sided since
+/// <c>TextureCache.CreateMaterial</c> never disables the engine's own
+/// default back-face culling - it only ever looked "double-sided" before
+/// because of the old manual double-triangle trick, not because
+/// anything relied on genuinely seeing a wall's texture from its own
+/// wrong side.
 ///
 /// UVs are top-pegged (V=0 at the segment's own top edge, offset by the
 /// originating sidedef's OffsetX/OffsetY) - see LinedefWallBuilder's
@@ -101,9 +114,40 @@ public static class WallMeshBuilder
         var brightness = SectorBrightness.CalculateForWall(segment.Side.Sector.Brightness, wallDirection);
         var color = brightness.ToBrightnessColor();
 
-        DoubleSidedMesh.AddTriangle(
-            surfaceTool, startBottom, startTop, endTop, uvStartBottom, uvStartTop, uvEndTop, color);
-        DoubleSidedMesh.AddTriangle(
-            surfaceTool, startBottom, endTop, endBottom, uvStartBottom, uvEndTop, uvEndBottom, color);
+        // Winding flips between front and back: walking Start->End puts
+        // the front sidedef's own sector on the walker's right (the same
+        // convention established by SectorTracer/LinedefSide/BoundaryTracer's
+        // own SidePoint, and visibly confirmed correct by
+        // LinedefOverlayHandler.DrawFrontIndicator's own already-shipped
+        // 2D front tick). This is the winding order empirically confirmed
+        // (after an initial, backwards first attempt - Godot's actual
+        // front-face/culling convention turned out not to match a naive
+        // right-hand-rule-normal derivation against VectorConversions.ToWorld's
+        // axis mapping) to make each side's own texture visible only from
+        // inside that side's own <see cref="Sector"/>, not its neighbor's.
+        if (segment.Side.IsFront)
+        {
+            AddTriangle(surfaceTool, startBottom, startTop, endTop, uvStartBottom, uvStartTop, uvEndTop, color);
+            AddTriangle(surfaceTool, startBottom, endTop, endBottom, uvStartBottom, uvEndTop, uvEndBottom, color);
+        }
+        else
+        {
+            AddTriangle(surfaceTool, startBottom, endTop, startTop, uvStartBottom, uvEndTop, uvStartTop, color);
+            AddTriangle(surfaceTool, startBottom, endBottom, endTop, uvStartBottom, uvEndBottom, uvEndTop, color);
+        }
+    }
+
+    private static void AddTriangle(
+        SurfaceTool surfaceTool, Vector3 a, Vector3 b, Vector3 c, Vector2 uvA, Vector2 uvB, Vector2 uvC, Color color)
+    {
+        surfaceTool.SetColor(color);
+        surfaceTool.SetUV(uvA);
+        surfaceTool.AddVertex(a);
+        surfaceTool.SetColor(color);
+        surfaceTool.SetUV(uvB);
+        surfaceTool.AddVertex(b);
+        surfaceTool.SetColor(color);
+        surfaceTool.SetUV(uvC);
+        surfaceTool.AddVertex(c);
     }
 }

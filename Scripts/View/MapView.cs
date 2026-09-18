@@ -299,7 +299,7 @@ public partial class MapView : Node3D
 	/// gap that never mattered before Draw mode, since until now every
 	/// Sector/Linedef in a live map was already known about from the
 	/// initial <see cref="LoadMap"/>/<see cref="RebuildAllMeshes"/> pass;
-	/// nothing ever added or removed one at runtime. <see cref="CreateSectorLoopCommand"/>'s
+	/// nothing ever added or removed one at runtime. <see cref="DrawLoopCommand"/>'s
 	/// own <c>Do</c>/<c>Undo</c> now does both, so this frame-by-frame
 	/// catch-up is what actually gives a freshly drawn sector its mesh
 	/// (real bug: the very first version of Draw mode crashed with a

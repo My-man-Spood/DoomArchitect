@@ -1819,59 +1819,189 @@ file just tracks what's built and what's next.
       selection on any casing mismatch between a map's stored texture
       name and the resource's own real lump casing - now case-insensitive,
       matching every other name lookup in this codebase.
-- [ ] Drawing mode (UDB's real "Draw Lines" mode) - **Phase 1 done
-      2026-09-17** (standalone new sectors only); **Phases 2/3 not started**
-      - user's own explicit scope call is full UDB parity eventually
-      ("every possible way to draw lines, vectors, sectors... ported
-      basically exactly as it is in UDB"), phased rather than all at once.
-      Planned against two parallel research passes (UDB's real
-      `DrawGeometryMode`/`Tools.DrawLines`/`Tools.MakeSector`/`JoinSector`
-      source, and this project's own current `MapOverlay`/`Core.Geometry`/
-      `Core.Undo`/`MapData` code) - full design + phase breakdown in
-      `Scripts/View/DrawOverlayHandler.cs`'s own doc comment and (while it
-      still exists) `/home/spood/.claude/plans/steady-bubbling-gosling.md`.
+- [ ] Drawing mode (UDB's real "Draw Lines" mode) - **Phases 1+2 done
+      2026-09-17**; **Phase 3 not started**. User's own explicit scope call
+      is full UDB parity eventually ("every possible way to draw lines,
+      vectors, sectors... ported basically exactly as it is in UDB"),
+      phased rather than all at once - offered a further phase split for
+      Phase 2 itself (mechanical snap/split vs. the much larger join/
+      inheritance half) and explicitly chose to build all of it now rather
+      than defer. Planned against several research passes against UDB's
+      real source (`DrawGeometryMode`/`Tools.DrawLines`/`FindClosestPath`/
+      `FindPotentialSectorAt`/`MakeSector`/`JoinSector`/`Linedef.Split`/
+      `EarClipPolygon`/`LinedefTracePath`) - full design in (while it still
+      exists) `/home/spood/.claude/plans/steady-bubbling-gosling.md`.
 
-      **Phase 1 (done)**: `EditMode.Draw` + `DrawOverlayHandler` - click to
-      place points, click back near the first one to close the loop and
-      commit a brand-new, fully self-contained sector (or cancel, if fewer
-      than 3 points - a degenerate loop, matching UDB exactly); Escape/
-      right-click cancels, Backspace removes the last point. Does **not**
-      snap onto, split, or otherwise interact with any existing vertex/
-      linedef/sector - a loop that spatially overlaps existing geometry
-      just produces a second, data-model-disconnected sector (an honest
-      Phase 1 limitation, not a bug), and no self-intersection validation
-      either. New Core: `Geometry/PolygonWinding.cs` (the shoelace formula,
-      extracted out of `Loop.SignedArea()` so both share one
-      implementation - `Loop` now delegates to it); `MapData.RemoveLinedef`/
-      `RemoveVertex`/`RemoveSector` (no removal API existed at all before
-      this); `Undo/CreateSectorLoopCommand.cs` (one atomic command for the
-      whole loop, matching UDB's own real "one undo step per draw session"
-      - redo-safe, since nothing outside the command ever holds a
-      reference to the vertices/linedef/sector it created). Front/back
-      sidedef assignment verified directly against `SectorTracer`'s own
-      documented winding convention ("front sidedef walked Start-to-End,
-      back sidedef End-to-Start, either way the sector ends up on the
-      walker's right") and cross-checked against the existing
+      **Phase 1**: `EditMode.Draw` + `DrawOverlayHandler` - click to place
+      points, click back near the first one to close the loop and commit
+      a sector (or cancel, if fewer than 3 points - a degenerate loop,
+      matching UDB exactly); Escape/right-click cancels, Backspace removes
+      the last point. New Core: `Geometry/PolygonWinding.cs` (the shoelace
+      formula, extracted out of `Loop.SignedArea()` so both share one
+      implementation). Front/back sidedef assignment verified directly
+      against `SectorTracer`'s own documented winding convention and
+      cross-checked against the existing
       `MapDataTestExtensions.CreateClosedSector` test-helper's own real
-      precedent, not guessed. New sector defaults
-      (`floorHeight: 0, ceilingHeight: 128`, `"-"`/`"-"` textures,
-      brightness 160) match `Sector`'s own class defaults and the existing
-      `MapView.BuildSampleSector` precedent exactly - no new "default
-      sector settings" concept invented. New toolbar button + `W` keybind
-      (matching UDB's own real Draw Lines key, confirmed free).
+      precedent, not guessed.
 
-      **Phase 2 (not started)**: stitching into existing geometry - a
-      real `MapData.SplitLinedef`, snap-onto-existing-vertex/linedef while
-      drawing, `Tools.MakeSector`'s real property-inheritance behavior
-      (a sector split off an existing one copies its floor/ceiling
-      texture/height/brightness), and the real `FindPotentialSectorAt`/
-      `JoinSector`-equivalent mixed old+new boundary tracing - genuinely
-      new Core geometry work, none of it started.
+      **Phase 2**: stitching into existing geometry - the big remaining
+      piece, now done. New Core: `Geometry/LinedefSide.cs` (mirrors UDB's
+      real type); `Geometry/LinedefAngleSorter.cs` (the exact same angle
+      formula `SectorTracer`'s own already-tested `RelativeAngle` uses,
+      generalized off `Sidedef` onto the more general `LinedefSide`, reused
+      rather than re-derived independently); `Geometry/BoundaryTracer.cs`
+      (`FindPotentialSectorAt`/`FindOuterLines`/`FindInnerLines`/
+      `FindClosestPath`-equivalent walk over the map's raw vertex/linedef
+      topology - reuses this project's own already-built `Loop`/
+      `PolygonNesting` for outer/hole validation instead of porting a
+      second polygon class the way UDB's own separate `EarClipPolygon`
+      exists); `MapData.SplitLinedef`/`AttachOrRetargetSidedef` (the real
+      `Linedef.Split`/`JoinSector` primitives - `Sidedef.Sector` is now
+      settable to support re-pointing an already-existing sidedef, not
+      just creating fresh ones); `Undo/DrawLoopCommand.cs` (replaces
+      `CreateSectorLoopCommand` - per edge, the interior side always
+      resolves into a new sector, inheriting a neighbor's properties if
+      the trace finds one; the exterior side either joins an existing
+      neighbor directly - no new sector - or stays void).
+
+      Two real algorithmic bugs found and fixed while writing
+      `BoundaryTracerTests` (hand-constructed graphs with known-correct
+      expected traces, including a diagonal-split box and a box with a
+      hole): the anti-loop tie-break was missing UDB's real "never swap
+      away from the start/end line" exception, so a trace could never
+      actually close on real geometry; a vertex shared with the outer
+      loop's own boundary was being treated as a valid interior hole seed
+      (point-in-polygon containment is ambiguous exactly on a boundary
+      point) - now excluded explicitly. A third real bug, found by
+      reasoning through the "a drawn line splits an existing sector"
+      scenario before it could even be tested: `DrawLoopCommand` was
+      skipping trace entries that already had a sidedef when populating a
+      newly resolved boundary, when what an old sector's own untouched
+      sidedefs actually need in that scenario is *re-pointing* to the new
+      sector, not being left alone - `AttachOrRetargetSidedefTracked`
+      already handled that branch correctly, the outer skip was just
+      wrong and has been removed.
+
+      One deliberate simplification, flagged rather than silently
+      dropped: `AttachOrRetargetSidedefTracked`'s freshly-created sidedefs
+      always get `DrawLoopCommand.DefaultWallTexture` rather than first
+      trying to copy a neighboring sidedef's own specific texture name the
+      way UDB's real `JoinSector`/`TakeSidedefSettings` does before
+      falling back to a default.
+
+      **Post-Phase-2 fix, 2026-09-18**: user reported drawing a loop
+      against an existing wall neither made it two-sided/traversable nor
+      inherited its neighbor's textures. Root cause: `DrawLoopCommand.Do()`
+      always created a brand-new `Linedef` between every consecutive pair
+      of resolved points, even when they were already directly connected
+      by an existing one (e.g. two points landing on the same old wall) -
+      so no drawn loop could ever end up sharing a real edge with existing
+      geometry, only a coincident duplicate or an isolated point-touch.
+      Fixed via a new `CreateOrReuseEdge` that detects and reuses an
+      already-existing coincident `Linedef` instead of duplicating it,
+      with `front` for the interior/exterior resolution passes recomputed
+      per edge against whether the reused edge's own direction matches
+      this loop's own traversal direction. Separately, `MapData.SplitLinedef`/
+      `AttachOrRetargetSidedef` never marked any affected *existing*
+      sector's `NeedsRebuild` dirty flag (unlike `MoveVertex`, which
+      already does via `Linedef.MarkAdjacentSectorsDirty`) - meant a
+      reused wall's mesh could pick up the correct Front/Back sectors in
+      Core yet never actually rebuild in the running app, since
+      `MapView`'s dirty-sector sweep is what triggers `RebuildWallMesh`
+      for an *existing* `MeshInstance3D` (a brand-new Linedef gets its
+      first mesh for free when the App side notices it, but a reused one
+      needs the dirty flag). Both sectors touched by `AttachOrRetargetSidedef`
+      (the new target and whichever sector a re-pointed/opposite sidedef
+      used to belong to) and both sides of a freshly split linedef are now
+      marked dirty. Root-caused via a new failing test reproducing the
+      report at the Core level
+      (`Do_LoopSharingAWholeExistingWallByBothEndpoints_ReusesItAsATwoSidedWall`)
+      before touching any code; a separate, pre-existing test
+      (`..._InheritsPropertiesAndBecomesTwoSided`, renamed
+      `..._TouchesAtAPointOnlyWithNoSharedWall`) turned out to have a
+      wrong expectation of its own - a loop touching old geometry at a
+      single vertex only genuinely has no shared wall to inherit from,
+      matching real UDB's own identical limitation there.
+
+      **Second post-Phase-2 fix, 2026-09-18 (same session)**: the reuse
+      fix above only covered *one* split point per original wall - user's
+      own hard test case (a 60-unit new sector sharing only the *middle*
+      portion of a wider 128-unit wall) needs *two*. Root cause:
+      `DrawPoint.SplitLinedef` captures whichever `Linedef` was hit at
+      draw time - for two points on the same still-unsplit wall, that's
+      the exact same object reference - and the old per-point
+      `ResolveVertex` split each one independently, in whatever order
+      `points` happened to list them, always calling `MapData.SplitLinedef`
+      straight on that same captured reference. The *first* split
+      correctly shrinks it in place; the *second* point's own position
+      then usually no longer lies on what that same (now-shrunk) object
+      represents, silently producing overlapping/corrupted geometry
+      instead of a clean three-way division. Fixed via a new
+      `ResolveVertices` that groups same-linedef split points together,
+      sorts each group by distance from the original linedef's own
+      `Start` (matching the order they actually lie along the wall,
+      regardless of `points` order), and splits a running "tail" segment
+      sequentially - the first split's own leftover far half becomes the
+      second split's real target instead of the stale original. Also
+      fixed alongside it, found by re-reading the user's own bug report
+      more carefully ("lose its texture and become traversible"):
+      `AttachOrRetargetSidedefTracked`'s freshly-created sidedef always
+      got `DefaultWallTexture`, even when the wall was *becoming*
+      two-sided (the opposite side already existed) - a real, opaque
+      texture on both faces of a plain two-sided wall, when UDB's own
+      real behavior is `"-"` on both once there's a genuine sector on
+      each side (the opposite side's own cleanup to `"-"` was already
+      correct; the newly-created side's own texture was the missed
+      half).
+
+      **Third fix, same session, App-layer only (no Core change)**: user
+      also flagged that `WallMeshBuilder`'s walls being rendered
+      genuinely double-sided (`DoubleSidedMesh`, a leftover from before
+      front/back sidedefs could carry independently different textures)
+      now actively causes wrong-texture-from-the-wrong-side/z-fighting
+      once a two-sided linedef's front and back masked-middle textures
+      actually differ (`LinedefWallBuilder.BuildTwoSided` already
+      correctly builds two independent, spatially-coincident
+      `WallSegment`s in that case - one per side's own texture - so
+      double-siding *both* draws all four triangle-equivalents of the
+      same quad, undefined draw order deciding which texture wins each
+      pixel). Fixed by making wall quads single-sided, wound per
+      `WallSegment.Side.IsFront`. `TextureCache`'s wall/flat material
+      never disabled the engine's own default back-face culling in the
+      first place (only the sprite material explicitly does, for its own
+      unrelated billboard reason) - the old double-triangle trick was the
+      only reason a wall ever looked double-sided at all, so no material
+      change was needed, just the winding. First attempt at the winding
+      direction was backwards - derived by hand via a right-hand-rule
+      cross product against `VectorConversions.ToWorld`'s axis mapping
+      and cross-checked numerically, but that derivation implicitly
+      assumed a normal-vs-view-direction culling test; Godot's actual
+      front-face/culling convention (screen-space triangle winding after
+      projection) didn't match it. User caught it immediately by eye
+      ("most textures are rendered on the wrong side of the lines") -
+      fixed by swapping the two winding branches; no way to unit-test
+      this in `DoomArchitect.Core.Tests` at all (Core is Godot-free by
+      design), so this one *only* got verified by the user's own visual
+      check in the running app, not by an automated test the way every
+      other fix this session was. `SectorMeshBuilder` (floor/ceiling) and
+      `TargetHighlight` deliberately still use `DoubleSidedMesh`
+      unchanged - a sector only ever has one floor/one ceiling texture
+      (no front/back conflict possible there), and the target/selection
+      highlight isn't textured content at all, so per the user's own
+      explicit call, only walls needed this fix.
 
       **Phase 3 (not started)**: cardinal-direction constrained drawing,
-      auto-close across existing geometry, `SplitOuterSectors`-equivalent
-      post-pass, continuous drawing mode, a real dashed rubber-band line
-      (none exists anywhere in this codebase), live length/angle labels.
+      full auto-close across existing geometry (the general case beyond
+      "two consecutive drawn points share an already-existing edge",
+      fixed above - splitting a drawn line's path across *several*
+      existing linedefs/vertices along an arbitrary route still isn't
+      supported, matching UDB's own real `autoclosedrawing` scope),
+      `SplitOuterSectors`-equivalent post-pass, continuous drawing mode, a
+      real dashed rubber-band line (none exists anywhere in this
+      codebase), live length/angle labels, and `BoundaryTracer`'s own real
+      gap (a trace that lands on the wrong loop on its first attempt
+      returns "not found" rather than UDB's real rightward-ray-cast retry -
+      see that file's own doc comment).
 - [ ] Adding things - no way to place a *new* Thing exists yet, only
       select/move/edit already-loaded ones. `MapData.CreateThing(Vector2,
       int)` is already public (not private/internal - only ever actually
