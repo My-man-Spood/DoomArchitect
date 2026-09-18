@@ -65,6 +65,35 @@ public sealed class MapData
     }
 
     /// <summary>
+    /// Detaches a linedef from both its endpoint vertices and both its
+    /// sidedefs' sectors (either side may be null on a one-sided wall),
+    /// then drops it - the exact reverse of <see cref="CreateLinedef"/>.
+    /// </summary>
+    public void RemoveLinedef(Linedef linedef)
+    {
+        linedef.Start.RemoveLinedef(linedef);
+        linedef.End.RemoveLinedef(linedef);
+
+        if (linedef.Front != null) linedef.Front.Sector.RemoveSidedef(linedef.Front);
+        if (linedef.Back != null) linedef.Back.Sector.RemoveSidedef(linedef.Back);
+
+        _linedefs.Remove(linedef);
+    }
+
+    /// <summary>
+    /// Trusts every linedef touching this vertex has already been removed
+    /// (via <see cref="RemoveLinedef"/>) - matching this class's existing
+    /// "trusted internal invariant, no defensive runtime checks" style
+    /// (e.g. <see cref="CreateLinedef"/> doesn't validate its inputs
+    /// either). A vertex still referenced by a linedef when this is
+    /// called is left dangling in that linedef's own Start/End.
+    /// </summary>
+    public void RemoveVertex(Vertex vertex) => _vertices.Remove(vertex);
+
+    /// <summary>Trusts every sidedef on this sector has already been detached (via <see cref="RemoveLinedef"/>).</summary>
+    public void RemoveSector(Sector sector) => _sectors.Remove(sector);
+
+    /// <summary>
     /// Moves a vertex, dirtying only the sectors of linedefs touching it -
     /// never the rest of the map.
     /// </summary>

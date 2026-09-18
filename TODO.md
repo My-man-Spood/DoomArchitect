@@ -1819,25 +1819,59 @@ file just tracks what's built and what's next.
       selection on any casing mismatch between a map's stored texture
       name and the resource's own real lump casing - now case-insensitive,
       matching every other name lookup in this codebase.
-- [ ] Drawing mode (UDB's real "Draw Lines" mode - click to place new
-      vertices, closing a loop auto-builds a sector on the enclosed side)
-      - doesn't exist in any form yet. `EditMode` only has the 4
-      selection modes (Vertices/Linedefs/Sectors/Things); every
-      `MapOverlay.Handle*Input` method is exhaustively select/marquee/
-      drag-existing-elements, with no branch anywhere that creates a new
-      vertex or linedef by clicking into empty space.
-      `Core.Geometry.SectorTracer.Trace` looks like it should be
-      reusable for this but isn't quite: it walks a sector's own already-
-      assigned sidedefs to reconstruct boundary loops (used today for
-      marquee hit-testing/hover-fill), which needs sidedefs/sectors to
-      already exist - it doesn't detect closed loops among bare
-      unassigned linedefs or decide what new sector(s) to create on each
-      side of a freshly closed loop. That loop-closing/sector-creation
-      step (UDB's own real `SectorBuilder`/draw-mode logic) has no
-      counterpart in Core at all yet - this is a real, code-verified gap,
-      not just "needs a new EditMode," and its own research/design pass
-      is worth doing before starting, the same way the property dialogs
-      and thing-type catalog each got one.
+- [ ] Drawing mode (UDB's real "Draw Lines" mode) - **Phase 1 done
+      2026-09-17** (standalone new sectors only); **Phases 2/3 not started**
+      - user's own explicit scope call is full UDB parity eventually
+      ("every possible way to draw lines, vectors, sectors... ported
+      basically exactly as it is in UDB"), phased rather than all at once.
+      Planned against two parallel research passes (UDB's real
+      `DrawGeometryMode`/`Tools.DrawLines`/`Tools.MakeSector`/`JoinSector`
+      source, and this project's own current `MapOverlay`/`Core.Geometry`/
+      `Core.Undo`/`MapData` code) - full design + phase breakdown in
+      `Scripts/View/DrawOverlayHandler.cs`'s own doc comment and (while it
+      still exists) `/home/spood/.claude/plans/steady-bubbling-gosling.md`.
+
+      **Phase 1 (done)**: `EditMode.Draw` + `DrawOverlayHandler` - click to
+      place points, click back near the first one to close the loop and
+      commit a brand-new, fully self-contained sector (or cancel, if fewer
+      than 3 points - a degenerate loop, matching UDB exactly); Escape/
+      right-click cancels, Backspace removes the last point. Does **not**
+      snap onto, split, or otherwise interact with any existing vertex/
+      linedef/sector - a loop that spatially overlaps existing geometry
+      just produces a second, data-model-disconnected sector (an honest
+      Phase 1 limitation, not a bug), and no self-intersection validation
+      either. New Core: `Geometry/PolygonWinding.cs` (the shoelace formula,
+      extracted out of `Loop.SignedArea()` so both share one
+      implementation - `Loop` now delegates to it); `MapData.RemoveLinedef`/
+      `RemoveVertex`/`RemoveSector` (no removal API existed at all before
+      this); `Undo/CreateSectorLoopCommand.cs` (one atomic command for the
+      whole loop, matching UDB's own real "one undo step per draw session"
+      - redo-safe, since nothing outside the command ever holds a
+      reference to the vertices/linedef/sector it created). Front/back
+      sidedef assignment verified directly against `SectorTracer`'s own
+      documented winding convention ("front sidedef walked Start-to-End,
+      back sidedef End-to-Start, either way the sector ends up on the
+      walker's right") and cross-checked against the existing
+      `MapDataTestExtensions.CreateClosedSector` test-helper's own real
+      precedent, not guessed. New sector defaults
+      (`floorHeight: 0, ceilingHeight: 128`, `"-"`/`"-"` textures,
+      brightness 160) match `Sector`'s own class defaults and the existing
+      `MapView.BuildSampleSector` precedent exactly - no new "default
+      sector settings" concept invented. New toolbar button + `W` keybind
+      (matching UDB's own real Draw Lines key, confirmed free).
+
+      **Phase 2 (not started)**: stitching into existing geometry - a
+      real `MapData.SplitLinedef`, snap-onto-existing-vertex/linedef while
+      drawing, `Tools.MakeSector`'s real property-inheritance behavior
+      (a sector split off an existing one copies its floor/ceiling
+      texture/height/brightness), and the real `FindPotentialSectorAt`/
+      `JoinSector`-equivalent mixed old+new boundary tracing - genuinely
+      new Core geometry work, none of it started.
+
+      **Phase 3 (not started)**: cardinal-direction constrained drawing,
+      auto-close across existing geometry, `SplitOuterSectors`-equivalent
+      post-pass, continuous drawing mode, a real dashed rubber-band line
+      (none exists anywhere in this codebase), live length/angle labels.
 - [ ] Adding things - no way to place a *new* Thing exists yet, only
       select/move/edit already-loaded ones. `MapData.CreateThing(Vector2,
       int)` is already public (not private/internal - only ever actually

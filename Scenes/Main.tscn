@@ -14,6 +14,7 @@
 [ext_resource type="Script" uid="uid://c5u0j2ulriu4q" path="res://Scripts/View/OpenMapMenu.cs" id="11"]
 [ext_resource type="Script" uid="uid://d3rertnouig4y" path="res://Scripts/View/MainMenuBar.cs" id="12"]
 [ext_resource type="Texture2D" uid="uid://ctaxvynhdsd46" path="res://Assets/Icons/icon_thing_nodir.svg" id="13"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/mode_draw.svg" id="14"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -153,6 +154,16 @@ focus_mode = 0
 toggle_mode = true
 button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("13")
+expand_icon = true
+
+[node name="DrawModeButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(28, 28)
+layout_mode = 2
+tooltip_text = "Draw mode (W)"
+focus_mode = 0
+toggle_mode = true
+button_group = SubResource("ButtonGroup_1")
+icon = ExtResource("14")
 expand_icon = true
 
 [node name="GridToolbar" type="PanelContainer" parent="UI/TopBar/ToolbarMargin/TopToolbar" unique_id=576592575]

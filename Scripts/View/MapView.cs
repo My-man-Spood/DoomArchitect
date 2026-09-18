@@ -143,6 +143,7 @@ public partial class MapView : Node3D
 	{
 		_textureIconCache.ProcessBudget(TextureIconDecodeBudgetPerFrame);
 		_spriteIconCache.ProcessBudget(SpriteIconDecodeBudgetPerFrame);
+		SyncMeshInstancesWithMap();
 
 		foreach (var sector in _map.GetDirtySectors())
 		{
@@ -290,6 +291,92 @@ public partial class MapView : Node3D
 		_spriteIconCache.SeedAll(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
 
 		RebuildAllMeshes();
+	}
+
+	/// <summary>
+	/// Keeps <see cref="_sectorMeshes"/>/<see cref="_wallMeshes"/> in sync
+	/// with whatever <see cref="_map"/> currently actually contains - a
+	/// gap that never mattered before Draw mode, since until now every
+	/// Sector/Linedef in a live map was already known about from the
+	/// initial <see cref="LoadMap"/>/<see cref="RebuildAllMeshes"/> pass;
+	/// nothing ever added or removed one at runtime. <see cref="CreateSectorLoopCommand"/>'s
+	/// own <c>Do</c>/<c>Undo</c> now does both, so this frame-by-frame
+	/// catch-up is what actually gives a freshly drawn sector its mesh
+	/// (real bug: the very first version of Draw mode crashed with a
+	/// <see cref="KeyNotFoundException"/> here, since nothing ever created
+	/// the new sector's dictionary entry at all) and cleans up a since-
+	/// undone one's mesh instances instead of leaving them orphaned in the
+	/// scene tree. A cheap count comparison first, so the O(n) diff below
+	/// only ever runs on the rare frame right after a structural change,
+	/// not every frame.
+	/// </summary>
+	private void SyncMeshInstancesWithMap()
+	{
+		if (_map.Sectors.Count != _sectorMeshes.Count) SyncSectorMeshes();
+		if (_map.Linedefs.Count != _wallMeshes.Count) SyncWallMeshes();
+	}
+
+	private void SyncSectorMeshes()
+	{
+		var live = new HashSet<Sector>(_map.Sectors);
+		var removed = _sectorMeshes.Keys.Where(s => !live.Contains(s)).ToList();
+
+		foreach (var sector in removed)
+		{
+			var (floor, ceiling) = _sectorMeshes[sector];
+			floor.QueueFree();
+			ceiling.QueueFree();
+			_sectorMeshes.Remove(sector);
+		}
+
+		if (removed.Count > 0) ClearStaleThreeDReferences(removed, Array.Empty<Linedef>());
+
+		foreach (var sector in _map.Sectors)
+		{
+			if (!_sectorMeshes.ContainsKey(sector)) CreateSectorMeshInstances(sector);
+		}
+	}
+
+	private void SyncWallMeshes()
+	{
+		var live = new HashSet<Linedef>(_map.Linedefs);
+		var removed = _wallMeshes.Keys.Where(l => !live.Contains(l)).ToList();
+
+		foreach (var linedef in removed)
+		{
+			_wallMeshes[linedef].QueueFree();
+			_wallMeshes.Remove(linedef);
+		}
+
+		if (removed.Count > 0) ClearStaleThreeDReferences(Array.Empty<Sector>(), removed);
+
+		foreach (var linedef in _map.Linedefs)
+		{
+			if (!_wallMeshes.ContainsKey(linedef)) CreateWallMeshInstance(linedef);
+		}
+	}
+
+	/// <summary>
+	/// A removed Sector/Linedef can still be referenced by the 3D-mode
+	/// target/selection (independent of the classic 2D selection - see
+	/// their own remarks) - drops just those specific stale references
+	/// rather than a blanket clear, so undoing a drawn sector doesn't also
+	/// wipe an unrelated in-progress 3D selection.
+	/// </summary>
+	private void ClearStaleThreeDReferences(IReadOnlyCollection<Sector> removedSectors, IReadOnlyCollection<Linedef> removedLinedefs)
+	{
+		if (_currentTarget is { } target)
+		{
+			var targetLinedef = target.WallSegment?.Side.Linedef;
+			if (removedSectors.Contains(target.Sector) || (targetLinedef != null && removedLinedefs.Contains(targetLinedef)))
+			{
+				_currentTarget = null;
+				_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
+			}
+		}
+
+		_selectedSectors3D.ExceptWith(removedSectors);
+		_selectedLinedefs3D.ExceptWith(removedLinedefs);
 	}
 
 	/// <summary>Tears down and rebuilds every sector/wall/thing mesh against the current <see cref="_map"/>/<see cref="_textureCache"/>/<see cref="_gameConfiguration"/> - the part <see cref="LoadMap"/> and <see cref="RefreshResources"/> share.</summary>
@@ -575,6 +662,9 @@ public partial class MapView : Node3D
 				break;
 			case Key.T:
 				_overlay.Mode = EditMode.Things;
+				break;
+			case Key.W:
+				_overlay.Mode = EditMode.Draw;
 				break;
 			case Key.G:
 				_overlay.SnapEnabled = !_overlay.SnapEnabled;

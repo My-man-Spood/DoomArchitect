@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Numerics;
 using DoomArchitect.Core.Map;
 
@@ -17,7 +18,7 @@ public sealed class Loop
 
     public IReadOnlyList<Vertex> Vertices { get; }
 
-    public bool IsClockwise => SignedArea() < 0;
+    public bool IsClockwise => PolygonWinding.IsClockwise(Positions());
 
     /// <summary>
     /// Even-odd rule, ray cast to the right from the point. Only correct
@@ -51,15 +52,5 @@ public sealed class Loop
         return inside;
     }
 
-    private float SignedArea()
-    {
-        var sum = 0f;
-        for (var i = 0; i < Vertices.Count; i++)
-        {
-            var a = Vertices[i].Position;
-            var b = Vertices[(i + 1) % Vertices.Count].Position;
-            sum += a.X * b.Y - b.X * a.Y;
-        }
-        return sum * 0.5f;
-    }
+    private Vector2[] Positions() => Vertices.Select(v => v.Position).ToArray();
 }

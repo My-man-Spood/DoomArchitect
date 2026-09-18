@@ -62,6 +62,7 @@ public partial class MapOverlay : Control
 	private readonly LinedefOverlayHandler _linedefHandler;
 	private readonly SectorOverlayHandler _sectorHandler;
 	private readonly ThingOverlayHandler _thingHandler;
+	private readonly DrawOverlayHandler _drawHandler;
 
 	public MapOverlay()
 	{
@@ -72,6 +73,7 @@ public partial class MapOverlay : Control
 		_linedefHandler = new LinedefOverlayHandler(this, _camera, _marquee);
 		_sectorHandler = new SectorOverlayHandler(this, _camera, _marquee);
 		_thingHandler = new ThingOverlayHandler(this, _camera, _marquee);
+		_drawHandler = new DrawOverlayHandler(this, _camera);
 	}
 
 	public MapData Map { get; set; }
@@ -132,6 +134,12 @@ public partial class MapOverlay : Control
 		set
 		{
 			if (_mode == value) return;
+
+			// A half-drawn loop belongs to Draw mode alone - leaving it
+			// without discarding would otherwise keep rendering (and stay
+			// closeable) after switching to something else entirely.
+			if (_mode == EditMode.Draw) _drawHandler.CancelDraw();
+
 			_mode = value;
 
 			switch (value)
@@ -241,6 +249,9 @@ public partial class MapOverlay : Control
 			case EditMode.Things:
 				_thingHandler.HandleInput(@event);
 				break;
+			case EditMode.Draw:
+				_drawHandler.HandleInput(@event);
+				break;
 		}
 	}
 
@@ -259,6 +270,7 @@ public partial class MapOverlay : Control
 		_linedefHandler.Draw(this);
 		_vertexHandler.Draw(this);
 		_thingHandler.Draw(this);
+		_drawHandler.Draw(this);
 		_marquee.Draw(this);
 	}
 }

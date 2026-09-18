@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Four radio-style buttons mirroring the V/L/S/T edit-mode keybinds -
+/// Five radio-style buttons mirroring the V/L/S/T/W edit-mode keybinds -
 /// either input drives the same <see cref="EditMode"/> on
 /// <see cref="Overlay"/>. Lives on its own <c>UI</c> canvas layer, drawn
 /// on top of and kept deliberately separate from <c>MapOverlay</c>'s
@@ -20,6 +20,7 @@ public partial class ModeToolbar : HBoxContainer
 	private Button _linedefButton;
 	private Button _sectorButton;
 	private Button _thingButton;
+	private Button _drawButton;
 
 	public override void _Ready()
 	{
@@ -27,11 +28,13 @@ public partial class ModeToolbar : HBoxContainer
 		_linedefButton = GetNode<Button>($"{ButtonsPath}/LinedefModeButton2");
 		_sectorButton = GetNode<Button>($"{ButtonsPath}/SectorModeButton");
 		_thingButton = GetNode<Button>($"{ButtonsPath}/ThingModeButton");
+		_drawButton = GetNode<Button>($"{ButtonsPath}/DrawModeButton");
 
 		_vertexButton.Toggled += pressed => OnToggled(pressed, EditMode.Vertices);
 		_linedefButton.Toggled += pressed => OnToggled(pressed, EditMode.Linedefs);
 		_sectorButton.Toggled += pressed => OnToggled(pressed, EditMode.Sectors);
 		_thingButton.Toggled += pressed => OnToggled(pressed, EditMode.Things);
+		_drawButton.Toggled += pressed => OnToggled(pressed, EditMode.Draw);
 	}
 
 	public override void _Process(double delta)
@@ -42,6 +45,7 @@ public partial class ModeToolbar : HBoxContainer
 		_linedefButton.SetPressedNoSignal(Overlay.Mode == EditMode.Linedefs);
 		_sectorButton.SetPressedNoSignal(Overlay.Mode == EditMode.Sectors);
 		_thingButton.SetPressedNoSignal(Overlay.Mode == EditMode.Things);
+		_drawButton.SetPressedNoSignal(Overlay.Mode == EditMode.Draw);
 	}
 
 	private void OnToggled(bool pressed, EditMode mode)

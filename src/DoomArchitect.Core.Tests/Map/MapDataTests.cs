@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Numerics;
 using DoomArchitect.Core.Map;
 
@@ -869,5 +870,81 @@ public class MapDataTests
 
         Assert.True(inside.IsSelected);
         Assert.False(outside.IsSelected);
+    }
+
+    [Fact]
+    public void RemoveLinedef_DetachesFromBothEndpointVerticesAndBothSidedefSectors()
+    {
+        var map = new MapData();
+        var (sector, vertices) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+        var linedef = vertices[0].Linedefs[0];
+
+        map.RemoveLinedef(linedef);
+
+        Assert.DoesNotContain(linedef, vertices[0].Linedefs);
+        Assert.DoesNotContain(linedef, vertices[1].Linedefs);
+        Assert.DoesNotContain(linedef, sector.Sidedefs.Select(s => s.Linedef));
+        Assert.DoesNotContain(linedef, map.Linedefs);
+    }
+
+    [Fact]
+    public void RemoveLinedef_OneSidedWall_OnlyDetachesFromItsOneRealSector()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var v0 = map.CreateVertex(new Vector2(0, 0));
+        var v1 = map.CreateVertex(new Vector2(64, 0));
+        var linedef = map.CreateLinedef(v0, v1, front: sector, back: null);
+
+        map.RemoveLinedef(linedef);
+
+        Assert.Empty(sector.Sidedefs);
+        Assert.Empty(v0.Linedefs);
+        Assert.Empty(v1.Linedefs);
+    }
+
+    [Fact]
+    public void RemoveVertex_RemovesItFromMapVertices()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+
+        map.RemoveVertex(vertex);
+
+        Assert.DoesNotContain(vertex, map.Vertices);
+    }
+
+    [Fact]
+    public void RemoveSector_RemovesItFromMapSectors()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+
+        map.RemoveSector(sector);
+
+        Assert.DoesNotContain(sector, map.Sectors);
+    }
+
+    /// <summary>
+    /// A full create-then-remove round trip (the shape a draw-mode undo
+    /// needs) leaves the map exactly as it started - no dangling
+    /// references left in any Vertex.Linedefs/Sector.Sidedefs.
+    /// </summary>
+    [Fact]
+    public void RemoveLinedefThenVertexThenSector_FullRoundTrip_LeavesMapDataEmptyAgain()
+    {
+        var map = new MapData();
+        var (sector, vertices) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+        var linedefs = map.Linedefs.ToList();
+
+        foreach (var linedef in linedefs) map.RemoveLinedef(linedef);
+        foreach (var vertex in vertices) map.RemoveVertex(vertex);
+        map.RemoveSector(sector);
+
+        Assert.Empty(map.Vertices);
+        Assert.Empty(map.Linedefs);
+        Assert.Empty(map.Sectors);
     }
 }
