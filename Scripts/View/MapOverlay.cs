@@ -120,6 +120,17 @@ public partial class MapOverlay : Control
 	private EditMode _mode = EditMode.Vertices;
 
 	/// <summary>
+	/// Whatever mode was active right before Draw mode was last entered -
+	/// UDB's own real <c>PreviousStableMode</c>, remembered here the same
+	/// way (captured the instant <see cref="Mode"/> is set to
+	/// <see cref="EditMode.Draw"/>, regardless of *how* it got there - the
+	/// W key or <see cref="StartDrawingAt"/>'s own right-click-empty-space
+	/// entry both funnel through this one setter). <see cref="ReturnFromDraw"/>
+	/// is what actually switches back to it.
+	/// </summary>
+	private EditMode _modeBeforeDraw = EditMode.Vertices;
+
+	/// <summary>
 	/// Switching to Vertices/Linedefs/Sectors re-derives that type's
 	/// selection from whatever's currently selected across all three,
 	/// exactly matching UDB's real <c>MapSet.ConvertSelection</c> (called
@@ -140,6 +151,8 @@ public partial class MapOverlay : Control
 			// closeable) after switching to something else entirely.
 			if (_mode == EditMode.Draw) _drawHandler.CancelDraw();
 
+			if (value == EditMode.Draw) _modeBeforeDraw = _mode;
+
 			_mode = value;
 
 			switch (value)
@@ -155,6 +168,18 @@ public partial class MapOverlay : Control
 					break;
 			}
 		}
+	}
+
+	/// <summary>
+	/// UDB's own real Draw-mode exit: both finishing (commit) and
+	/// cancelling return to whichever mode was active right before Draw
+	/// mode was entered (<see cref="_modeBeforeDraw"/>), not a fixed mode
+	/// and not staying in Draw - called by <see cref="DrawOverlayHandler"/>
+	/// itself on both its own finish and cancel paths.
+	/// </summary>
+	internal void ReturnFromDraw()
+	{
+		if (_mode == EditMode.Draw) Mode = _modeBeforeDraw;
 	}
 
 	public float GridSize
@@ -201,6 +226,24 @@ public partial class MapOverlay : Control
 	/// <summary>Internal (not private) so each per-element handler can pass it as a delegate - see <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>'s own constructor.</summary>
 	internal MapVector2 SnapIfEnabled(MapVector2 position) =>
 		EffectiveSnap ? GridSnapper.Snap(position, GridSize) : position;
+
+	/// <summary>
+	/// UDB's own real "AutoDrawOnEdit": right-clicking empty space in
+	/// Vertices/Linedefs/Sectors mode (nothing under the cursor for that
+	/// mode's own <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>
+	/// to select/edit) starts Draw mode with the first point already
+	/// placed right there, rather than doing nothing - wired as the
+	/// <c>onEmptyRightClick</c> delegate on each of those three handlers'
+	/// own <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>.
+	/// Not wired for Things mode - UDB's own real equivalent there is
+	/// "insert a new Thing", a distinct, larger, not-yet-built feature of
+	/// its own (see TODO.md's "Adding things" entry), not this one.
+	/// </summary>
+	internal void StartDrawingAt(Vector2 screenPosition)
+	{
+		Mode = EditMode.Draw;
+		_drawHandler.BeginAt(screenPosition);
+	}
 
 	public override void _Process(double delta)
 	{

@@ -34,7 +34,8 @@ public sealed class SectorOverlayHandler
 			v => v.Position, (v, p) => _owner.Map.MoveVertex(v, p),
 			(v, oldPos, newPos) => new MoveVertexCommand(_owner.Map, v, oldPos, newPos),
 			(min, max, mode) => _owner.Map.MarqueeSelectSectors(min, max, mode, _owner.MarqueeSelectTouching),
-			onDoubleClick: s => _owner.RaiseEditSectorsRequested(_owner.Map.GetSelectedSectors().ToList()));
+			onDoubleClick: s => _owner.RaiseEditSectorsRequested(_owner.Map.GetSelectedSectors().ToList()),
+			onEmptyRightClick: screenPosition => _owner.StartDrawingAt(screenPosition));
 	}
 
 	public void HandleInput(InputEvent @event) => _input.HandleInput(@event);

@@ -48,6 +48,13 @@ public partial class MapView : Node3D
 	private UndoStack _undoStack = new();
 	private bool _in3D;
 
+	// Matches the sample room's own baked-in starting transform (floor 0,
+	// camera Y 48 in Scenes/Main.tscn) - reused here rather than a new,
+	// independently-chosen number, so a fresh sample-room session (no
+	// mouse-over-a-sector placement possible yet) still lands at exactly
+	// the same height it always has.
+	private const double EyeHeightAboveFloor = 48;
+
 	// "What am I looking at" 3D targeting - see MapRaycaster's own remarks
 	// for why this is hand-rolled Core geometry rather than Godot physics.
 	private const double PickIntervalSeconds = 0.08; // matches UDB's own 80ms PICK_INTERVAL
@@ -184,6 +191,42 @@ public partial class MapView : Node3D
 				UpdateTarget();
 			}
 		}
+	}
+
+	/// <summary>
+	/// Moves the perspective camera to wherever the mouse is hovering in
+	/// the 2D view right as Tab is pressed, rather than leaving it at
+	/// whatever fixed transform it last had (the sample room's own baked-
+	/// in starting position the very first time - see <see cref="EyeHeightAboveFloor"/>'s
+	/// own remarks - and afterwards just wherever it happened to be left
+	/// after free-flying around) - almost never where the user actually
+	/// wants to look once a real, unrelated map is loaded. Casts the same
+	/// camera-ray-to-ground-plane unprojection <see cref="MapOverlayCamera.Unproject"/>
+	/// itself uses (through <see cref="_topDownCamera"/> directly rather
+	/// than through <see cref="MapOverlay"/>, which doesn't expose this as
+	/// a public operation) to find the map position under the cursor, then
+	/// only actually moves the camera if that position falls inside a real
+	/// sector - leaves it exactly where it was otherwise (empty space
+	/// outside the map, or the mouse simply not over the map view at all)
+	/// rather than guessing. Horizontal position only changes to the
+	/// cursor's own map position; height is that sector's own floor plus
+	/// <see cref="EyeHeightAboveFloor"/>, not the camera's previous
+	/// height, since reusing the old height could leave the camera
+	/// embedded in the floor or ceiling of a sector at a very different
+	/// elevation. Rotation is left untouched entirely.
+	/// </summary>
+	private void PlacePerspectiveCameraAtMouse()
+	{
+		var screenPosition = GetViewport().GetMousePosition();
+		var origin = _topDownCamera.ProjectRayOrigin(screenPosition);
+		var direction = _topDownCamera.ProjectRayNormal(screenPosition);
+		var distanceToPlane = -origin.Y / direction.Y;
+		var mapPosition = (origin + direction * distanceToPlane).ToDoom();
+
+		var sector = SectorHitTest.FindContaining(_map.Sectors, mapPosition);
+		if (sector == null) return;
+
+		_perspectiveCamera.Position = mapPosition.ToWorld((float)(sector.FloorHeight + EyeHeightAboveFloor));
 	}
 
 	/// <summary>
@@ -617,6 +660,17 @@ public partial class MapView : Node3D
 				_undoStack.Redo();
 				break;
 			case Key.Tab:
+				// Computed *before* any Current flag changes below, while
+				// _topDownCamera is still definitely the viewport's own
+				// active camera - Camera3D's ray-projection methods appear
+				// to depend on a camera actually being the current one for
+				// an up-to-date projection matrix (the likely real cause
+				// behind this being unreliable/imprecise when it ran after
+				// the Current swap instead: a stale matrix from whatever
+				// frame the top-down camera was last actually active,
+				// rather than genuinely wrong math).
+				if (!_in3D) PlacePerspectiveCameraAtMouse();
+
 				_in3D = !_in3D;
 				_topDownCamera.Current = !_in3D;
 				_perspectiveCamera.Current = _in3D;

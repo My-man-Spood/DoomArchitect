@@ -63,6 +63,7 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 	private readonly Func<TDraggable, MapVector2, MapVector2, ICommand> _makeMoveCommand;
 	private readonly Action<MapVector2, MapVector2, MarqueeSelectionMode> _marqueeSelect;
 	private readonly Action<TSelectable> _onDoubleClick;
+	private readonly Action<Vector2> _onEmptyRightClick;
 
 	private MapVector2 _dragOrigin;
 	private Dictionary<TDraggable, MapVector2> _dragStart;
@@ -75,7 +76,8 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 		Action<TSelectable> selectOnly, Action<TSelectable> toggleSelect, Action clearSelected,
 		Func<IEnumerable<TDraggable>> getSelectedDraggables, Func<TDraggable, MapVector2> getPosition,
 		Action<TDraggable, MapVector2> setPosition, Func<TDraggable, MapVector2, MapVector2, ICommand> makeMoveCommand,
-		Action<MapVector2, MapVector2, MarqueeSelectionMode> marqueeSelect, Action<TSelectable> onDoubleClick)
+		Action<MapVector2, MapVector2, MarqueeSelectionMode> marqueeSelect, Action<TSelectable> onDoubleClick,
+		Action<Vector2> onEmptyRightClick = null)
 	{
 		_camera = camera;
 		_marquee = marquee;
@@ -92,6 +94,7 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 		_makeMoveCommand = makeMoveCommand;
 		_marqueeSelect = marqueeSelect;
 		_onDoubleClick = onDoubleClick;
+		_onEmptyRightClick = onEmptyRightClick;
 	}
 
 	public void HandleInput(InputEvent @event)
@@ -127,6 +130,15 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 					if (!_isSelected(target)) _selectOnly(target);
 					_dragOrigin = _snap(_camera.Unproject(press.Position));
 					_dragStart = _getSelectedDraggables().ToDictionary(d => d, _getPosition);
+				}
+				else if (_onEmptyRightClick != null && !_marquee.IsSelecting)
+				{
+					// UDB's own real "AutoDrawOnEdit": right-clicking empty
+					// space (nothing under the cursor to select/edit) starts
+					// Draw mode instead, with the first point already placed
+					// right here - not while a marquee drag is in progress,
+					// matching UDB's own identical guard.
+					_onEmptyRightClick(press.Position);
 				}
 
 				break;

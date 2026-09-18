@@ -1998,10 +1998,64 @@ file just tracks what's built and what's next.
       supported, matching UDB's own real `autoclosedrawing` scope),
       `SplitOuterSectors`-equivalent post-pass, continuous drawing mode, a
       real dashed rubber-band line (none exists anywhere in this
-      codebase), live length/angle labels, and `BoundaryTracer`'s own real
-      gap (a trace that lands on the wrong loop on its first attempt
-      returns "not found" rather than UDB's real rightward-ray-cast retry -
-      see that file's own doc comment).
+      codebase), and `BoundaryTracer`'s own real gap (a trace that lands
+      on the wrong loop on its first attempt returns "not found" rather
+      than UDB's real rightward-ray-cast retry - see that file's own doc
+      comment). Genuinely open (non-closed) polylines aren't supported
+      either - `DrawLoopCommand` always closes back to the first point,
+      unlike UDB's own real `Tools.DrawLines` (see the right-click audit
+      entry below, which ran into this directly).
+
+      **Right-click audit, 2026-09-18**: user's own muscle memory
+      ("press right click to draw... in vertex mode") turned out to be
+      real UDB behavior this project was missing entirely, not a false
+      memory - checked every mode's real right-click ("classicedit")
+      behavior directly against UDB's source
+      (`VerticesMode`/`LinedefsMode`/`SectorsMode`/`ThingsMode.OnEditBegin`)
+      rather than guessing. Found and fixed: right-clicking empty space
+      (nothing under the cursor to select/edit) in Vertices/Linedefs/
+      Sectors mode now starts Draw mode with the first point already
+      placed there (UDB's own real `AutoDrawOnEdit`) -
+      `ElementOverlayHandler` gained an optional `onEmptyRightClick`
+      delegate, wired on those three handlers via a new
+      `MapOverlay.StartDrawingAt`/`DrawOverlayHandler.BeginAt`; Vertices
+      mode specifically also gained UDB's own real second priority tier -
+      right-clicking near a linedef (not a vertex) splits it immediately
+      via a new `SplitLinedefCommand`, without needing Draw mode at all
+      (`VertexOverlayHandler` now intercepts right-click itself, ahead of
+      the shared engine, to check for this case first). Draw mode's own
+      right-click changed from cancelling the whole gesture to UDB's real
+      `finishdraw` behavior instead - commits what's drawn so far (Escape
+      remains the real cancel, genuinely distinct in UDB, not a synonym) -
+      narrowed to "close the loop right now" rather than UDB's more
+      general "commit open-or-closed," since `DrawLoopCommand` has no
+      open-polyline support (noted above).
+
+      Two related real gaps found in the same audit, deliberately **not**
+      built this pass (each is its own separably-sized feature, not a
+      right-click wiring fix) - flagged here rather than silently
+      skipped: UDB's own real Vertices-mode right-click-with-no-drag on a
+      highlighted vertex opens a vertex properties dialog
+      (`VerticesMode.OnEditEnd`'s `ShowEditVertices`) - this project has
+      no `VertexEditDialog` at all yet, unlike Linedef/Sector/Thing's own
+      already-built edit dialogs; and UDB's own real Things-mode
+      right-click on empty space inserts a new Thing directly (not Draw
+      mode) - this is the same "Adding things" feature already tracked as
+      its own TODO entry immediately below, not a new discovery.
+
+      Also added: a live length/angle label per segment while drawing
+      (`DrawOverlayHandler.DrawLengthLabel`, UDB's own real
+      `LineLengthLabel` - "L:&lt;length&gt;  A:&lt;angle&gt;", shown for
+      both already-placed segments and the current rubber-band one) -
+      user's own second complaint this session ("it's hard to know what
+      you're doing" with no length feedback at all). The perpendicular
+      offset that keeps the label off the line itself is deliberately
+      computed from the *projected screen points*, not a map-space
+      direction scaled afterwards - keeps it a constant pixel offset
+      regardless of zoom (UDB achieves the identical result by dividing
+      by its own renderer's scale) without needing to reason about
+      whether a map-space perpendicular direction even survives
+      projection unchanged.
 - [ ] Adding things - no way to place a *new* Thing exists yet, only
       select/move/edit already-loaded ones. `MapData.CreateThing(Vector2,
       int)` is already public (not private/internal - only ever actually

@@ -9,14 +9,27 @@ using MapVector2 = System.Numerics.Vector2;
 /// <see cref="ElementOverlayHandler{Vertex,Vertex}"/> engine, since a
 /// vertex is its own draggable - it has a position of its own, unlike
 /// Linedef/Sector), and drawing. Vertex mode has no double-click dialog to
-/// open (UDB has no vertex property dialog), so
-/// <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/> is
-/// constructed with a <c>null</c> double-click delegate here.
+/// open, so <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/> is
+/// constructed with a <c>null</c> double-click delegate here - UDB's own
+/// real right-click *does* open a vertex properties dialog
+/// (<c>VerticesMode.OnEditEnd</c>'s <c>ShowEditVertices</c>), a genuine gap
+/// this project doesn't have yet (no <c>VertexEditDialog</c> exists at
+/// all - see TODO.md), not something intentionally skipped in favor of
+/// double-click.
+///
+/// Right-click gets one more layer ahead of the shared engine, matching
+/// UDB's own real three-way <c>VerticesMode.OnEditBegin</c> priority
+/// exactly: a highlighted vertex still drags/edits via the engine as
+/// normal; failing that, a nearby linedef splits immediately
+/// (<see cref="SplitLinedefCommand"/>) rather than falling through to
+/// empty space; only truly empty space starts Draw mode (the engine's own
+/// <c>onEmptyRightClick</c>).
 /// </summary>
 public sealed class VertexOverlayHandler
 {
 	private const float VertexSize = 6f;
 	private const float VertexPickRadius = 10f;
+	private const float LinedefPickRadius = 6f; // matches LinedefOverlayHandler's own LinedefPickRadius
 
 	private static readonly Color UnselectedColor = new(0.35f, 0.65f, 1f);
 
@@ -35,10 +48,26 @@ public sealed class VertexOverlayHandler
 			() => _owner.Map.GetSelectedVertices(), v => v.Position, (v, p) => _owner.Map.MoveVertex(v, p),
 			(v, oldPos, newPos) => new MoveVertexCommand(_owner.Map, v, oldPos, newPos),
 			(min, max, mode) => _owner.Map.MarqueeSelectVertices(min, max, mode),
-			onDoubleClick: null);
+			onDoubleClick: null,
+			onEmptyRightClick: screenPosition => _owner.StartDrawingAt(screenPosition));
 	}
 
-	public void HandleInput(InputEvent @event) => _input.HandleInput(@event);
+	public void HandleInput(InputEvent @event)
+	{
+		if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true } press
+			&& FindNear(press.Position) == null)
+		{
+			var linedef = FindNearLinedef(press.Position);
+			if (linedef != null)
+			{
+				var position = ProjectOntoLinedef(linedef, _camera.Unproject(press.Position));
+				_owner.UndoStack.Execute(new SplitLinedefCommand(_owner.Map, linedef, position));
+				return;
+			}
+		}
+
+		_input.HandleInput(@event);
+	}
 
 	private Vertex FindNear(Vector2 screenPosition)
 	{
@@ -55,6 +84,44 @@ public sealed class VertexOverlayHandler
 		}
 
 		return closest;
+	}
+
+	private Linedef FindNearLinedef(Vector2 screenPosition)
+	{
+		Linedef closest = null;
+		var closestDistance = LinedefPickRadius;
+		foreach (var linedef in _owner.Map.Linedefs)
+		{
+			var distance = DistanceToSegment(
+				screenPosition, _camera.Project(linedef.Start.Position), _camera.Project(linedef.End.Position));
+			if (distance <= closestDistance)
+			{
+				closest = linedef;
+				closestDistance = distance;
+			}
+		}
+
+		return closest;
+	}
+
+	private static float DistanceToSegment(Vector2 point, Vector2 a, Vector2 b)
+	{
+		var ab = b - a;
+		var t = ab.LengthSquared() > 0f ? Mathf.Clamp((point - a).Dot(ab) / ab.LengthSquared(), 0f, 1f) : 0f;
+		return point.DistanceTo(a + ab * t);
+	}
+
+	private static MapVector2 ProjectOntoLinedef(Linedef linedef, MapVector2 point)
+	{
+		var a = linedef.Start.Position;
+		var b = linedef.End.Position;
+		var ab = b - a;
+		var lengthSquared = ab.LengthSquared();
+		if (lengthSquared <= 0f) return a;
+
+		var t = MapVector2.Dot(point - a, ab) / lengthSquared;
+		t = System.Math.Clamp(t, 0f, 1f);
+		return a + ab * t;
 	}
 
 	public void Draw(CanvasItem target)

@@ -18,7 +18,14 @@ using MapVector2 = System.Numerics.Vector2;
 public sealed class MapOverlayCamera
 {
 	private const float MinCameraSize = 20f;
-	private const float MaxCameraSize = 2000f;
+
+	// Was 2000 - too tight to zoom out far enough to see a whole real
+	// map's floor plan at once (a real Doom level can easily span several
+	// thousand map units per side), found in practice rather than ported
+	// from any particular UDB limit (its own 2D view has no hard zoom-out
+	// ceiling at all - this project keeps one purely so a stray huge
+	// scroll can't zoom out to a degenerate near-infinite size).
+	private const float MaxCameraSize = 20000f;
 
 	private readonly Control _viewport;
 
