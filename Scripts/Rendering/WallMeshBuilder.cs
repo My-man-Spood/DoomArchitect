@@ -13,10 +13,13 @@ namespace DoomArchitect.Rendering;
 /// <see cref="Mesh"/> surfaces uses - a linedef's upper/lower/middle
 /// segments can each need a different texture, and a single
 /// <see cref="ArrayMesh"/> surface only carries one material, so each
-/// distinct texture gets its own surface. Applying the actual materials
-/// is left to the caller (MapView already owns mesh-instance lifecycle).
+/// distinct texture gets its own surface. <see cref="SurfaceIsMasked"/>
+/// (same index as <see cref="SurfaceTextures"/>) is whether that surface
+/// should use <see cref="TextureCache.GetMaskedWallMaterial"/> instead of
+/// the plain opaque one - applying the actual materials is left to the
+/// caller (MapView already owns mesh-instance lifecycle).
 /// </summary>
-public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<string> SurfaceTextures);
+public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<string> SurfaceTextures, IReadOnlyList<bool> SurfaceIsMasked);
 
 /// <summary>
 /// Turns a linedef's wall segments (Core.Geometry.LinedefWallBuilder -
@@ -39,8 +42,9 @@ public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<strin
 /// wrong side.
 ///
 /// UVs are top-pegged (V=0 at the segment's own top edge, offset by the
-/// originating sidedef's OffsetX/OffsetY) - see LinedefWallBuilder's
-/// remarks on why real linedef-flag pegging isn't modeled yet.
+/// originating sidedef's OffsetX and by <see cref="WallSegment.VerticalTextureOffset"/> -
+/// see that field's own remarks, and <c>LinedefWallBuilder</c>'s, for why
+/// this isn't simply <c>Side.OffsetY</c> for a masked middle wall.
 ///
 /// Each quad also gets a single flat brightness color (see
 /// <c>Core.Lighting.SectorBrightness</c>) baked onto all of its vertices,
@@ -64,8 +68,15 @@ public static class WallMeshBuilder
 
         var mesh = new ArrayMesh();
         var surfaceTextures = new List<string>();
+        var surfaceIsMasked = new List<bool>();
 
-        foreach (var group in segments.GroupBy(s => s.Texture))
+        // Grouped by (Texture, IsMasked) rather than Texture alone - a
+        // masked middle and a plain upper/lower/single could otherwise
+        // coincidentally share a texture name (nothing stops a mapper
+        // reusing the same name in both roles) and would then wrongly
+        // merge into one surface, losing the masked-vs-not distinction
+        // the caller needs to pick the right material.
+        foreach (var group in segments.GroupBy(s => (s.Texture, s.IsMasked)))
         {
             var surfaceTool = new SurfaceTool();
             surfaceTool.Begin(Mesh.PrimitiveType.Triangles);
@@ -77,10 +88,11 @@ public static class WallMeshBuilder
 
             surfaceTool.GenerateNormals();
             surfaceTool.Commit(mesh);
-            surfaceTextures.Add(group.Key);
+            surfaceTextures.Add(group.Key.Texture);
+            surfaceIsMasked.Add(group.Key.IsMasked);
         }
 
-        return new WallMeshResult(mesh, surfaceTextures);
+        return new WallMeshResult(mesh, surfaceTextures, surfaceIsMasked);
     }
 
     private static void AddQuad(SurfaceTool surfaceTool, WallSegment segment, TextureCache textures)
@@ -100,8 +112,14 @@ public static class WallMeshBuilder
 
         var uStart = segment.Side.OffsetX / (float)textureWidth;
         var uEnd = ((float)length + segment.Side.OffsetX) / textureWidth;
-        var vTop = segment.Side.OffsetY / (float)textureHeight;
-        var vBottom = ((top - bottom) + segment.Side.OffsetY) / textureHeight;
+
+        // VerticalTextureOffset, not Side.OffsetY directly - already the
+        // correct V-origin for both cases (identical to OffsetY for a
+        // plain upper/lower/single wall; the visible-clip offset for a
+        // masked middle, whose own OffsetY already went into computing
+        // Top/Bottom themselves - see WallSegment's own remarks).
+        var vTop = (float)segment.VerticalTextureOffset / textureHeight;
+        var vBottom = ((top - bottom) + (float)segment.VerticalTextureOffset) / textureHeight;
 
         var uvStartBottom = new Vector2(uStart, vBottom);
         var uvStartTop = new Vector2(uStart, vTop);

@@ -11,8 +11,20 @@ namespace DoomArchitect.Core.Geometry;
 /// back happened to share a texture name). Turning this into an actual
 /// rendered mesh (and eventually a real texture/material) is the App
 /// layer's job.
+///
+/// <see cref="VerticalTextureOffset"/> is what the App layer should
+/// actually use for the quad's own V-coordinate origin, instead of
+/// reading <see cref="Side"/>'s own <c>OffsetY</c> directly: for an
+/// upper/lower/single wall it's identical to <c>Side.OffsetY</c> (the
+/// quad's own extent is fixed by sector heights alone, so the offset
+/// only ever scrolls which part of the texture image shows within it) -
+/// but for a masked middle (<see cref="IsMasked"/>), <c>OffsetY</c>
+/// instead moves where the texture itself sits (see
+/// <see cref="AddMaskedMiddleIfVisible"/>'s own remarks), which already
+/// gets folded into <see cref="Top"/>/<see cref="Bottom"/> directly -
+/// applying <c>Side.OffsetY</c> a second time for the UV would double it.
 /// </summary>
-public readonly record struct WallSegment(Vertex Start, Vertex End, double Bottom, double Top, string Texture, Sidedef Side);
+public readonly record struct WallSegment(Vertex Start, Vertex End, double Bottom, double Top, string Texture, Sidedef Side, double VerticalTextureOffset, bool IsMasked);
 
 /// <summary>
 /// Computes which wall quads exist for a linedef and their vertical
@@ -25,13 +37,10 @@ public readonly record struct WallSegment(Vertex Start, Vertex End, double Botto
 /// <c>VisualMiddleDouble</c> in UDB) needs the real composited texture's
 /// pixel height to size correctly, which isn't something this pure-
 /// geometry layer has on its own - callers pass a
-/// <c>middleTextureHeightLookup</c> delegate for it. Two things are
-/// deliberately not modeled yet, both because this codebase has no typed
-/// linedef-flags concept at all yet (see <c>Core.Map.Linedef</c>):
-/// - Pegging: UDB anchors the texture's bottom edge to the opening's
-///   bottom when the line's "lower unpegged" flag is set; this always
-///   uses UDB's *default* (flag unset) behavior - anchor the top edge to
-///   the opening's top, hanging down.
+/// <c>middleTextureHeightLookup</c> delegate for it. Its own real
+/// pegging - the "lower unpegged" flag, read via <see cref="IsLowerUnpegged"/> -
+/// is ported directly (see <see cref="AddMaskedMiddleIfVisible"/>'s own
+/// remarks); one thing is still deliberately not modeled:
 /// - Repeating (<c>wrapmidtex</c>/Hexen's <c>Line_SetIdentification</c>
 ///   arg): always treated as off (UDB's own vanilla-format default too -
 ///   the flag doesn't even exist outside UDMF/Hexen), so a texture taller
@@ -76,7 +85,7 @@ public static class LinedefWallBuilder
 
         if (ceiling - floor <= MinimumHeight) return Array.Empty<WallSegment>();
 
-        return new[] { new WallSegment(linedef.Start, linedef.End, floor, ceiling, side.MiddleTexture, side) };
+        return new[] { new WallSegment(linedef.Start, linedef.End, floor, ceiling, side.MiddleTexture, side, side.OffsetY, IsMasked: false) };
     }
 
     private static IReadOnlyList<WallSegment> BuildTwoSided(
@@ -117,7 +126,7 @@ public static class LinedefWallBuilder
         var bottom = Math.Max(otherCeiling, side.Sector.FloorHeight);
         if (sideCeiling - bottom <= MinimumHeight) return;
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, sideCeiling, side.UpperTexture, side));
+        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, sideCeiling, side.UpperTexture, side, side.OffsetY, IsMasked: false));
     }
 
     /// <summary>Mirror of <see cref="AddUpperIfVisible"/> for floors - matches UDB's <c>VisualLower</c>.</summary>
@@ -130,19 +139,41 @@ public static class LinedefWallBuilder
         var top = Math.Min(otherFloor, side.Sector.CeilingHeight);
         if (top - sideFloor <= MinimumHeight) return;
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, sideFloor, top, side.LowerTexture, side));
+        segments.Add(new WallSegment(linedef.Start, linedef.End, sideFloor, top, side.LowerTexture, side, side.OffsetY, IsMasked: false));
     }
+
+    /// <summary>
+    /// UDB's own real classic <c>ML_DONTPEGBOTTOM</c> bit (value 16,
+    /// verified directly against its own game-configuration data) for a
+    /// classic-format linedef, or the UDMF <c>dontpegbottom</c> field for
+    /// one loaded from a UDMF map - <c>ClassicMapReader</c> stores a
+    /// classic linedef's whole raw flags word verbatim as an integer
+    /// <c>"flags"</c> field, while <c>UdmfReader</c> stores each named
+    /// UDMF flag as its own boolean field directly - so checking both
+    /// here, in that order, correctly resolves either format without
+    /// needing to know which one produced this <see cref="Linedef"/>.
+    /// </summary>
+    private static bool IsLowerUnpegged(Linedef linedef) =>
+        linedef.Fields.GetBool("dontpegbottom", false) || (linedef.Fields.GetInteger("flags", 0) & 16) != 0;
 
     /// <summary>
     /// A two-sided masked middle (fence/bars/window) - matches UDB's
     /// <c>VisualMiddleDouble</c>: the "opening" between the two sectors is
     /// <c>[max(floor_front, floor_back), min(ceiling_front, ceiling_back)]</c>
-    /// (same bounds an upper/lower wall's own gap uses), and - with no
-    /// unpegged flag and no repeat, both hardcoded off per this class's
-    /// remarks - the texture's top edge anchors to the top of that
-    /// opening and hangs down by its own height, clipped to the opening
-    /// on both ends. A texture shorter than the opening leaves the rest
-    /// of the opening with no geometry; nothing is built at all if the
+    /// (same bounds an upper/lower wall's own gap uses). Real pegging,
+    /// ported directly from <c>VisualMiddleDouble.Setup</c>'s own real
+    /// crop-plane computation: with the line's own "lower unpegged" flag
+    /// set, the texture's *bottom* edge anchors to the opening's own
+    /// bottom and hangs *up*; the default (flag unset) anchors the *top*
+    /// edge to the opening's own top and hangs down, this class's own
+    /// prior unconditional behavior. Either way, <see cref="Sidedef.OffsetY"/>
+    /// shifts that anchor point itself (not just which part of the
+    /// texture image shows, unlike a plain upper/lower/single wall - see
+    /// <see cref="WallSegment.VerticalTextureOffset"/>'s own remarks), and
+    /// the result is clipped to the opening on both ends exactly as
+    /// before - a texture shorter than the opening (or one pushed out of
+    /// it entirely by its own offset) leaves the rest of the opening with
+    /// no geometry rather than tiling. Nothing is built at all if the
     /// side has no middle texture or the opening has no real height.
     /// </summary>
     private static void AddMaskedMiddleIfVisible(
@@ -155,10 +186,20 @@ public static class LinedefWallBuilder
         if (openingTop - openingBottom <= MinimumHeight) return;
 
         var textureHeight = textureHeightLookup(side.MiddleTexture);
-        var top = openingTop;
-        var bottom = Math.Max(openingBottom, top - textureHeight);
+        var textureTop = IsLowerUnpegged(linedef)
+            ? openingBottom + side.OffsetY + textureHeight
+            : openingTop + side.OffsetY;
+        var textureBottom = textureTop - textureHeight;
+
+        var top = Math.Min(textureTop, openingTop);
+        var bottom = Math.Max(textureBottom, openingBottom);
         if (top - bottom <= MinimumHeight) return;
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, top, side.MiddleTexture, side));
+        // How far the visible top edge sits below the texture's own
+        // natural (unclipped) top - 0 unless OffsetY, or a too-tall/short
+        // texture, pushed part of it outside the opening.
+        var verticalTextureOffset = textureTop - top;
+
+        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, top, side.MiddleTexture, side, verticalTextureOffset, IsMasked: true));
     }
 }

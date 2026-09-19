@@ -293,4 +293,106 @@ public class LinedefWallBuilderTests
         Assert.Contains(segments, s => s.Texture == "FRONTFENCE");
         Assert.Contains(segments, s => s.Texture == "BACKFENCE");
     }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_DefaultPegging_IsMaskedAndAnchoredToOpeningTop()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.True(middle.IsMasked);
+        Assert.Equal(88, middle.Bottom);
+        Assert.Equal(128, middle.Top);
+        Assert.Equal(0, middle.VerticalTextureOffset); // unclipped - visible top edge is the texture's own natural top
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperLowerAndSingleSegments_AreNeverMasked()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.False(segment.IsMasked);
+        Assert.Equal(0, segment.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_ClassicLowerUnpeggedFlag_AnchorsToOpeningBottom()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Fields.SetInteger("flags", 16); // ML_DONTPEGBOTTOM, classic-format storage
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(0, middle.Bottom); // opening bottom (0)
+        Assert.Equal(40, middle.Top); // opening bottom (0) + texture height (40)
+        Assert.Equal(0, middle.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_UdmfDontPegBottomField_AnchorsToOpeningBottom()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Fields.SetBool("dontpegbottom", true);
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(0, middle.Bottom);
+        Assert.Equal(40, middle.Top);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_OffsetYShiftsTheAnchorPosition_NotJustTheUv()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Front!.OffsetY = -10; // shift the texture's own top down by 10 from the opening's top
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(78, middle.Bottom); // (128 - 10) - 40
+        Assert.Equal(118, middle.Top); // 128 - 10
+        Assert.Equal(0, middle.VerticalTextureOffset); // still unclipped - the whole shifted texture still fits inside the opening
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_ClippedAtTop_ReportsTheVisibleOffsetIntoTheTexture()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Front!.OffsetY = 20; // push the texture's own top 20 units *above* the opening's own top
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(128, middle.Top); // clipped to the opening's own top
+        Assert.Equal(20, middle.VerticalTextureOffset); // the visible top edge is 20 units below the texture's own natural top
+    }
 }

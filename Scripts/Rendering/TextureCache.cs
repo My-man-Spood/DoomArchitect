@@ -18,6 +18,7 @@ public sealed class TextureCache
 {
     private readonly TextureSet _textures;
     private readonly Dictionary<string, (PixelImage Pixels, StandardMaterial3D Material)> _wallCache = new();
+    private readonly Dictionary<string, StandardMaterial3D> _maskedWallCache = new();
     private readonly Dictionary<string, StandardMaterial3D> _flatCache = new();
     private readonly Dictionary<string, (PixelImage Pixels, StandardMaterial3D Material)> _spriteCache = new();
 
@@ -27,6 +28,40 @@ public sealed class TextureCache
     }
 
     public StandardMaterial3D GetWallMaterial(string name) => GetWallEntry(name).Material;
+
+    /// <summary>
+    /// The masked-middle variant of the same wall texture - same decoded
+    /// pixels/albedo (reuses <see cref="GetWallEntry"/>'s own already-
+    /// cached <see cref="Texture2D"/>, no second decode/upload), but with
+    /// alpha cutout enabled, unlike <see cref="GetWallMaterial"/>'s own
+    /// plain opaque one. Cached separately (by name, same as
+    /// <see cref="GetWallMaterial"/>'s own cache) rather than sharing one
+    /// material per texture name - the identical texture name could
+    /// legitimately be used as a plain opaque wall on one linedef and a
+    /// masked middle on another, and they need genuinely different
+    /// <see cref="BaseMaterial3D.Transparency"/> settings to render
+    /// correctly in each role.
+    /// </summary>
+    public StandardMaterial3D GetMaskedWallMaterial(string name)
+    {
+        if (_maskedWallCache.TryGetValue(name, out var cached)) return cached;
+
+        var baseTexture = GetWallEntry(name).Material.AlbedoTexture;
+        var material = CreateMaterial(baseTexture);
+
+        // Doom's own real masking convention is strictly binary - a
+        // pixel is either fully opaque or fully transparent, never
+        // partial (confirmed directly in this project's own patch/
+        // composite texture decoders, which only ever write alpha 0 or
+        // 255) - a hard cutout matches that source data more faithfully
+        // than smooth alpha blending, which would also introduce real
+        // draw-order/sorting concerns vanilla masking never had for
+        // genuinely binary transparency.
+        material.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+
+        _maskedWallCache[name] = material;
+        return material;
+    }
 
     /// <summary>Pixel dimensions of a wall texture, needed to build wall UVs and to size a masked middle wall.</summary>
     public Vector2I GetWallTextureSize(string name)
@@ -92,9 +127,19 @@ public sealed class TextureCache
         return material;
     }
 
-    private static StandardMaterial3D CreateMaterial(PixelImage pixels)
+    private static StandardMaterial3D CreateMaterial(PixelImage pixels) =>
+        CreateMaterial(ImageTexture.CreateFromImage(pixels.ToGodotImage()));
+
+    /// <summary>
+    /// The shared "base look" every wall/flat material starts from,
+    /// taking an already-resolved <see cref="Texture2D"/> directly rather
+    /// than always decoding a fresh one - <see cref="GetMaskedWallMaterial"/>
+    /// reuses an existing one from <see cref="GetWallEntry"/> this way,
+    /// rather than decoding and uploading the identical pixels to the GPU
+    /// twice.
+    /// </summary>
+    private static StandardMaterial3D CreateMaterial(Texture2D texture)
     {
-        var texture = ImageTexture.CreateFromImage(pixels.ToGodotImage());
         return new StandardMaterial3D
         {
             AlbedoTexture = texture,

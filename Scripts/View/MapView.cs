@@ -291,6 +291,91 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
+	/// UDB's own real visual-mode right-click ("visualedit", bound to the
+	/// right mouse button by default, exactly like classic mode's own
+	/// "classicedit") - opens the properties dialog for whichever element
+	/// *type* is currently targeted (<c>BaseVisualGeometrySector.OnEditEnd</c>'s
+	/// own real <c>ShowEditSectors</c> for a floor/ceiling,
+	/// <c>BaseVisualGeometrySidedef.OnEditEnd</c>'s own real
+	/// <c>ShowEditLinedefs</c> for a wall), for the *whole* current 3D-mode
+	/// selection of that type if any - matching UDB's real
+	/// <c>GetSelectedObjects</c> fallback exactly: only when nothing of
+	/// that type is selected does it fall back to acting on just the
+	/// targeted element. Which dialog opens is decided purely by what's
+	/// under the crosshair, not by which selection happens to be
+	/// non-empty - aiming at a wall always means Linedef properties, even
+	/// with sectors also selected elsewhere, and vice versa.
+	///
+	/// Releases the mouse capture 3D mode holds (matching
+	/// <see cref="FreeFlyCamera"/>'s own already-established Escape/
+	/// left-click capture toggle) *before* popping the dialog - a popup
+	/// opened while the OS cursor is still captured/hidden would be
+	/// unreachable to actually click. Left-clicking back into the 3D view
+	/// afterward re-captures it again, the same existing gesture already
+	/// used to resume after Escape.
+	/// </summary>
+	private void HandleThreeDEditClick()
+	{
+		if (_currentTarget is not { } target) return;
+
+		Input.MouseMode = Input.MouseModeEnum.Visible;
+
+		if (target.Kind == TargetSurfaceKind.Wall)
+		{
+			var linedefs = _selectedLinedefs3D.Count > 0
+				? _selectedLinedefs3D.ToList()
+				: new List<Linedef> { target.WallSegment!.Value.Side.Linedef };
+			_overlay.RaiseEditLinedefsRequested(linedefs);
+		}
+		else
+		{
+			var sectors = _selectedSectors3D.Count > 0 ? _selectedSectors3D.ToList() : new List<Sector> { target.Sector };
+			_overlay.RaiseEditSectorsRequested(sectors);
+		}
+	}
+
+	/// <summary>
+	/// UDB's own real visual-mode plain-mouse-wheel default binding
+	/// (<c>raisesector8</c>/<c>lowersector8</c>, verified directly against
+	/// its default keybind config - the numeric action-key values there
+	/// decode into "plain wheel" for the unmodified 8-unit raise/lower,
+	/// "wheel+Shift" for a 1-unit fine adjustment, "wheel+Ctrl" for
+	/// brightness instead, the latter two not ported here since the user's
+	/// own request was specifically the plain-wheel case): raises or
+	/// lowers whichever *specific* surface - floor or ceiling, exactly
+	/// matching <see cref="TargetSurfaceKind"/> - is currently targeted,
+	/// by <paramref name="amount"/> map units, undoably. A wall target is
+	/// deliberately left untouched, matching the user's own explicit
+	/// scope ("if we're pointing at a ceiling or a floor").
+	///
+	/// Unlike the edit-click above, this deliberately does *not* extend to
+	/// the whole 3D-mode selection - <see cref="_selectedSectors3D"/> only
+	/// ever tracks *which sectors* are selected, not separately *which
+	/// surface* of each (UDB's own real per-surface
+	/// <c>BaseVisualGeometrySector</c> objects do track that distinction,
+	/// letting a multi-select scroll raise several floors *and* ceilings
+	/// together correctly) - always acting on just the live target avoids
+	/// that ambiguity entirely rather than guessing. Each wheel notch is
+	/// also its own separate undo step, unlike UDB's own real
+	/// <c>UndoGroup</c>-based coalescing of a rapid scroll gesture into
+	/// one - this project's own <see cref="UndoStack"/> has no such
+	/// merging mechanism yet, a deliberately small, flagged simplification
+	/// rather than a new general-purpose one built just for this.
+	/// </summary>
+	private void AdjustTargetHeight(double amount)
+	{
+		if (_currentTarget is not { } target) return;
+		if (target.Kind == TargetSurfaceKind.Wall) return;
+
+		var sector = target.Sector;
+		ICommand command = target.Kind == TargetSurfaceKind.Floor
+			? new SetPropertyCommand<Sector, double>(sector, (s, v) => s.FloorHeight = v, sector.FloorHeight, sector.FloorHeight + amount, s => _map.MarkDirty(s))
+			: new SetPropertyCommand<Sector, double>(sector, (s, v) => s.CeilingHeight = v, sector.CeilingHeight, sector.CeilingHeight + amount, s => _map.MarkDirty(s));
+
+		_undoStack.Execute(command);
+	}
+
+	/// <summary>
 	/// Swaps in a freshly loaded map: tears down every existing sector's
 	/// meshes and rebuilds from scratch, resets undo history (the old
 	/// stack's commands still close over the discarded MapData, so they'd
@@ -576,7 +661,10 @@ public partial class MapView : Node3D
 		{
 			// Same "-" skip as ApplyFlatMaterial - see its remarks.
 			if (result.SurfaceTextures[i] == "-") continue;
-			instance.SetSurfaceOverrideMaterial(i, _textureCache.GetWallMaterial(result.SurfaceTextures[i]));
+			var material = result.SurfaceIsMasked[i]
+				? _textureCache.GetMaskedWallMaterial(result.SurfaceTextures[i])
+				: _textureCache.GetWallMaterial(result.SurfaceTextures[i]);
+			instance.SetSurfaceOverrideMaterial(i, material);
 		}
 	}
 
@@ -673,6 +761,24 @@ public partial class MapView : Node3D
 		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true })
 		{
 			HandleThreeDSelectClick();
+			return;
+		}
+
+		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.Right, Pressed: true })
+		{
+			HandleThreeDEditClick();
+			return;
+		}
+
+		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.WheelUp, Pressed: true })
+		{
+			AdjustTargetHeight(8);
+			return;
+		}
+
+		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.WheelDown, Pressed: true })
+		{
+			AdjustTargetHeight(-8);
 			return;
 		}
 

@@ -489,12 +489,46 @@ file just tracks what's built and what's next.
       leaves the rest of the opening with no geometry at all (not
       tiled), matching UDB's own non-repeating default exactly rather
       than approximating it.
-      **Deliberately not modeled**: UDB's "lower unpegged" flag (which
-      would instead anchor the texture's *bottom* edge to the opening's
-      bottom) and the `wrapmidtex`/Hexen repeat-texture behavior - both
-      because `Core.Map.Linedef` has no typed flags concept at all yet.
-      Always uses UDB's own default (unpegged-flag-unset) behavior in the
-      meantime; revisit once linedef flags are modeled, naturally
+      **Real pegging and transparency added in a later pass** (2026-09-18),
+      closing the two gaps flagged above: `LinedefWallBuilder` now reads
+      the line's own real "lower unpegged" flag - `Core.Map.Linedef`
+      still has no typed flags concept, so this reads both storage
+      conventions that actually exist in the codebase directly:
+      `ClassicMapReader`'s verbatim raw-flags-word `"flags"` integer
+      field (bit 16, `ML_DONTPEGBOTTOM`, verified against UDB's own
+      game-configuration data) and `UdmfReader`'s own named boolean
+      `"dontpegbottom"` field - and, when set, anchors the texture's
+      *bottom* edge to the opening's own bottom (hangs up) instead of the
+      prior unconditional top-anchor/hangs-down behavior, matching
+      `VisualMiddleDouble.Setup`'s own real crop-plane formula exactly.
+      `Sidedef.OffsetY` now shifts that anchor point itself for a masked
+      middle - moving where the texture actually sits, not just scrolling
+      which part of it shows - unlike a plain upper/lower/single wall,
+      where the quad's extent is fixed by sector heights alone and
+      `OffsetY` only ever scrolls the image within it; `WallSegment`
+      grew a `VerticalTextureOffset` field to carry the right V-origin
+      for either case so the App layer doesn't need its own pegging logic
+      (`WallMeshBuilder` reads that instead of `Side.OffsetY` directly).
+      Transparency was a separate, purely App-layer gap: the decoded
+      texture pixels themselves were already correctly alpha 0/255 per
+      pixel (`DoomPictureReader`/`CompositeTextureBuilder` both zero-init
+      and only ever write alpha 255 for pixels a patch post actually
+      covers) - `TextureCache.CreateMaterial` just never enabled any
+      `Transparency` mode on the material using them. Fixed with a new
+      `TextureCache.GetMaskedWallMaterial`, reusing the same already-
+      decoded/uploaded texture as the opaque `GetWallMaterial` (no double
+      decode) but with `TransparencyEnum.AlphaScissor` - a hard cutout
+      rather than smooth `Alpha` blending, chosen because Doom's own
+      masking convention is strictly binary (confirmed via the decoders
+      above), so a cutout matches the source data faithfully without
+      introducing the draw-order/sorting concerns smooth blending would
+      add for no real benefit. `WallMeshBuilder` now groups wall segments
+      by `(Texture, IsMasked)` rather than `Texture` alone, so a masked
+      middle and a same-named opaque upper/lower/single never merge into
+      one surface, and picks the right material per surface accordingly.
+      Still deliberately not modeled: the `wrapmidtex`/Hexen repeat-
+      texture behavior, for the same underlying reason as before
+      (no typed linedef-flags concept for that flag either yet) - revisit
       alongside the Game configuration system below.
 - [x] Sector lighting, including vanilla "fake contrast" wall shading
       (`Core.Lighting.SectorBrightness`) - reprioritized ahead of Things
@@ -1697,6 +1731,50 @@ file just tracks what's built and what's next.
       its own design pass for the pattern-matching rule format and how a
       category set gets defined/loaded before the browser's tree can grow
       a second branch for it.
+- [x] 3D-mode plain-scroll-wheel floor/ceiling height + right-click
+      properties - done 2026-09-19. User's own request, confirmed as real
+      UDB behavior rather than invented from scratch by decoding its
+      default keybind config: the numeric action-key values there
+      (`raisesector8`/`lowersector8` = plain wheel, `raisesector1`/
+      `lowersector1` = wheel+Shift for a 1-unit fine adjustment,
+      `raisebrightness8`/`lowerbrightness8` = wheel+Ctrl) split cleanly
+      into a base "wheel up/down" code plus a modifier bit - confirming
+      plain scroll really does raise/lower height by 8 in real UDB's own
+      default binds, not brightness (that's Ctrl+Scroll specifically,
+      still the not-yet-built item directly below). `BaseVisualGeometrySector.OnChangeTargetHeight`/
+      `ChangeHeight` confirmed it targets `Sector.FloorHeight`/`CeilingHeight`
+      directly (no slopes to consider, matching this project's own scope).
+      `MapView.AdjustTargetHeight` - reads `TargetSurfaceKind` off the
+      already-built `MapRaycaster`/`_currentTarget` (already distinguishes
+      Floor/Ceiling/Wall, exactly what this needed) and applies a
+      `SetPropertyCommand<Sector, double>` through the undo stack; a Wall
+      target is left untouched, matching the user's own explicit scope.
+      Deliberately not ported: UDB's own real per-notch `UndoGroup`
+      coalescing (this project's own `UndoStack` has no merging mechanism
+      at all yet, so each notch is its own undo step) and extending the
+      action to the whole 3D-mode selection at once (`_selectedSectors3D`
+      only tracks *which sectors* are selected, not separately *which
+      surface* of each the way UDB's own per-surface visual objects do,
+      so multi-select-then-scroll would be ambiguous without a real
+      redesign of that selection model) - always acts on just the live
+      target instead.
+
+      Also added in the same pass: right-click in 3D mode now opens
+      Sector or Linedef properties depending on what's targeted (UDB's
+      own real `visualedit` action, bound to the right mouse button by
+      default exactly like classic mode's own `classicedit` - confirmed
+      directly against `BaseVisualGeometrySector`/`BaseVisualGeometrySidedef.OnEditEnd`,
+      which call the identical `ShowEditSectors`/`ShowEditLinedefs` this
+      project's own 2D-mode dialogs already use, reusing the exact same
+      `MapOverlay.RaiseEditSectorsRequested`/`RaiseEditLinedefsRequested`
+      wiring). Operates on the whole 3D-mode selection of the *targeted*
+      type if any (a wall target always means Linedef properties, even
+      with sectors selected elsewhere), else just the targeted element -
+      matches UDB's own real `GetSelectedObjects` fallback exactly. Also
+      releases 3D mode's own mouse capture before popping the dialog
+      (matching `FreeFlyCamera`'s already-established Escape/left-click
+      capture toggle) - a popup opened while the OS cursor is still
+      captured/hidden would otherwise be unreachable to actually click.
 - [ ] Full-bright toggle + real sector/wall brightness editing (Ctrl+Scroll,
       matching UDB's own `togglebrightness`/`raisebrightness8`/
       `lowerbrightness8` default keybinds) - the feature that originally
