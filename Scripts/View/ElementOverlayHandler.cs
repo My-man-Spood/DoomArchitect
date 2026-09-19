@@ -49,8 +49,9 @@ using MapVector2 = System.Numerics.Vector2;
 /// own real one - a right-click that releases without ever turning into
 /// a drag (<c>OnEditEnd</c>, only ever reached when no drag started;
 /// "did the position actually change" already doubles as the drag-vs-
-/// click distinction this needs, since every draggable position here is
-/// snapped). Both invoke the identical delegate rather than two separate
+/// click distinction this needs - even with snapping on, a small enough
+/// movement can legitimately still round back to the exact same grid
+/// point). Both invoke the identical delegate rather than two separate
 /// ones because every real caller's own <c>onEdit</c> implementation
 /// already ignores whichever single element triggered it and re-derives
 /// the *current* selection instead (matching UDB's own real "edit
@@ -82,6 +83,8 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 
 	private MapVector2 _dragOrigin;
 	private Dictionary<TDraggable, MapVector2> _dragStart;
+	private TDraggable _dragAnchor;
+	private MapVector2 _dragAnchorStartPosition;
 
 	public TSelectable Hovered { get; private set; }
 
@@ -143,8 +146,25 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 				if (target != null)
 				{
 					if (!_isSelected(target)) _selectOnly(target);
-					_dragOrigin = _snap(_camera.Unproject(press.Position));
 					_dragStart = _getSelectedDraggables().ToDictionary(d => d, _getPosition);
+
+					// UDB's own real DragGeometryMode: the raw, *unsnapped*
+					// click position is the drag's own origin - the
+					// draggable actually nearest to it (not necessarily
+					// target itself; for Linedef/Sector mode this searches
+					// among every selected vertex) is the one whose own
+					// resulting position gets snapped directly to the grid
+					// each motion tick, with the offset that produces then
+					// applied uniformly to the rest of the selection -
+					// never "snap the cursor's own movement," which
+					// preserves whatever sub-grid offset existed between
+					// the click and the draggable's own position instead
+					// of eliminating it.
+					_dragOrigin = _camera.Unproject(press.Position);
+					_dragAnchor = _dragStart.Keys
+						.OrderBy(d => MapVector2.DistanceSquared(_getPosition(d), _dragOrigin))
+						.First();
+					_dragAnchorStartPosition = _getPosition(_dragAnchor);
 				}
 				else if (_onEmptyRightClick != null && !_marquee.IsSelecting)
 				{
@@ -183,10 +203,18 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 
 				break;
 			case InputEventMouseMotion motion when _dragStart != null:
-				var delta = _snap(_camera.Unproject(motion.Position)) - _dragOrigin;
+				// The anchor's own new (unsnapped) position first, exactly
+				// tracking the raw cursor movement - then *that* gets
+				// snapped directly (a no-op when snapping is currently
+				// off, since _snap returns its input unchanged), and the
+				// offset actually applied to the whole selection is
+				// derived from the anchor's own before/after snapped
+				// position, not from the cursor's.
+				var rawAnchorPosition = _dragAnchorStartPosition + (_camera.Unproject(motion.Position) - _dragOrigin);
+				var offset = _snap(rawAnchorPosition) - _dragAnchorStartPosition;
 				foreach (var (draggable, startPosition) in _dragStart)
 				{
-					_setPosition(draggable, startPosition + delta);
+					_setPosition(draggable, startPosition + offset);
 				}
 
 				break;
