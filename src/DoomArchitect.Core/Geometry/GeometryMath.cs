@@ -27,6 +27,50 @@ internal static class GeometryMath
         return uRay is >= 0f and <= 1f && uLine is >= 0f and <= 1f;
     }
 
+    /// <summary>
+    /// Same bounded segment-vs-segment math as <see cref="SegmentsIntersect"/>,
+    /// also returning where along b (<paramref name="uB"/>, 0 at
+    /// <paramref name="b1"/>, 1 at <paramref name="b2"/>) and the actual
+    /// intersection point - mirrors UDB's real <c>Line2D.GetIntersection</c>,
+    /// whose own <c>u</c> output is along its "other" argument (verified by
+    /// its own real call site, <c>Tools.DrawLines</c>, using the returned
+    /// <c>u</c> against the segment passed as "other" to get the split
+    /// coordinates), the same convention kept here.
+    /// </summary>
+    public static bool TryGetSegmentIntersection(Vector2 a1, Vector2 a2, Vector2 b1, Vector2 b2, out float uB, out Vector2 point)
+    {
+        var divisor = (b2.Y - b1.Y) * (a2.X - a1.X) - (b2.X - b1.X) * (a2.Y - a1.Y);
+        if (divisor == 0f)
+        {
+            uB = 0f;
+            point = default;
+            return false;
+        }
+
+        var uA = ((b2.X - b1.X) * (a1.Y - b1.Y) - (b2.Y - b1.Y) * (a1.X - b1.X)) / divisor;
+        uB = ((a2.X - a1.X) * (a1.Y - b1.Y) - (a2.Y - a1.Y) * (a1.X - b1.X)) / divisor;
+
+        if (uA is < 0f or > 1f || uB is < 0f or > 1f)
+        {
+            point = default;
+            return false;
+        }
+
+        point = b1 + (b2 - b1) * uB;
+        return true;
+    }
+
+    /// <summary>Squared distance from p to the closest point on the *bounded* segment a-&gt;b (clipped to its own endpoints, not the infinite line).</summary>
+    public static float DistanceToSegmentSquared(Vector2 a, Vector2 b, Vector2 p)
+    {
+        var ab = b - a;
+        var lengthSquared = ab.LengthSquared();
+        if (lengthSquared <= 0f) return (p - a).LengthSquared();
+
+        var t = System.Math.Clamp(Vector2.Dot(p - a, ab) / lengthSquared, 0f, 1f);
+        return (p - (a + ab * t)).LengthSquared();
+    }
+
     /// <summary>Direction from a to b, normalized to [0, 2*PI).</summary>
     public static float Angle(Vector2 a, Vector2 b)
     {

@@ -122,6 +122,7 @@ public partial class ThingEditDialog : AcceptDialog
 	private MapData _map;
 	private UndoStack _undoStack;
 	private Action _onLiveChange;
+	private Action<int> _onTypeChanged;
 	private bool _suppressLiveApply;
 
 	public override void _Ready()
@@ -208,12 +209,13 @@ public partial class ThingEditDialog : AcceptDialog
 
 	public void SetThings(
 		IReadOnlyList<Thing> things, MapData map, IGameConfiguration gameConfiguration, UndoStack undoStack, Action onLiveChange,
-		SpriteIconCache spriteIconCache)
+		SpriteIconCache spriteIconCache, Action<int> onTypeChanged = null)
 	{
 		_things = things;
 		_map = map;
 		_undoStack = undoStack;
 		_onLiveChange = onLiveChange;
+		_onTypeChanged = onTypeChanged;
 
 		var flagKeys = gameConfiguration.GetThingFlags();
 		_snapshots = things.ToDictionary(t => t, t => new Snapshot(
@@ -369,6 +371,12 @@ public partial class ThingEditDialog : AcceptDialog
 			thing.Type = (int)(NumericFieldExpression.ResolveInteger(text, snapshot.Type) ?? snapshot.Type);
 			_map.MarkDirty(thing);
 		}
+
+		// A resolvable value here is a genuine, intentional type choice -
+		// matches UDB's own real ThingEditFormUDMF, which updates
+		// General.Settings.DefaultThingType the same way on every apply,
+		// not just for a freshly inserted Thing.
+		if (NumericFieldExpression.ResolveInteger(text, 0) is { } resolvedType) _onTypeChanged?.Invoke((int)resolvedType);
 
 		_onLiveChange?.Invoke();
 	}

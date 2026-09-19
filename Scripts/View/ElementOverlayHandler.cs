@@ -35,13 +35,28 @@ using MapVector2 = System.Numerics.Vector2;
 /// (<c>MapData.MoveVertex</c>/<c>MoveVertexCommand</c> for every
 /// vertex-backed mode, <c>MapData.MoveThing</c>/<c>MoveThingCommand</c>
 /// for Thing)</item>
-/// <item>whether a double-click even exists for this mode at all (Vertex
-/// mode has none - UDB has no vertex property dialog to open) and, when
-/// it does, which <see cref="MapOverlay"/> event it fires</item>
+/// <item>whether opening a properties dialog even exists for this mode at
+/// all (Vertex mode has none yet - see TODO.md) and, when it does, which
+/// <see cref="MapOverlay"/> event it fires</item>
 /// </list>
 /// Every other line of logic - the exact case-by-case shape of
 /// <see cref="HandleInput"/> below - is a direct, unmodified port of what
 /// was independently duplicated four times before this extraction.
+///
+/// <c>onEdit</c> fires from two genuinely different real UDB gestures,
+/// not just the one its name might suggest: a left-double-click (this
+/// project's own added convenience, not a real UDB gesture) and - UDB's
+/// own real one - a right-click that releases without ever turning into
+/// a drag (<c>OnEditEnd</c>, only ever reached when no drag started;
+/// "did the position actually change" already doubles as the drag-vs-
+/// click distinction this needs, since every draggable position here is
+/// snapped). Both invoke the identical delegate rather than two separate
+/// ones because every real caller's own <c>onEdit</c> implementation
+/// already ignores whichever single element triggered it and re-derives
+/// the *current* selection instead (matching UDB's own real "edit
+/// whatever's selected, not just what you clicked" dialog behavior) - so
+/// there's genuinely nothing gesture-specific for two separate delegates
+/// to carry.
 /// </summary>
 public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 	where TSelectable : class
@@ -62,7 +77,7 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 	private readonly Action<TDraggable, MapVector2> _setPosition;
 	private readonly Func<TDraggable, MapVector2, MapVector2, ICommand> _makeMoveCommand;
 	private readonly Action<MapVector2, MapVector2, MarqueeSelectionMode> _marqueeSelect;
-	private readonly Action<TSelectable> _onDoubleClick;
+	private readonly Action<TSelectable> _onEdit;
 	private readonly Action<Vector2> _onEmptyRightClick;
 
 	private MapVector2 _dragOrigin;
@@ -76,7 +91,7 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 		Action<TSelectable> selectOnly, Action<TSelectable> toggleSelect, Action clearSelected,
 		Func<IEnumerable<TDraggable>> getSelectedDraggables, Func<TDraggable, MapVector2> getPosition,
 		Action<TDraggable, MapVector2> setPosition, Func<TDraggable, MapVector2, MapVector2, ICommand> makeMoveCommand,
-		Action<MapVector2, MapVector2, MarqueeSelectionMode> marqueeSelect, Action<TSelectable> onDoubleClick,
+		Action<MapVector2, MapVector2, MarqueeSelectionMode> marqueeSelect, Action<TSelectable> onEdit,
 		Action<Vector2> onEmptyRightClick = null)
 	{
 		_camera = camera;
@@ -93,7 +108,7 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 		_setPosition = setPosition;
 		_makeMoveCommand = makeMoveCommand;
 		_marqueeSelect = marqueeSelect;
-		_onDoubleClick = onDoubleClick;
+		_onEdit = onEdit;
 		_onEmptyRightClick = onEmptyRightClick;
 	}
 
@@ -101,12 +116,12 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 	{
 		switch (@event)
 		{
-			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true, DoubleClick: true } doubleClick when _onDoubleClick != null:
+			case InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true, DoubleClick: true } doubleClick when _onEdit != null:
 				var doubleClickTarget = _findNear(doubleClick.Position);
 				if (doubleClickTarget != null)
 				{
 					if (!_isSelected(doubleClickTarget)) _selectOnly(doubleClickTarget);
-					_onDoubleClick(doubleClickTarget);
+					_onEdit(doubleClickTarget);
 				}
 
 				break;
@@ -151,6 +166,16 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 							.Select(kvp => _makeMoveCommand(kvp.Key, kvp.Value, _getPosition(kvp.Key)))
 							.ToList();
 						_getUndoStack().Record(new CommandGroup(commands));
+					}
+					else if (Hovered != null)
+					{
+						// UDB's own real behavior: a right-click that never
+						// turned into a drag opens the properties dialog
+						// (OnEditEnd, only ever reached when OnDragStart
+						// never fired) - see this class's own remarks on why
+						// this reuses the identical onEdit delegate rather
+						// than a separate one.
+						_onEdit?.Invoke(Hovered);
 					}
 
 					_dragStart = null;

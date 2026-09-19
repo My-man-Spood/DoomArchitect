@@ -93,13 +93,14 @@ public partial class MapOverlay : Control
 	public IReadOnlyList<NamedResource> NamedResources { get; set; } = System.Array.Empty<NamedResource>();
 
 	/// <summary>
-	/// Raised on a double-click in Sectors mode - the trigger for opening a
-	/// properties dialog. Reuses the same select-only-if-unselected-else-
-	/// keep-group rule already verified and ported for right-button drag
-	/// this session (rather than re-verifying UDB's own double-click
-	/// handler independently - a reasonable default given this project's
-	/// established muscle-memory-consistency pattern, flagged as inferred
-	/// rather than confirmed if it ever feels off in practice).
+	/// Raised on either of the two gestures that open a properties dialog
+	/// for the current mode - a right-click that releases without ever
+	/// turning into a drag (UDB's own real behavior, verified directly
+	/// against its source: <c>OnEditEnd</c> only opens the dialog when
+	/// <c>OnDragStart</c> never fired) or a left-double-click (this
+	/// project's own added convenience, not a real UDB gesture, but a
+	/// harmless and common one). See <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>'s
+	/// own remarks on why both share one delegate.
 	/// </summary>
 	public event System.Action<IReadOnlyList<Sector>> EditSectorsRequested;
 	public event System.Action<IReadOnlyList<Linedef>> EditLinedefsRequested;
@@ -181,6 +182,22 @@ public partial class MapOverlay : Control
 	{
 		if (_mode == EditMode.Draw) Mode = _modeBeforeDraw;
 	}
+
+	/// <summary>
+	/// UDB's own real <c>General.Settings.DefaultThingType</c> - the type
+	/// a freshly right-click-inserted Thing gets (<see cref="ThingOverlayHandler"/>'s
+	/// own real <c>InsertThingAt</c>), updated in turn whenever a type is
+	/// actually applied through the thing-edit dialog
+	/// (<c>ThingEditDialog</c>'s own <c>onTypeChanged</c> callback, wired
+	/// in <c>MainMenuBar</c>) - a plain in-memory session value, same as
+	/// UDB's own real one before it's ever saved to disk; naturally
+	/// outlives a single map load/unload since this <see cref="MapOverlay"/>
+	/// instance itself does, matching UDB's own real cross-map
+	/// persistence within one running session close enough without this
+	/// project having any settings-file persistence to hook into at all
+	/// (see TODO.md's "Keybinding management" entry on that same gap).
+	/// </summary>
+	internal int LastUsedThingType { get; set; } = CreateThingCommand.DefaultType;
 
 	public float GridSize
 	{

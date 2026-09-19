@@ -1126,4 +1126,137 @@ public class MapDataTests
         Assert.Contains(linedef.Back, target.Sidedefs);
         Assert.DoesNotContain(backSidedef, other.Sidedefs);
     }
+
+    [Fact]
+    public void MergeVertex_RedirectsEveryTouchingLinedefOntoTheKeptVertex()
+    {
+        var map = new MapData();
+        var from = map.CreateVertex(new Vector2(50, 50));
+        var into = map.CreateVertex(new Vector2(50.001f, 50));
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 100));
+        var l1 = map.CreateLinedef(a, from, null, null);
+        var l2 = map.CreateLinedef(from, b, null, null);
+
+        map.MergeVertex(from, into);
+
+        Assert.Same(into, l1.End);
+        Assert.Same(into, l2.Start);
+        Assert.DoesNotContain(from, map.Vertices);
+        Assert.Contains(l1, into.Linedefs);
+        Assert.Contains(l2, into.Linedefs);
+        Assert.Empty(from.Linedefs);
+    }
+
+    [Fact]
+    public void RestoreVertex_UndoesRemoveVertex()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        map.RemoveVertex(vertex);
+
+        map.RestoreVertex(vertex);
+
+        Assert.Contains(vertex, map.Vertices);
+    }
+
+    [Fact]
+    public void JoinLinedefs_RemoveHasNoSidedefs_KeepIsUntouched()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var keep = map.CreateLinedef(a, b, sector, null);
+        var remove = map.CreateLinedef(a, b, null, null);
+
+        map.JoinLinedefs(keep, remove);
+
+        Assert.Same(sector, keep.Front!.Sector);
+        Assert.Null(keep.Back);
+        Assert.DoesNotContain(remove, map.Linedefs);
+    }
+
+    [Fact]
+    public void JoinLinedefs_KeepHasNoSidedefs_CopiesRemovesSidedefsOntoKeep()
+    {
+        var map = new MapData();
+        var frontSector = map.CreateSector(0, 128);
+        var backSector = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var keep = map.CreateLinedef(a, b, null, null);
+        var remove = map.CreateLinedef(a, b, frontSector, backSector);
+        remove.Front!.MiddleTexture = "FRONTTEX";
+        remove.Back!.MiddleTexture = "BACKTEX";
+
+        map.JoinLinedefs(keep, remove);
+
+        Assert.Same(frontSector, keep.Front!.Sector);
+        Assert.Same(backSector, keep.Back!.Sector);
+        Assert.Equal("FRONTTEX", keep.Front.MiddleTexture);
+        Assert.Equal("BACKTEX", keep.Back.MiddleTexture);
+        Assert.DoesNotContain(remove, map.Linedefs);
+    }
+
+    [Fact]
+    public void JoinLinedefs_KeepHasNoSidedefs_ReversedDirection_SwapsFrontAndBack()
+    {
+        var map = new MapData();
+        var frontSector = map.CreateSector(0, 128);
+        var backSector = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var keep = map.CreateLinedef(b, a, null, null); // reversed: keep.Start == remove.End
+        var remove = map.CreateLinedef(a, b, frontSector, backSector);
+
+        map.JoinLinedefs(keep, remove);
+
+        Assert.Same(backSector, keep.Front!.Sector);
+        Assert.Same(frontSector, keep.Back!.Sector);
+    }
+
+    [Fact]
+    public void JoinLinedefs_AlwaysDisposesRemove_LeavingOnlyKeepInTheMap()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var keep = map.CreateLinedef(a, b, sector, null);
+        var remove = map.CreateLinedef(a, b, sector, null);
+        var linedefCountBefore = map.Linedefs.Count;
+
+        map.JoinLinedefs(keep, remove);
+
+        Assert.Equal(linedefCountBefore - 1, map.Linedefs.Count);
+        Assert.Contains(keep, map.Linedefs);
+        Assert.DoesNotContain(remove, map.Linedefs);
+    }
+
+    /// <summary>
+    /// A direct, literal port of UDB's own real "compare front sectors"
+    /// branch (<c>Linedef.Join</c>) - a matching front sector on both
+    /// lines makes keep's *own* front get replaced by remove's *back*
+    /// side's data, not left alone. Surprising at a glance, but this is
+    /// exactly what the real source does (re-verified directly against
+    /// it, not guessed) - kept faithful rather than "corrected", per this
+    /// session's explicit 1:1-port mandate.
+    /// </summary>
+    [Fact]
+    public void JoinLinedefs_MatchingFrontSectors_ReplacesKeepsFrontWithRemovesBack()
+    {
+        var map = new MapData();
+        var sharedSector = map.CreateSector(0, 128);
+        var backSector = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var keep = map.CreateLinedef(a, b, sharedSector, null);
+        var remove = map.CreateLinedef(a, b, sharedSector, backSector);
+
+        map.JoinLinedefs(keep, remove);
+
+        Assert.Same(backSector, keep.Front!.Sector);
+        Assert.Null(keep.Back);
+    }
 }

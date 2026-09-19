@@ -337,26 +337,29 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// Keeps <see cref="_sectorMeshes"/>/<see cref="_wallMeshes"/> in sync
-	/// with whatever <see cref="_map"/> currently actually contains - a
-	/// gap that never mattered before Draw mode, since until now every
-	/// Sector/Linedef in a live map was already known about from the
-	/// initial <see cref="LoadMap"/>/<see cref="RebuildAllMeshes"/> pass;
-	/// nothing ever added or removed one at runtime. <see cref="DrawLoopCommand"/>'s
+	/// Keeps <see cref="_sectorMeshes"/>/<see cref="_wallMeshes"/>/
+	/// <see cref="_thingMeshes"/> in sync with whatever <see cref="_map"/>
+	/// currently actually contains - a gap that never mattered before
+	/// Draw mode (Sector/Linedef) and <see cref="CreateThingCommand"/>
+	/// (Thing), since until now every element of a live map was already
+	/// known about from the initial <see cref="LoadMap"/>/
+	/// <see cref="RebuildAllMeshes"/> pass; nothing ever added or removed
+	/// one at runtime. <see cref="DrawLoopCommand"/>'s/<see cref="CreateThingCommand"/>'s
 	/// own <c>Do</c>/<c>Undo</c> now does both, so this frame-by-frame
-	/// catch-up is what actually gives a freshly drawn sector its mesh
-	/// (real bug: the very first version of Draw mode crashed with a
-	/// <see cref="KeyNotFoundException"/> here, since nothing ever created
-	/// the new sector's dictionary entry at all) and cleans up a since-
-	/// undone one's mesh instances instead of leaving them orphaned in the
-	/// scene tree. A cheap count comparison first, so the O(n) diff below
-	/// only ever runs on the rare frame right after a structural change,
-	/// not every frame.
+	/// catch-up is what actually gives a freshly drawn sector or freshly
+	/// placed Thing its mesh (real bug: the very first version of Draw
+	/// mode crashed with a <see cref="KeyNotFoundException"/> here, since
+	/// nothing ever created the new sector's dictionary entry at all) and
+	/// cleans up a since-undone one's mesh instances instead of leaving
+	/// them orphaned in the scene tree. A cheap count comparison first, so
+	/// the O(n) diff below only ever runs on the rare frame right after a
+	/// structural change, not every frame.
 	/// </summary>
 	private void SyncMeshInstancesWithMap()
 	{
 		if (_map.Sectors.Count != _sectorMeshes.Count) SyncSectorMeshes();
 		if (_map.Linedefs.Count != _wallMeshes.Count) SyncWallMeshes();
+		if (_map.Things.Count != _thingMeshes.Count) SyncThingMeshes();
 	}
 
 	private void SyncSectorMeshes()
@@ -396,6 +399,30 @@ public partial class MapView : Node3D
 		foreach (var linedef in _map.Linedefs)
 		{
 			if (!_wallMeshes.ContainsKey(linedef)) CreateWallMeshInstance(linedef);
+		}
+	}
+
+	/// <summary>
+	/// Things never participate in the 3D-mode target/selection system at
+	/// all (see <see cref="HandleThreeDSelectClick"/> - only Sector/Wall
+	/// surfaces are targetable), so unlike <see cref="SyncSectorMeshes"/>/
+	/// <see cref="SyncWallMeshes"/> there's no stale-reference cleanup to
+	/// do here on removal.
+	/// </summary>
+	private void SyncThingMeshes()
+	{
+		var live = new HashSet<Thing>(_map.Things);
+		var removed = _thingMeshes.Keys.Where(t => !live.Contains(t)).ToList();
+
+		foreach (var thing in removed)
+		{
+			_thingMeshes[thing].QueueFree();
+			_thingMeshes.Remove(thing);
+		}
+
+		foreach (var thing in _map.Things)
+		{
+			if (!_thingMeshes.ContainsKey(thing)) CreateThingMeshInstance(thing);
 		}
 	}
 

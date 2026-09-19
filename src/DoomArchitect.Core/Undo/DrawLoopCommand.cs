@@ -33,28 +33,45 @@ public readonly struct DrawPoint
 }
 
 /// <summary>
-/// Draw mode's real command, Phase 2: builds a closed loop that can snap
-/// onto existing vertices, split existing linedefs it lands on, and -
-/// per edge - either inherit an existing sector's properties into a
-/// brand-new one bordering it (UDB's real <c>MakeSector</c>) or join
-/// directly onto an existing sector with no new sector at all (UDB's real
-/// <c>JoinSector</c>), instead of Phase 1's always-standalone sector.
-/// Supersedes <c>CreateSectorLoopCommand</c> - a loop touching nothing
-/// existing degrades to exactly that command's old behavior.
+/// Draw mode's real command: builds a closed loop and - per edge -
+/// either inherits an existing sector's properties into a brand-new one
+/// bordering it (UDB's real <c>MakeSector</c>) or joins directly onto an
+/// existing sector with no new sector at all (UDB's real <c>JoinSector</c>),
+/// instead of Phase 1's always-standalone sector.
+///
+/// <c>Do()</c> follows UDB's own real <c>Tools.DrawLines</c> architecture
+/// directly (re-derived from its source, not approximated): every
+/// consecutive pair of resolved points always creates a brand-new
+/// <see cref="Linedef"/> - there is no look-ahead reuse-detection here at
+/// all (an earlier version of this command tried that, via a
+/// <c>CreateOrReuseEdge</c> that only ever covered the one specific case
+/// it was built for and was fundamentally unreliable for everything
+/// else - drawing over an existing vertex, crossing an existing wall
+/// without landing exactly on a split point, etc.). Instead, every new
+/// edge is stitched against existing (and the loop's own other new)
+/// geometry by a genuinely general reconciliation pass, ported directly
+/// from UDB's own real stitching primitives
+/// (<see cref="GeometryStitcher"/> - <c>JoinVertices</c> x2,
+/// <c>SplitLinesByVertices</c> x2 directions, <c>RemoveLoopedLinedefs</c>,
+/// <c>JoinOverlappingLines</c>, <c>FlipBackwardLinedefs</c>, plus
+/// <c>DrawLines</c>' own per-segment existing-line-crossing pre-pass),
+/// run in UDB's own real order. Only *after* that stitch pass does
+/// interior/exterior resolution run, using UDB's own real per-linedef
+/// geometry-driven interior determination
+/// (<see cref="BoundaryTracer.DetermineFrontInterior"/>) rather than a
+/// polygon-winding shortcut - necessary since the stitched result can be
+/// a genuinely more complex shape than the single simple loop the user
+/// physically drew.
 ///
 /// One atomic command for the whole loop, matching UDB's own real "one
 /// undo step per draw session". Internally records a small undo action
-/// per individual mutation, in the exact order performed, and reverses
-/// them in <see cref="Undo"/> - simpler and far less error-prone than
-/// hand-sequencing category-by-category removal (linedef splits, sidedef
-/// joins/creates, and sector creation all interleave and depend on each
-/// other's exact order here, unlike Phase 1's uniform "create everything,
-/// remove everything" shape). Rebuilt fresh on every <see cref="Do"/>, so
-/// this stays redo-safe exactly like Phase 1's command.
+/// per individual mutation, in the exact order performed (by
+/// <see cref="DrawLoopCommand"/>'s own helpers and by
+/// <see cref="GeometryStitcher"/>'s, which append to the identical
+/// shared list), and reverses them in <see cref="Undo"/>. Rebuilt fresh
+/// on every <see cref="Do"/>, so this stays redo-safe.
 ///
-/// Every edge's *interior* side (the side matching this loop's own
-/// enclosed area, per <see cref="PolygonWinding.IsClockwise"/> - same
-/// convention Phase 1 already established) always resolves via
+/// Every edge's *interior* side always resolves via
 /// <see cref="BoundaryTracer.FindPotentialSectorAt"/> into a brand-new
 /// sector - <see cref="DefaultFloorTexture"/>/etc. if the traced boundary
 /// borders nothing existing, or a full property copy from whichever
@@ -105,28 +122,59 @@ public sealed class DrawLoopCommand : ICommand
     {
         undoActions.Clear();
 
-        var vertices = ResolveVertices();
-        var clockwise = PolygonWinding.IsClockwise(vertices.Select(v => v.Position).ToArray());
+        // Snapshots of the map's state *before* this session touches
+        // anything - UDB's own real "oldlines"/pre-draw vertex set, used
+        // as the "existing" side of every stitch check below so a
+        // freshly created segment never gets compared against its own
+        // later siblings here.
+        var existingLinedefs = map.Linedefs.ToList();
+        var existingVertices = map.Vertices.ToList();
 
-        var edges = new List<(Linedef Linedef, bool MatchesLoopDirection)>(vertices.Count);
+        var newVertices = new List<Vertex>();
+        var vertices = ResolveVertices(newVertices);
+
+        var newLinedefs = new List<Linedef>();
         for (var i = 0; i < vertices.Count; i++)
         {
             var start = vertices[i];
             var end = vertices[(i + 1) % vertices.Count];
-            edges.Add(CreateOrReuseEdge(start, end));
+            var segment = CreateLinedefTracked(start, end);
+            newLinedefs.Add(segment);
+
+            GeometryStitcher.SplitAgainstExistingLines(map, segment, existingLinedefs, newLinedefs, newVertices, undoActions);
         }
+
+        // The real stitch pass (UDB's own real MapSet.StitchGeometry,
+        // CLASSIC mode - Tools.DrawLines' own default), in its own real
+        // order. SplitLinesByLines (new-vs-new crossing splitting) is
+        // deliberately not run here - confirmed directly against UDB's
+        // source to be a no-op in CLASSIC mode, not a gap on this
+        // project's side.
+        GeometryStitcher.JoinVerticesWithinSet(map, newVertices, GeometryStitcher.StitchDistance, undoActions);
+        GeometryStitcher.JoinVerticesOntoExisting(map, existingVertices, newVertices, GeometryStitcher.StitchDistance, undoActions);
+        GeometryStitcher.SplitLinesByVertices(map, newLinedefs, existingVertices, GeometryStitcher.StitchDistance, newLinedefs, undoActions);
+        GeometryStitcher.SplitLinesByVertices(map, existingLinedefs, newVertices, GeometryStitcher.StitchDistance, newLinedefs, undoActions);
+        GeometryStitcher.RemoveLoopedLinedefs(map, newLinedefs, undoActions);
+        GeometryStitcher.JoinOverlappingLines(map, newLinedefs, undoActions);
+
+        // UDB's own real per-linedef FrontInterior is computed once for
+        // every line in the fully-stitched result *before* either
+        // resolution pass runs, then only ever read (never recomputed)
+        // by both passes - resolving interior first would otherwise
+        // populate real sidedefs that could change what a later
+        // DetermineFrontInterior call finds, corrupting the exterior
+        // pass's own results.
+        var frontInterior = newLinedefs.ToDictionary(l => l, l => BoundaryTracer.DetermineFrontInterior(map, l));
 
         // Interior first, always - an edge's exterior-side trace can
         // legitimately walk across an interior sidedef another edge just
         // created (a shared corner two of this loop's own edges meet at),
         // so every interior side needs to exist before any exterior side
-        // is resolved. "Interior" is front=clockwise only for an edge
-        // walked in this loop's own direction (a brand-new one always is);
-        // a *reused* edge may have been created originally in the
-        // opposite direction, in which case interior/exterior flip too -
-        // see CreateOrReuseEdge's own remarks.
-        foreach (var (linedef, matches) in edges) ResolveInteriorSide(linedef, front: clockwise == matches);
-        foreach (var (linedef, matches) in edges) ResolveExteriorSide(linedef, front: clockwise != matches);
+        // is resolved.
+        foreach (var linedef in newLinedefs) ResolveInteriorSide(linedef, front: frontInterior[linedef]);
+        foreach (var linedef in newLinedefs) ResolveExteriorSide(linedef, front: !frontInterior[linedef]);
+
+        GeometryStitcher.FlipBackwardLinedefs(newLinedefs, undoActions);
     }
 
     public void Undo()
@@ -136,26 +184,32 @@ public sealed class DrawLoopCommand : ICommand
 
     /// <summary>
     /// Resolves every point to a real <see cref="Vertex"/>, in the loop's
-    /// own drawn order. Points splitting a <see cref="Linedef"/> are
-    /// special: two of them can name the very same original linedef (a
-    /// new loop sharing only part of a wider existing wall needs a split
-    /// at each end of the shared portion) - and <see cref="DrawPoint.SplitLinedef"/>
-    /// always captures whichever linedef was hit at draw time, which for
-    /// two points on the same wall is the exact same, not-yet-split
-    /// object. Resolving those independently and naively (in drawn
-    /// order, each calling <see cref="MapData.SplitLinedef"/> straight on
-    /// that shared reference) breaks the moment the *first* split shrinks
-    /// it: the second point's own position generally no longer lies on
-    /// what that same object now represents, so the split silently
-    /// produces overlapping, corrupted geometry instead of a clean
-    /// three-way division of the wall. Grouping same-linedef points
-    /// together and splitting them along-the-wall order (nearest
+    /// own drawn order, appending every genuinely *new* vertex it creates
+    /// (brand-new position or split point - never an already-existing
+    /// one named via <see cref="DrawPoint.AtExistingVertex"/>) to
+    /// <paramref name="newVertices"/> for the stitch pass that follows in
+    /// <see cref="Do"/> to use.
+    ///
+    /// Points splitting a <see cref="Linedef"/> are special: two of them
+    /// can name the very same original linedef (a new loop sharing only
+    /// part of a wider existing wall needs a split at each end of the
+    /// shared portion) - and <see cref="DrawPoint.SplitLinedef"/> always
+    /// captures whichever linedef was hit at draw time, which for two
+    /// points on the same wall is the exact same, not-yet-split object.
+    /// Resolving those independently and naively (in drawn order, each
+    /// calling <see cref="MapData.SplitLinedef"/> straight on that shared
+    /// reference) breaks the moment the *first* split shrinks it: the
+    /// second point's own position generally no longer lies on what that
+    /// same object now represents, so the split silently produces
+    /// overlapping, corrupted geometry instead of a clean three-way
+    /// division of the wall. Grouping same-linedef points together and
+    /// splitting them along-the-wall order (nearest
     /// <see cref="Linedef.Start"/> first, each split's own leftover far
     /// half becoming the next split's target) is what actually matches
     /// what the user physically drew, regardless of the order the points
     /// happen to appear in <see cref="points"/>.
     /// </summary>
-    private List<Vertex> ResolveVertices()
+    private List<Vertex> ResolveVertices(List<Vertex> newVertices)
     {
         var resolved = new Vertex[points.Count];
         var splitGroups = new Dictionary<Linedef, List<int>>();
@@ -164,7 +218,7 @@ public sealed class DrawLoopCommand : ICommand
         {
             var point = points[i];
             if (point.ExistingVertex != null) resolved[i] = point.ExistingVertex;
-            else if (point.SplitLinedef == null) resolved[i] = CreateVertexTracked(point.Position);
+            else if (point.SplitLinedef == null) resolved[i] = CreateVertexTracked(point.Position, newVertices);
             else
             {
                 if (!splitGroups.TryGetValue(point.SplitLinedef, out var indices))
@@ -187,7 +241,7 @@ public sealed class DrawLoopCommand : ICommand
             var tail = originalLinedef;
             foreach (var index in indices)
             {
-                var vertex = CreateVertexTracked(points[index].Position);
+                var vertex = CreateVertexTracked(points[index].Position, newVertices);
                 var splitTail = tail;
                 var originalEnd = splitTail.End;
                 var newHalf = map.SplitLinedef(splitTail, vertex);
@@ -208,10 +262,11 @@ public sealed class DrawLoopCommand : ICommand
         return resolved.ToList();
     }
 
-    private Vertex CreateVertexTracked(Vector2 position)
+    private Vertex CreateVertexTracked(Vector2 position, List<Vertex> newVertices)
     {
         var vertex = map.CreateVertex(position);
         undoActions.Add(() => map.RemoveVertex(vertex));
+        newVertices.Add(vertex);
         return vertex;
     }
 
@@ -220,38 +275,6 @@ public sealed class DrawLoopCommand : ICommand
         var linedef = map.CreateLinedef(start, end, null, null);
         undoActions.Add(() => map.RemoveLinedef(linedef));
         return linedef;
-    }
-
-    /// <summary>
-    /// Two consecutive resolved points can already be directly connected -
-    /// two split points on the same old wall, or two existing vertices of
-    /// an already-drawn edge - in which case that old <see cref="Linedef"/>
-    /// *is* this loop edge, not something to duplicate alongside. Reusing
-    /// it (rather than always creating a fresh, coincident one, which is
-    /// all this command used to do) is what lets a drawn line actually
-    /// pick up an existing sidedef/sector to inherit properties from or
-    /// join onto - UDB itself never needs this because its own
-    /// <c>autoclosedrawing</c> (deferred here, Phase 3) already prevents a
-    /// user from placing two points that share an existing edge without
-    /// first stitching onto it; this project draws the loop from raw
-    /// resolved points instead, so the same situation has to be handled
-    /// explicitly here.
-    ///
-    /// The returned <c>MatchesLoopDirection</c> records whether the
-    /// reused edge already runs <paramref name="start"/>-to-
-    /// <paramref name="end"/> (like a brand-new edge always does) or the
-    /// other way around - the caller uses it to flip which physical side
-    /// (Front/Back) corresponds to this loop's own interior/exterior.
-    /// </summary>
-    private (Linedef Linedef, bool MatchesLoopDirection) CreateOrReuseEdge(Vertex start, Vertex end)
-    {
-        foreach (var linedef in start.Linedefs)
-        {
-            if (linedef.Start == start && linedef.End == end) return (linedef, true);
-            if (linedef.Start == end && linedef.End == start) return (linedef, false);
-        }
-
-        return (CreateLinedefTracked(start, end), true);
     }
 
     private void ResolveInteriorSide(Linedef linedef, bool front)

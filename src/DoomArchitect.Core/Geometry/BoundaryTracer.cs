@@ -61,6 +61,38 @@ public static class BoundaryTracer
     }
 
     /// <summary>
+    /// UDB's own real per-linedef interior/exterior determination
+    /// (<c>Tools.DrawLines</c>' own "Determine drawing interior" step) -
+    /// geometry-driven, not a global clockwise/counterclockwise polygon-
+    /// winding shortcut, which only ever works for a single simple
+    /// polygon and breaks down once stitching can produce a self-
+    /// touching or multiply-connected shape. Front is interior if tracing
+    /// from the front side finds a genuinely valid, self-containing
+    /// boundary (<see cref="FindPotentialSectorAt"/> already does the
+    /// trace + build-loop + validate-own-side-point-is-contained work
+    /// this needs); otherwise falls back to checking whether the *back*
+    /// side's own trace is valid instead - if it is, front is not
+    /// interior; if neither side traces to a valid boundary, defaults to
+    /// front being interior, matching UDB's own real default.
+    ///
+    /// One flagged simplification: UDB's own real fallback check is
+    /// subtly different - it tests whether the *front* side's own point
+    /// falls inside the *back* trace's own polygon, not merely whether
+    /// the back trace is independently valid. Ported here as "does the
+    /// back trace succeed at all" instead, reusing
+    /// <see cref="FindPotentialSectorAt"/>'s own already-correct
+    /// containment validation rather than re-deriving UDB's separate
+    /// <c>EarClipPolygon.CalculateArea</c>/<c>Intersect</c> machinery a
+    /// second time - should be behaviorally equivalent in practice, not
+    /// verified byte-for-byte against every possible pathological shape.
+    /// </summary>
+    public static bool DetermineFrontInterior(MapData map, Linedef linedef)
+    {
+        if (FindPotentialSectorAt(map, linedef, front: true) != null) return true;
+        return FindPotentialSectorAt(map, linedef, front: false) == null;
+    }
+
+    /// <summary>
     /// Traces from <paramref name="start"/> and validates the result is
     /// actually the outer boundary containing <paramref name="start"/>'s
     /// own side-point, not some other loop the walk happened to close on.

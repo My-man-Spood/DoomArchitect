@@ -1820,7 +1820,11 @@ file just tracks what's built and what's next.
       name and the resource's own real lump casing - now case-insensitive,
       matching every other name lookup in this codebase.
 - [ ] Drawing mode (UDB's real "Draw Lines" mode) - **Phases 1+2 done
-      2026-09-17**; **Phase 3 not started**. User's own explicit scope call
+      2026-09-17**, geometry-stitching rewritten 1:1 against UDB's real
+      source **2026-09-19** (see that entry below for the full writeup);
+      **Phase 3 (auto-close-across-geometry specifically, plus cardinal-
+      direction snap/continuous drawing/rubber-band polish) not started**.
+      User's own explicit scope call
       is full UDB parity eventually ("every possible way to draw lines,
       vectors, sectors... ported basically exactly as it is in UDB"),
       phased rather than all at once - offered a further phase split for
@@ -2056,22 +2060,151 @@ file just tracks what's built and what's next.
       by its own renderer's scale) without needing to reason about
       whether a map-space perpendicular direction even survives
       projection unchanged.
-- [ ] Adding things - no way to place a *new* Thing exists yet, only
-      select/move/edit already-loaded ones. `MapData.CreateThing(Vector2,
-      int)` is already public (not private/internal - only ever actually
-      called from `UdmfReader` during map loading and from Core tests)
-      and `MapOverlay.HandleThingInput` already has an established
-      click-to-select/right-drag-to-move shape to extend, but there's no
-      click-into-empty-space-to-create branch, and no undo command at all
-      for creating (or deleting) any element of any kind yet - `Core.Undo`
-      only has `MoveVertexCommand`/`MoveThingCommand`/`SetFieldCommand`/
-      `SetPropertyCommand`/`CommandGroup`, so an undoable "place Thing"
-      needs a new `ICommand` (a real, small, well-scoped one - the
-      pattern's already established by `MoveThingCommand`). Worth doing
-      before "Drawing mode" above, or at least before general element-
-      creation/deletion commands get generalized off it, since it's the
-      simplest of the two "create a new element" gaps (a single point, no
-      loop-closing/sector-building step).
+
+      **Geometry-stitching rewrite, 2026-09-19**: user's own explicit
+      mandate after real-world use exposed the previous `CreateOrReuseEdge`
+      look-ahead approach as fundamentally unreliable ("the intersection
+      rules we have for drawing overlapping lines are exceptionally
+      lackluster... we do some parts correctly and some parts wrong") -
+      "let's take doom builder's algorithms 1 to 1." A full research pass
+      directly against `Tools.DrawLines`/`MapSet.StitchGeometry` and every
+      primitive it calls found the real architectural mismatch:
+      **UDB never looks ahead** - it draws every consecutive point pair as
+      a brand-new `Linedef` unconditionally, then runs a genuinely
+      general-purpose reconciliation pass against whatever already
+      exists. `CreateOrReuseEdge` was a different design that could only
+      ever cover the one case it was explicitly built for.
+
+      `DrawLoopCommand.Do()` rewritten to match UDB's own real "draw
+      first, stitch after" shape exactly. New Core:
+      `Geometry/GeometryStitcher.cs` (a direct port of `MapSet.JoinVertices`
+      x2/`SplitLinesByVertices`/`RemoveLoopedLinedefs`/`JoinOverlappingLines`/
+      `FlipBackwardLinedefs`, plus `Tools.DrawLines`' own per-segment
+      existing-line-crossing pre-pass, guarded by its own real
+      `MINIMUM_INTERSECTION_DISTANCE`); `MapData.MergeVertex`/`JoinLinedefs`
+      (the real `Vertex.Join`/`Linedef.Join` primitives, the latter's full
+      real sector-matching branching ported exactly - including a couple
+      of checks that read as unreachable given the branch they sit in,
+      kept rather than "corrected," since UDB's own source has them too);
+      `BoundaryTracer.DetermineFrontInterior` (UDB's own real per-linedef,
+      geometry-driven interior/exterior determination, replacing the
+      `PolygonWinding.IsClockwise` shortcut that only ever worked for a
+      single simple polygon and breaks down once stitching can produce a
+      self-touching or multiply-connected shape). Confirmed directly
+      against source and deliberately *not* ported: UDB's own real
+      `SplitLinesByLines` (new-vs-new crossing splitting) is a complete
+      no-op in the `CLASSIC` merge mode `Tools.DrawLines` itself always
+      uses - a self-intersecting drawn polygon genuinely isn't split by
+      real UDB during a normal draw either, not a gap on this project's
+      side.
+
+      Verified against the exact scenarios the user reported broken:
+      drawing a loop that straddles an existing wall with zero explicit
+      snapping (both crossing points now split correctly, mid-wall, with
+      no `DrawPoint.OnLinedef` involved at all) and a new edge passing
+      straight through an existing T-junction vertex with zero explicit
+      snapping (the existing vertex gets picked up, not duplicated) - see
+      `DrawLoopCommandTests.cs`'s own `..._WithNoExplicitSnapping_...`
+      tests. Of the 11 pre-existing `DrawLoopCommandTests`, only one
+      needed changing (an `Assert.Same` on a specific `Linedef` object's
+      identity surviving a wall-sharing draw - under UDB's own real
+      `JoinOverlappingLines`/`Linedef.Join` semantics, the *newly drawn*
+      coincident edge survives and the original is merged into it, not
+      the other way around; structurally still fully correct, just no
+      longer the same object) - every other test kept passing unchanged.
+
+      This also directly narrows (not fully closes) the "Phase 3"
+      auto-close gap noted below: a drawn edge that crosses *several*
+      existing linedefs/vertices along its own straight path is now
+      handled correctly (the stitch pass), but finding a path *through*
+      existing geometry to close an otherwise-open drawn polyline
+      (UDB's own real `FindClosestPath`-based gap-closing, gated by
+      `autoclosedrawing`) still isn't - remains its own separate,
+      deliberately out-of-scope item, confirmed directly against source
+      to be architecturally distinct from stitching correctness.
+- [x] Adding things - done 2026-09-18. Right-clicking empty space in
+      Things mode now places a new Thing there (UDB's own real
+      `ThingsMode.OnEditBegin`/`InsertThing`), wired through
+      `ElementOverlayHandler`'s existing `onEmptyRightClick` slot (already
+      built for Vertices/Linedefs/Sectors' own "start Draw mode" - the
+      exact same delegate shape fits here too, just with a different
+      implementation). New Core: `MapData.RemoveThing` (the missing
+      reverse of the already-public `CreateThing`) and
+      `Undo/CreateThingCommand.cs`, with UDB's own real default settings
+      (`ProgramConfiguration.ApplyDefaultThingSettings`, verified against
+      source, not guessed) - Type 1 (Player 1 Start), Angle 0, classic-
+      format `RawFlags` 0b0111 (Easy|Medium|Hard, from `Doom_misc.cfg`'s
+      real `defaultthingflags`).
+
+      A related, previously-invisible bug found and fixed while
+      implementing this: `MapView`'s own mesh-instance sync
+      (`SyncMeshInstancesWithMap`, built earlier this session for Draw
+      mode's Sector/Linedef creation) never covered Things at all - a
+      newly inserted Thing would have had no `MeshInstance3D` ever
+      created for it, invisible in 3D mode. Fixed by adding the same
+      count-gated create/remove diff (`SyncThingMeshes`) alongside the
+      existing Sector/Linedef ones, mirroring `SyncWallMeshes` exactly -
+      no stale-3D-reference cleanup needed there unlike Sector/Linedef's
+      own, since Things never participate in 3D-mode targeting/selection
+      at all (`HandleThreeDSelectClick` only targets Sector/Wall
+      surfaces).
+
+      One deliberate simplification, flagged rather than silently
+      dropped: UDB's own real insert continues straight into dragging the
+      newly created Thing within the very same mouse gesture
+      (`editthings = new List<Thing> { t }`, picked up by its own
+      `OnDragStart`) - this project's shared
+      `ElementOverlayHandler<TSelectable,TDraggable>` engine has no hook
+      for "the element this same press just created is now what should
+      drag," so a newly inserted Thing here is created and selected, but
+      a separate right-click-drag is needed afterward to reposition it.
+      Also not ported: UDB's own real `defaultthingflags` being read from
+      the loaded game configuration's own `.cfg` at map-load time (this
+      project hardcodes the vanilla-Doom value as a constant instead,
+      matching every other real-UDB-default constant already established
+      this session - `DrawLoopCommand`'s own texture/height/brightness
+      defaults), and its own map-boundary check before inserting
+      (`LeftBoundary`/etc.) - this project doesn't model map boundaries
+      anywhere else either.
+
+      **Follow-up, same day**: `DefaultThingType` being real session
+      state (not a fixed constant) *was* built after all, once the user
+      asked for it directly - UDB's own real behavior confirmed by
+      reading `ThingEditFormUDMF.cs`: every time the thing-edit dialog
+      applies a Type value (`General.Settings.DefaultThingType = thingtype.GetResult(...)`),
+      that becomes the default for the *next* inserted Thing, regardless
+      of whether the dialog was opened for a fresh insert or an
+      already-existing one. Ported as `MapOverlay.LastUsedThingType`
+      (plain in-memory session state, outliving a single map load/unload
+      since `MapOverlay` itself does - not disk-persisted, this project
+      has no settings-file mechanism at all yet) - `CreateThingCommand`
+      gained an explicit `type` constructor parameter (defaulting to
+      `DefaultType` for callers, like Core tests, that don't have a
+      "last used" concept of their own), `ThingOverlayHandler.InsertThingAt`
+      passes `LastUsedThingType`, and `ThingEditDialog.ApplyRealTimeType`
+      reports every resolvable typed value back out via a new
+      `onTypeChanged` callback (wired in `MainMenuBar.OpenThingEditDialogFor`)
+      so editing an existing Thing's type updates the default too, not
+      just inserting a new one.
+
+      **Second follow-up, same day**: user also asked to confirm/add
+      UDB's own real right-click-without-dragging behavior across every
+      mode - verified directly against `VerticesMode`/`LinedefsMode`/
+      `SectorsMode`/`ThingsMode`'s own real `OnEditBegin`/`OnEditEnd`:
+      `OnEditEnd` (mouse-up) only ever opens the properties dialog when
+      no drag actually started (`OnDragStart` switches to a *different*
+      mode object entirely, e.g. `DragLinedefsMode`, so the original
+      mode's own `OnEditEnd` never even fires on mouse-up once a real
+      drag began). This project's `ElementOverlayHandler`'s own right-
+      click-release already distinguished "did the position actually
+      change" for its own move-command bookkeeping - the exact same test
+      doubles as the drag-vs-click distinction UDB's own gesture needs,
+      so no new state was needed, just one more branch: a still-`Hovered`
+      element on a release that moved nothing now also invokes the
+      existing edit-dialog delegate (renamed `onDoubleClick` -> `onEdit`,
+      since it's no longer only reachable from a double-click - this
+      project's own left-double-click convenience is kept alongside it,
+      not replaced, since it's harmless and doesn't conflict).
 
 ## Known concerns
 
@@ -2115,7 +2248,3 @@ file just tracks what's built and what's next.
       setter is safe from the very first frame regardless of Godot's own
       node-ready order.
 
-## Process
-
-- [ ] CI (GitHub Actions): run `dotnet test` on `Core.Tests` on every
-      push - cheap to set up now since it needs no Godot install at all

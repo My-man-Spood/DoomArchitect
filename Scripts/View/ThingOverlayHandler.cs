@@ -15,6 +15,25 @@ using MapVector2 = System.Numerics.Vector2;
 /// single piece of this project's whole 2D-view code, ported from UDB's
 /// real <c>Renderer2D.RenderThingsBatch</c> - see <see cref="Draw"/>'s own
 /// remarks).
+///
+/// Right-clicking empty space is this mode's own distinct real UDB
+/// action - <c>ThingsMode.OnEditBegin</c>'s own "nothing highlighted"
+/// branch inserts a new Thing right there (<c>InsertThing</c>), not
+/// "start Draw mode" the way Vertices/Linedefs/Sectors' own identical-
+/// looking empty right-click does (their own real <c>AutoDrawOnEdit</c>
+/// branch) - wired via the shared engine's own <c>onEmptyRightClick</c>
+/// slot regardless, since from this handler's own point of view it's
+/// still just "a side effect with no return value the generic engine
+/// itself needs to react to," the same shape as theirs. One deliberate
+/// simplification versus UDB's own real behavior, flagged rather than
+/// silently dropped: UDB's own insert continues straight into dragging
+/// the newly created Thing within the very same mouse gesture
+/// (<c>editthings = new List&lt;Thing&gt; { t }</c>, picked up by its own
+/// <c>OnDragStart</c>) - this project's own shared
+/// <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/> has no
+/// hook for "the thing this same press just created is now what should
+/// drag," so a newly inserted Thing here is created and selected, but a
+/// separate right-click-drag is needed afterward to reposition it.
 /// </summary>
 public sealed class ThingOverlayHandler
 {
@@ -56,10 +75,19 @@ public sealed class ThingOverlayHandler
 			() => _owner.Map.GetSelectedThings(), t => t.Position, (t, p) => _owner.Map.MoveThing(t, p),
 			(t, oldPos, newPos) => new MoveThingCommand(_owner.Map, t, oldPos, newPos),
 			(min, max, mode) => _owner.Map.MarqueeSelectThings(min, max, mode),
-			onDoubleClick: t => _owner.RaiseEditThingsRequested(_owner.Map.GetSelectedThings().ToList()));
+			onEdit: t => _owner.RaiseEditThingsRequested(_owner.Map.GetSelectedThings().ToList()),
+			onEmptyRightClick: screenPosition => InsertThingAt(screenPosition));
 	}
 
 	public void HandleInput(InputEvent @event) => _input.HandleInput(@event);
+
+	private void InsertThingAt(Vector2 screenPosition)
+	{
+		var position = _owner.SnapIfEnabled(_camera.Unproject(screenPosition));
+		var command = new CreateThingCommand(_owner.Map, position, _owner.LastUsedThingType);
+		_owner.UndoStack.Execute(command);
+		_owner.Map.SelectOnly(command.CreatedThing);
+	}
 
 	/// <summary>
 	/// Picks against each Thing's own real on-screen radius rather than a

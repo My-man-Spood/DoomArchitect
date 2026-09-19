@@ -80,6 +80,18 @@ public sealed class MapData
         _linedefs.Remove(linedef);
     }
 
+    /// <summary>Re-inserts a linedef removed by <see cref="RemoveLinedef"/> - undo support, mirroring <see cref="RestoreVertex"/>, for a caller (<c>GeometryStitcher</c>'s stitching passes) building its own undo closure around a primitive like <see cref="JoinLinedefs"/> that ends up disposing one.</summary>
+    public void RestoreLinedef(Linedef linedef)
+    {
+        linedef.Start.AddLinedef(linedef);
+        linedef.End.AddLinedef(linedef);
+
+        if (linedef.Front != null) linedef.Front.Sector.AddSidedef(linedef.Front);
+        if (linedef.Back != null) linedef.Back.Sector.AddSidedef(linedef.Back);
+
+        _linedefs.Add(linedef);
+    }
+
     /// <summary>
     /// Trusts every linedef touching this vertex has already been removed
     /// (via <see cref="RemoveLinedef"/>) - matching this class's existing
@@ -90,8 +102,36 @@ public sealed class MapData
     /// </summary>
     public void RemoveVertex(Vertex vertex) => _vertices.Remove(vertex);
 
+    /// <summary>Re-inserts a vertex removed by <see cref="RemoveVertex"/>/<see cref="MergeVertex"/> - undo support for a caller that builds its own undo closure around one of those (mirroring how <see cref="SplitLinedef"/>'s own caller-built undo directly reverses its endpoint reassignment via <see cref="Linedef.End"/>/<see cref="Vertex.AddLinedef"/>).</summary>
+    public void RestoreVertex(Vertex vertex) => _vertices.Add(vertex);
+
+    /// <summary>
+    /// UDB's own real <c>Vertex.Join</c>: redirects every linedef
+    /// touching <paramref name="from"/> onto <paramref name="into"/>,
+    /// then removes <paramref name="from"/>. Skips UDB's own pre-merge
+    /// position snap (<c>into.Move(from.Position)</c>) - every real
+    /// caller (<c>GeometryStitcher</c>'s own stitching passes) only ever
+    /// merges vertices already within its own tiny stitch-distance
+    /// tolerance, so the position difference is already imperceptible.
+    /// </summary>
+    public void MergeVertex(Vertex from, Vertex into)
+    {
+        foreach (var linedef in from.Linedefs.ToList())
+        {
+            from.RemoveLinedef(linedef);
+            if (linedef.Start == from) linedef.Start = into; else linedef.End = into;
+            into.AddLinedef(linedef);
+            linedef.MarkAdjacentSectorsDirty();
+        }
+
+        _vertices.Remove(from);
+    }
+
     /// <summary>Trusts every sidedef on this sector has already been detached (via <see cref="RemoveLinedef"/>).</summary>
     public void RemoveSector(Sector sector) => _sectors.Remove(sector);
+
+    /// <summary>A Thing has no adjacency of its own to detach - the exact reverse of <see cref="CreateThing"/>.</summary>
+    public void RemoveThing(Thing thing) => _things.Remove(thing);
 
     /// <summary>
     /// Inserts <paramref name="vertex"/> mid-<paramref name="linedef"/>,
@@ -163,6 +203,133 @@ public sealed class MapData
         to.OffsetX = from.OffsetX;
         to.OffsetY = from.OffsetY;
         foreach (var (key, value) in from.Fields) to.Fields[key] = value;
+    }
+
+    /// <summary>
+    /// UDB's own real <c>Linedef.Join</c> - the counterpart
+    /// <c>GeometryStitcher.JoinOverlappingLines</c> uses once two lines
+    /// turn out to be fully coincident (same two endpoints, matching or
+    /// reversed direction - the only shape UDB's own real call site,
+    /// <c>MapSet.JoinOverlappingLines</c>, ever actually hands it,
+    /// confirmed directly against its source): reconciles
+    /// <paramref name="remove"/>'s own sidedefs onto <paramref name="keep"/>
+    /// by comparing which of their sectors match on which side - the
+    /// full real branching, ported exactly (including a couple of checks
+    /// that read as unreachable given the branch they sit in - UDB's own
+    /// source has them too, so they're kept rather than "corrected"),
+    /// then disposes <paramref name="remove"/>. UDB's own additional
+    /// texture *preservation* pass on top of this (<c>AddTexturesTo</c>/
+    /// <c>RemoveUnneededTextures</c>, gated by its own
+    /// <c>AutoClearSidedefTextures</c> setting this project has no
+    /// equivalent of) is deliberately not ported - a freshly created
+    /// sidedef here still gets <paramref name="remove"/>'s donor side's
+    /// own full properties via the same <see cref="CopySidedefProperties"/>
+    /// <see cref="SplitLinedef"/> already uses, just without the extra
+    /// migrate-textures-from-the-superseded-side step on top.
+    /// </summary>
+    public void JoinLinedefs(Linedef keep, Linedef remove)
+    {
+        var keepFront = keep.Front;
+        var keepBack = keep.Back;
+        var removeFront = remove.Front;
+        var removeBack = remove.Back;
+
+        var removeHasSides = removeFront != null || removeBack != null;
+        var keepHasSides = keepFront != null || keepBack != null;
+
+        if (!removeHasSides)
+        {
+            // remove has no sidedefs, so it has no influence on keep
+        }
+        else if (!keepHasSides)
+        {
+            if (remove.Start == keep.Start)
+            {
+                JoinChangeSidedef(keep, true, removeFront);
+                JoinChangeSidedef(keep, false, removeBack);
+            }
+            else
+            {
+                JoinChangeSidedef(keep, false, removeFront);
+                JoinChangeSidedef(keep, true, removeBack);
+            }
+        }
+        else
+        {
+            var keepFrontSector = keepFront?.Sector;
+            var keepBackSector = keepBack?.Sector;
+            var removeFrontSector = removeFront?.Sector;
+            var removeBackSector = removeBack?.Sector;
+
+            if (keepFrontSector != null && keepFrontSector == removeFrontSector)
+            {
+                JoinChangeSidedef(keep, true, removeBack);
+            }
+            else if (keepBackSector != null && keepBackSector == removeBackSector)
+            {
+                JoinChangeSidedef(keep, false, removeFront);
+            }
+            else if (keepFrontSector != null && keepFrontSector == removeBackSector)
+            {
+                JoinChangeSidedef(keep, true, removeFront);
+            }
+            else if (keepBackSector != null && keepBackSector == removeFrontSector)
+            {
+                JoinChangeSidedef(keep, false, removeBack);
+            }
+            else if (keepBack == null)
+            {
+                if (remove.Start == keep.End) JoinChangeSidedef(keep, false, removeFront);
+                else JoinChangeSidedef(keep, false, removeBack);
+            }
+            else if (removeBack == null)
+            {
+                if (keep.Start == remove.End)
+                {
+                    if (keepBackSector == null) JoinChangeSidedef(keep, false, removeFront);
+                }
+                else
+                {
+                    if (keepFrontSector == null) JoinChangeSidedef(keep, true, removeFront);
+                }
+            }
+            else
+            {
+                if (remove.Start == keep.End) JoinChangeSidedef(keep, false, removeFront);
+                else JoinChangeSidedef(keep, false, removeBack);
+            }
+        }
+
+        // Every sector remove's own original sidedefs pointed at loses one
+        // once remove itself is gone - its own mesh needs rebuilding too,
+        // matching AttachOrRetargetSidedef's own established dirtying
+        // (JoinChangeSidedef already dirties whatever keep ends up
+        // touching; this covers the side of the join that method never
+        // sees, since remove's own sidedefs are never routed through it).
+        if (removeFront != null) removeFront.Sector.NeedsRebuild = true;
+        if (removeBack != null) removeBack.Sector.NeedsRebuild = true;
+
+        RemoveLinedef(remove);
+    }
+
+    private static void JoinChangeSidedef(Linedef target, bool front, Sidedef? donor)
+    {
+        var existing = front ? target.Front : target.Back;
+        if (existing != null)
+        {
+            existing.Sector.RemoveSidedef(existing);
+            existing.Sector.NeedsRebuild = true;
+            if (front) target.Front = null; else target.Back = null;
+        }
+
+        if (donor != null)
+        {
+            var created = new Sidedef(donor.Sector, target);
+            CopySidedefProperties(donor, created);
+            donor.Sector.AddSidedef(created);
+            donor.Sector.NeedsRebuild = true;
+            if (front) target.Front = created; else target.Back = created;
+        }
     }
 
     /// <summary>

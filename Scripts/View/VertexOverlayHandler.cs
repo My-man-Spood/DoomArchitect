@@ -8,14 +8,16 @@ using MapVector2 = System.Numerics.Vector2;
 /// select/marquee/drag input (via the shared
 /// <see cref="ElementOverlayHandler{Vertex,Vertex}"/> engine, since a
 /// vertex is its own draggable - it has a position of its own, unlike
-/// Linedef/Sector), and drawing. Vertex mode has no double-click dialog to
-/// open, so <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/> is
-/// constructed with a <c>null</c> double-click delegate here - UDB's own
-/// real right-click *does* open a vertex properties dialog
-/// (<c>VerticesMode.OnEditEnd</c>'s <c>ShowEditVertices</c>), a genuine gap
-/// this project doesn't have yet (no <c>VertexEditDialog</c> exists at
-/// all - see TODO.md), not something intentionally skipped in favor of
-/// double-click.
+/// Linedef/Sector), and drawing. Vertex mode has no properties dialog to
+/// open yet, so <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>
+/// is constructed with a <c>null</c> <c>onEdit</c> delegate here - both of
+/// its own real triggers (a right-click that releases without dragging,
+/// and this project's own added left-double-click convenience) correctly
+/// end up no-ops as a result. UDB's own real right-click *does* open a
+/// vertex properties dialog (<c>VerticesMode.OnEditEnd</c>'s
+/// <c>ShowEditVertices</c>), a genuine gap this project doesn't have yet
+/// (no <c>VertexEditDialog</c> exists at all - see TODO.md), not something
+/// intentionally skipped.
 ///
 /// Right-click gets one more layer ahead of the shared engine, matching
 /// UDB's own real three-way <c>VerticesMode.OnEditBegin</c> priority
@@ -48,7 +50,7 @@ public sealed class VertexOverlayHandler
 			() => _owner.Map.GetSelectedVertices(), v => v.Position, (v, p) => _owner.Map.MoveVertex(v, p),
 			(v, oldPos, newPos) => new MoveVertexCommand(_owner.Map, v, oldPos, newPos),
 			(min, max, mode) => _owner.Map.MarqueeSelectVertices(min, max, mode),
-			onDoubleClick: null,
+			onEdit: null,
 			onEmptyRightClick: screenPosition => _owner.StartDrawingAt(screenPosition));
 	}
 

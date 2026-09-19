@@ -176,7 +176,7 @@ public partial class MainMenuBar : MenuBar
 		_thingEditDialog ??= CreateThingEditDialog();
 		_thingEditDialog.SetThings(
 			things, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
-			_overlay.SpriteIconCache);
+			_overlay.SpriteIconCache, onTypeChanged: type => _overlay.LastUsedThingType = type);
 		_thingEditDialog.PopupCentered();
 	}
 

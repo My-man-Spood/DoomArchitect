@@ -52,6 +52,43 @@ public class BoundaryTracerTests
     }
 
     [Fact]
+    public void DetermineFrontInterior_FrontAlreadyTracesTheInterior_ReturnsTrue()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(0, 64));
+        var c = map.CreateVertex(new Vector2(64, 64));
+        var d = map.CreateVertex(new Vector2(64, 0));
+
+        var ab = map.CreateLinedef(a, b, null, null);
+        map.CreateLinedef(b, c, null, null);
+        map.CreateLinedef(c, d, null, null);
+        map.CreateLinedef(d, a, null, null);
+
+        Assert.True(BoundaryTracer.DetermineFrontInterior(map, ab));
+    }
+
+    [Fact]
+    public void DetermineFrontInterior_EdgeConstructedBackward_FallsBackToTheBackSideCorrectly()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(0, 64));
+        var c = map.CreateVertex(new Vector2(64, 64));
+        var d = map.CreateVertex(new Vector2(64, 0));
+
+        // Reversed relative to the box's own clockwise a->b->c->d->a
+        // construction - front (Start->End, b->a) is the void side here,
+        // back (End->Start, a->b) is the real interior.
+        var ba = map.CreateLinedef(b, a, null, null);
+        map.CreateLinedef(b, c, null, null);
+        map.CreateLinedef(c, d, null, null);
+        map.CreateLinedef(d, a, null, null);
+
+        Assert.False(BoundaryTracer.DetermineFrontInterior(map, ba));
+    }
+
+    [Fact]
     public void FindPotentialSectorAt_BoxSplitByADiagonal_FindsOnlyOneTriangle()
     {
         var map = new MapData();
