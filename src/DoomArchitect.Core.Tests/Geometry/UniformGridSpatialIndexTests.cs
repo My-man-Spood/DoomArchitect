@@ -34,6 +34,19 @@ public class UniformGridSpatialIndexTests
     }
 
     [Fact]
+    public void QueryAlongRay_RayNearAThing_FindsThatThing()
+    {
+        var map = new MapData();
+        var thing = map.CreateThing(new Vector2(128, 128), type: 1);
+        var index = new UniformGridSpatialIndex();
+        index.Rebuild(map);
+
+        var result = index.QueryAlongRay(new Vector2(-1000, 128), new Vector2(1, 0));
+
+        Assert.Contains(thing, result.Things);
+    }
+
+    [Fact]
     public void QueryAlongRay_RayFarFromEverything_FindsNothing()
     {
         var map = new MapData();

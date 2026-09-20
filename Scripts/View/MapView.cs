@@ -77,6 +77,7 @@ public partial class MapView : Node3D
 	/// </summary>
 	private readonly HashSet<Sector> _selectedSectors3D = new();
 	private readonly HashSet<Linedef> _selectedLinedefs3D = new();
+	private readonly HashSet<Thing> _selectedThings3D = new();
 
 	public override void _Ready()
 	{
@@ -105,8 +106,12 @@ public partial class MapView : Node3D
 		// Reads _textureCache/_map fresh on every call rather than a
 		// captured value, so this keeps working correctly across LoadMap
 		// swapping both fields out from under it later.
-		_targetFinder = new MapRaycaster(_spatialIndex, name => _textureCache.GetWallTextureSize(name).Y);
-		_targetHighlight = new TargetHighlight { MiddleTextureHeightLookup = name => _textureCache.GetWallTextureSize(name).Y };
+		_targetFinder = new MapRaycaster(_spatialIndex, name => _textureCache.GetWallTextureSize(name).Y, ResolveThingPickBounds);
+		_targetHighlight = new TargetHighlight
+		{
+			MiddleTextureHeightLookup = name => _textureCache.GetWallTextureSize(name).Y,
+			ThingPickBoundsLookup = ResolveThingPickBounds,
+		};
 		AddChild(_targetHighlight);
 		// Parented under the same screen-space overlay layer MapOverlay
 		// already renders correctly through, rather than directly under
@@ -177,8 +182,8 @@ public partial class MapView : Node3D
 
 		foreach (var thing in _map.GetDirtyThings())
 		{
-			var hangs = _gameConfiguration.GetThingType(thing.Type)?.Hangs ?? false;
-			_thingMeshes[thing].Position = thing.Position.ToWorld((float)ResolveThingWorldZ(thing, hangs));
+			var info = _gameConfiguration.GetThingType(thing.Type);
+			_thingMeshes[thing].Position = thing.Position.ToWorld((float)ResolveThingWorldZ(thing, info));
 			_map.ClearDirty(thing);
 		}
 
@@ -248,25 +253,27 @@ public partial class MapView : Node3D
 		var direction = (-_perspectiveCamera.GlobalTransform.Basis.Z).ToDoom3D();
 		_currentTarget = _targetFinder.FindTarget(origin, direction);
 
-		_targetHighlight.UpdateHighlights(_currentTarget, _selectedSectors3D, _selectedLinedefs3D, new MapVector2(origin.X, origin.Y));
+		_targetHighlight.UpdateHighlights(_currentTarget, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, new MapVector2(origin.X, origin.Y));
 	}
 
 	/// <summary>
 	/// 3D visual-mode click-to-select: acts on whichever target
 	/// <see cref="UpdateTarget"/> most recently found (kept fresh every
-	/// <see cref="PickIntervalSeconds"/>), at Sector/Linedef granularity -
-	/// clicking any part of a wall selects its whole Linedef, any part of
-	/// a floor/ceiling selects its whole Sector. A plain click always
-	/// toggles (adds if unselected, removes if selected) - UDB's own real
-	/// visual-mode click (<c>BaseVisualGeometrySector.OnSelectEnd</c>/
-	/// <c>BaseVisualGeometrySidedef.OnSelectEnd</c>) does the identical
-	/// toggle, with no modifier needed. Touches only the local 3D
-	/// selection (<see cref="_selectedSectors3D"/>/
-	/// <see cref="_selectedLinedefs3D"/>), not the classic 2D selection -
+	/// <see cref="PickIntervalSeconds"/>), at Sector/Linedef/Thing
+	/// granularity - clicking any part of a wall selects its whole
+	/// Linedef, any part of a floor/ceiling selects its whole Sector, a
+	/// Thing selects itself. A plain click always toggles (adds if
+	/// unselected, removes if selected) - UDB's own real visual-mode click
+	/// (<c>BaseVisualGeometrySector.OnSelectEnd</c>/
+	/// <c>BaseVisualGeometrySidedef.OnSelectEnd</c>/
+	/// <c>BaseVisualThing.OnSelectEnd</c>) does the identical toggle, with
+	/// no modifier needed. Touches only the local 3D selection
+	/// (<see cref="_selectedSectors3D"/>/<see cref="_selectedLinedefs3D"/>/
+	/// <see cref="_selectedThings3D"/>), not the classic 2D selection -
 	/// they're bridged only on entering/leaving 3D mode, matching UDB's
 	/// real separate-selection model. Unlike 2D, there's no "current mode"
 	/// restricting which type can be selected - clicking a floor then a
-	/// wall naturally builds a mixed Sector+Linedef selection, matching
+	/// wall then a Thing naturally builds a mixed selection, matching
 	/// UDB's real visual-mode behavior.
 	/// </summary>
 	private void HandleThreeDSelectClick()
@@ -278,15 +285,21 @@ public partial class MapView : Node3D
 				var linedef = target.WallSegment!.Value.Side.Linedef;
 				if (!_selectedLinedefs3D.Remove(linedef)) _selectedLinedefs3D.Add(linedef);
 			}
+			else if (target.Kind == TargetSurfaceKind.Thing)
+			{
+				var thing = target.Thing!;
+				if (!_selectedThings3D.Remove(thing)) _selectedThings3D.Add(thing);
+			}
 			else
 			{
-				if (!_selectedSectors3D.Remove(target.Sector)) _selectedSectors3D.Add(target.Sector);
+				if (!_selectedSectors3D.Remove(target.Sector!)) _selectedSectors3D.Add(target.Sector!);
 			}
 		}
 		else
 		{
 			_selectedSectors3D.Clear();
 			_selectedLinedefs3D.Clear();
+			_selectedThings3D.Clear();
 		}
 	}
 
@@ -327,9 +340,14 @@ public partial class MapView : Node3D
 				: new List<Linedef> { target.WallSegment!.Value.Side.Linedef };
 			_overlay.RaiseEditLinedefsRequested(linedefs);
 		}
+		else if (target.Kind == TargetSurfaceKind.Thing)
+		{
+			var things = _selectedThings3D.Count > 0 ? _selectedThings3D.ToList() : new List<Thing> { target.Thing! };
+			_overlay.RaiseEditThingsRequested(things);
+		}
 		else
 		{
-			var sectors = _selectedSectors3D.Count > 0 ? _selectedSectors3D.ToList() : new List<Sector> { target.Sector };
+			var sectors = _selectedSectors3D.Count > 0 ? _selectedSectors3D.ToList() : new List<Sector> { target.Sector! };
 			_overlay.RaiseEditSectorsRequested(sectors);
 		}
 	}
@@ -365,14 +383,158 @@ public partial class MapView : Node3D
 	private void AdjustTargetHeight(double amount)
 	{
 		if (_currentTarget is not { } target) return;
-		if (target.Kind == TargetSurfaceKind.Wall) return;
+		if (target.Kind is TargetSurfaceKind.Wall or TargetSurfaceKind.Thing) return;
 
-		var sector = target.Sector;
+		var sector = target.Sector!;
 		ICommand command = target.Kind == TargetSurfaceKind.Floor
 			? new SetPropertyCommand<Sector, double>(sector, (s, v) => s.FloorHeight = v, sector.FloorHeight, sector.FloorHeight + amount, s => _map.MarkDirty(s))
 			: new SetPropertyCommand<Sector, double>(sector, (s, v) => s.CeilingHeight = v, sector.CeilingHeight, sector.CeilingHeight + amount, s => _map.MarkDirty(s));
 
 		_undoStack.Execute(command);
+	}
+
+	/// <summary>
+	/// UDB's own real texture-offset-nudge keybinds
+	/// (<c>movetextureleft</c>/<c>right</c>/<c>up</c>/<c>down</c>, plain/
+	/// <c>*8</c>/<c>*gs</c> variants, verified against its own default
+	/// keybind config): plain arrow = 1 pixel, Alt+arrow = 8 pixels,
+	/// Ctrl+arrow = the current grid size (<see cref="MapOverlay.GridSize"/> -
+	/// not a fixed step, matches UDB's own real behavior for the step sizes
+	/// themselves). The 8-pixel modifier is Alt here, not UDB's own real
+	/// Shift - Shift is this project's own pre-existing
+	/// <c>FreeFlyCamera</c> fly-down control (polled every frame,
+	/// independent of whatever else is happening with the key), and a real
+	/// collision surfaced the same day this landed: holding Shift+Arrow to
+	/// nudge also silently drifted the camera downward. Reassigning
+	/// fly-down to a fresh key was tried first and reverted at the user's
+	/// own request - Shift stays fly-down, unchanged from before this
+	/// feature existed, and the nudge modifier moved instead. Always
+	/// writes the targeted wall's own *per-part* UDMF offset field
+	/// (<c>offsetx_&lt;part&gt;</c>/<c>offsety_&lt;part&gt;</c>, resolved via
+	/// <see cref="WallSegment.PartKind"/> - see <see cref="LinedefWallBuilder.PartSuffix"/>'s
+	/// own remarks), never the shared <see cref="Sidedef.OffsetX"/>/
+	/// <see cref="Sidedef.OffsetY"/> - matches every one of UDB's own real
+	/// <c>VisualUpper</c>/<c>VisualLower</c>/<c>VisualMiddleSingle</c>/
+	/// <c>VisualMiddleDouble.MoveTextureOffset</c> overrides, which all do
+	/// the identical thing. Same "act on just the live target, never the
+	/// whole selection" scope as <see cref="AdjustTargetHeight"/> above,
+	/// for the identical reason (this project's selection model tracks
+	/// *which linedefs* are selected, not separately *which wall part* of
+	/// each).
+	///
+	/// Explicitly bypasses <c>SetFieldCommand</c>'s lack of a dirty-marking
+	/// callback (unlike <see cref="SetPropertyCommand{T,TValue}"/>, which
+	/// has one) by marking the sector dirty directly right after executing -
+	/// this needs to actually redraw live as the key is held, unlike some
+	/// of this codebase's other <c>SetFieldCommand</c> call sites (e.g.
+	/// <c>LinedefEditDialog</c>'s own per-part offset/scale fields, which
+	/// don't mark dirty at all - a real, separate, pre-existing gap, not
+	/// something to silently inherit here).
+	/// </summary>
+	private void HandleTextureNudge(Key key, bool alt, bool ctrl)
+	{
+		if (_currentTarget is not { Kind: TargetSurfaceKind.Wall } target) return;
+
+		var segment = target.WallSegment!.Value;
+		var side = segment.Side;
+		var suffix = LinedefWallBuilder.PartSuffix(segment.PartKind);
+
+		double delta = alt ? 8 : ctrl ? _overlay.GridSize : 1;
+		double dx = key switch { Key.Left => -delta, Key.Right => delta, _ => 0 };
+		// Up needs +delta, Down needs -delta to read the way a mapper
+		// expects - confirmed live. Never camera-relative: a wall is
+		// always vertical and this project's camera never rolls, so
+		// world-up is unambiguous regardless of which way you're facing,
+		// unlike X below.
+		double dy = key switch { Key.Up => delta, Key.Down => -delta, _ => 0 };
+		if (dx == 0 && dy == 0) return;
+
+		// X, unlike Y, *is* camera-relative: "Left"/"Right" should always
+		// shift the texture left/right as seen on screen right now, not in
+		// the wall's own fixed Start->End coordinate space - a fixed sign
+		// (tried first) is only ever right for walls that happen to run
+		// the same way relative to the camera as whatever wall it was
+		// tuned against, and wrong for others (a wall in a different room,
+		// or the same wall viewed from the opposite end of it). Flip the
+		// base UDB-literal sign (`Right` = <c>+delta</c> in the wall's own
+		// direction) whenever that direction actually points toward the
+		// camera's own screen-left instead of screen-right.
+		if (dx != 0)
+		{
+			var wallDirection = segment.End.Position - segment.Start.Position;
+			var cameraRight = _perspectiveCamera.GlobalTransform.Basis.X.ToDoom();
+			// Confirmed 100% inverted from correct once actually tried
+			// live, consistently rather than intermittently - a plain
+			// polarity flip of the whole check, not a deeper bug in which
+			// cases get flipped.
+			if (wallDirection != MapVector2.Zero && cameraRight != MapVector2.Zero && MapVector2.Dot(wallDirection, cameraRight) > 0)
+			{
+				dx = -dx;
+			}
+		}
+
+		var textureSize = _textureCache.GetWallTextureSize(segment.Texture);
+		var commands = new List<ICommand>();
+
+		if (dx != 0)
+		{
+			var oldX = side.Fields.GetFloat($"offsetx_{suffix}", 0.0);
+			var newX = TextureOffsetMath.Nudge(oldX, dx, textureSize.X);
+			commands.Add(new SetFieldCommand(side.Fields, $"offsetx_{suffix}", newX == 0 ? null : new UniValue(UniversalType.Float, newX)));
+		}
+
+		if (dy != 0)
+		{
+			var oldY = side.Fields.GetFloat($"offsety_{suffix}", 0.0);
+			var newY = TextureOffsetMath.Nudge(oldY, dy, textureSize.Y);
+			commands.Add(new SetFieldCommand(side.Fields, $"offsety_{suffix}", newY == 0 ? null : new UniValue(UniversalType.Float, newY)));
+		}
+
+		_undoStack.Execute(commands.Count == 1 ? commands[0] : new CommandGroup(commands));
+		_map.MarkDirty(side.Sector);
+	}
+
+	/// <summary>
+	/// UDB's own real texture auto-align (<c>visualautoalign</c>/<c>x</c>/
+	/// <c>y</c>, see <see cref="TextureAutoAligner"/>'s own remarks for the
+	/// real algorithm this ports) - starts from the currently targeted wall
+	/// part and flood-fills outward, so this deliberately reads
+	/// <see cref="_currentTarget"/> fresh rather than the 3D-mode selection,
+	/// same reasoning as <see cref="HandleTextureNudge"/> above.
+	/// </summary>
+	private void HandleTextureAutoAlign(bool alignX, bool alignY)
+	{
+		if (_currentTarget is not { Kind: TargetSurfaceKind.Wall } target) return;
+
+		var segment = target.WallSegment!.Value;
+		var results = TextureAutoAligner.Align(
+			segment.Side, segment.PartKind, alignX, alignY,
+			name => _textureCache.GetWallTextureSize(name).X, name => _textureCache.GetWallTextureSize(name).Y);
+		if (results.Count == 0) return;
+
+		var suffix = LinedefWallBuilder.PartSuffix(segment.PartKind);
+		var commands = new List<ICommand>();
+		var dirtySectors = new HashSet<Sector>();
+
+		foreach (var result in results)
+		{
+			if (result.OffsetX != null)
+			{
+				commands.Add(new SetFieldCommand(result.Side.Fields, $"offsetx_{suffix}", result.OffsetX == 0 ? null : new UniValue(UniversalType.Float, result.OffsetX.Value)));
+			}
+
+			if (result.OffsetY != null)
+			{
+				commands.Add(new SetFieldCommand(result.Side.Fields, $"offsety_{suffix}", result.OffsetY == 0 ? null : new UniValue(UniversalType.Float, result.OffsetY.Value)));
+			}
+
+			dirtySectors.Add(result.Side.Sector);
+		}
+
+		if (commands.Count == 0) return;
+
+		_undoStack.Execute(new CommandGroup(commands));
+		foreach (var sector in dirtySectors) _map.MarkDirty(sector);
 	}
 
 	/// <summary>
@@ -460,7 +622,7 @@ public partial class MapView : Node3D
 			_sectorMeshes.Remove(sector);
 		}
 
-		if (removed.Count > 0) ClearStaleThreeDReferences(removed, Array.Empty<Linedef>());
+		if (removed.Count > 0) ClearStaleThreeDReferences(removed, Array.Empty<Linedef>(), Array.Empty<Thing>());
 
 		foreach (var sector in _map.Sectors)
 		{
@@ -479,7 +641,7 @@ public partial class MapView : Node3D
 			_wallMeshes.Remove(linedef);
 		}
 
-		if (removed.Count > 0) ClearStaleThreeDReferences(Array.Empty<Sector>(), removed);
+		if (removed.Count > 0) ClearStaleThreeDReferences(Array.Empty<Sector>(), removed, Array.Empty<Thing>());
 
 		foreach (var linedef in _map.Linedefs)
 		{
@@ -487,13 +649,6 @@ public partial class MapView : Node3D
 		}
 	}
 
-	/// <summary>
-	/// Things never participate in the 3D-mode target/selection system at
-	/// all (see <see cref="HandleThreeDSelectClick"/> - only Sector/Wall
-	/// surfaces are targetable), so unlike <see cref="SyncSectorMeshes"/>/
-	/// <see cref="SyncWallMeshes"/> there's no stale-reference cleanup to
-	/// do here on removal.
-	/// </summary>
 	private void SyncThingMeshes()
 	{
 		var live = new HashSet<Thing>(_map.Things);
@@ -505,6 +660,8 @@ public partial class MapView : Node3D
 			_thingMeshes.Remove(thing);
 		}
 
+		if (removed.Count > 0) ClearStaleThreeDReferences(Array.Empty<Sector>(), Array.Empty<Linedef>(), removed);
+
 		foreach (var thing in _map.Things)
 		{
 			if (!_thingMeshes.ContainsKey(thing)) CreateThingMeshInstance(thing);
@@ -512,26 +669,31 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// A removed Sector/Linedef can still be referenced by the 3D-mode
-	/// target/selection (independent of the classic 2D selection - see
-	/// their own remarks) - drops just those specific stale references
+	/// A removed Sector/Linedef/Thing can still be referenced by the
+	/// 3D-mode target/selection (independent of the classic 2D selection -
+	/// see their own remarks) - drops just those specific stale references
 	/// rather than a blanket clear, so undoing a drawn sector doesn't also
 	/// wipe an unrelated in-progress 3D selection.
 	/// </summary>
-	private void ClearStaleThreeDReferences(IReadOnlyCollection<Sector> removedSectors, IReadOnlyCollection<Linedef> removedLinedefs)
+	private void ClearStaleThreeDReferences(
+		IReadOnlyCollection<Sector> removedSectors, IReadOnlyCollection<Linedef> removedLinedefs, IReadOnlyCollection<Thing> removedThings)
 	{
 		if (_currentTarget is { } target)
 		{
 			var targetLinedef = target.WallSegment?.Side.Linedef;
-			if (removedSectors.Contains(target.Sector) || (targetLinedef != null && removedLinedefs.Contains(targetLinedef)))
+			var isStale = (target.Sector != null && removedSectors.Contains(target.Sector))
+				|| (targetLinedef != null && removedLinedefs.Contains(targetLinedef))
+				|| (target.Thing != null && removedThings.Contains(target.Thing));
+			if (isStale)
 			{
 				_currentTarget = null;
-				_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
+				_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
 			}
 		}
 
 		_selectedSectors3D.ExceptWith(removedSectors);
 		_selectedLinedefs3D.ExceptWith(removedLinedefs);
+		_selectedThings3D.ExceptWith(removedThings);
 	}
 
 	/// <summary>Tears down and rebuilds every sector/wall/thing mesh against the current <see cref="_map"/>/<see cref="_textureCache"/>/<see cref="_gameConfiguration"/> - the part <see cref="LoadMap"/> and <see cref="RefreshResources"/> share.</summary>
@@ -561,13 +723,14 @@ public partial class MapView : Node3D
 		_thingTypeMeshes.Clear();
 
 		// The old target - and the local 3D selection, which holds its own
-		// Sector/Linedef references independent of the classic 2D
+		// Sector/Linedef/Thing references independent of the classic 2D
 		// selection - may reference meshes being discarded here; never
-		// carry either across a rebuild.
+		// carry any of them across a rebuild.
 		_currentTarget = null;
 		_selectedSectors3D.Clear();
 		_selectedLinedefs3D.Clear();
-		_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
+		_selectedThings3D.Clear();
+		_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
 
 		foreach (var sector in _map.Sectors)
 		{
@@ -676,8 +839,8 @@ public partial class MapView : Node3D
 	/// </summary>
 	private void CreateThingMeshInstance(Thing thing)
 	{
-		var (mesh, material, hangs) = ResolveThingMeshAndMaterial(thing.Type);
-		var worldZ = ResolveThingWorldZ(thing, hangs);
+		var (mesh, material, _) = ResolveThingMeshAndMaterial(thing.Type);
+		var worldZ = ResolveThingWorldZ(thing, _gameConfiguration.GetThingType(thing.Type));
 
 		var instance = new MeshInstance3D
 		{
@@ -695,16 +858,92 @@ public partial class MapView : Node3D
 	/// A hanging Thing (e.g. a ceiling-attached decoration) measures
 	/// <see cref="Thing.Height"/> down from its containing sector's
 	/// ceiling instead of up from its floor - shared by
-	/// <see cref="CreateThingMeshInstance"/> and the dirty-things resync
-	/// in <see cref="_Process"/>, so a moved Thing's height stays correct
-	/// even if it crosses into a different sector.
+	/// <see cref="CreateThingMeshInstance"/>, the dirty-things resync in
+	/// <see cref="_Process"/>, and <see cref="ResolveThingPickBounds"/>'s
+	/// own fallback, so a moved Thing's height stays correct even if it
+	/// crosses into a different sector.
+	///
+	/// Also clamps against the *opposite* surface using the type's own
+	/// real collision height (<paramref name="info"/> - matches UDB's own
+	/// real <c>BaseVisualThing</c> Z-position resolution exactly, verified
+	/// directly against source): a floor-standing Thing whose own
+	/// mapper-set <see cref="Thing.Height"/> offset (or a tall type in a
+	/// low room) would push it above <c>ceiling - info.Height</c> gets
+	/// pulled back down to it instead (never below its own floor, for a
+	/// sector too short to fit it at all); a ceiling-hanging Thing is the
+	/// mirror image, clamped against the floor. Missing before this fix -
+	/// a real, previously-caught bug: an unclamped Thing could sit
+	/// partially or fully inside solid floor/ceiling geometry, both
+	/// looking wrong *and* becoming unhoverable in 3D (its own pick box,
+	/// buried behind the very floor/ceiling surface a ray would hit
+	/// first, can never win against it). UDB's own <c>AbsoluteZ</c>/
+	/// <c>nointeraction</c>/special-DoomEdNum-9500-9501 branches aren't
+	/// modeled - no per-type <c>AbsoluteZ</c> flag or special-actor
+	/// concept exists here yet, so every Thing always gets the same real
+	/// clamped floor/ceiling-relative treatment.
 	/// </summary>
-	private double ResolveThingWorldZ(Thing thing, bool hangs)
+	private double ResolveThingWorldZ(Thing thing, ThingTypeInfo info)
 	{
 		var containingSector = SectorHitTest.FindContaining(_map.Sectors, thing.Position);
-		return hangs
-			? (containingSector?.CeilingHeight ?? 0) - thing.Height
-			: (containingSector?.FloorHeight ?? 0) + thing.Height;
+		var floor = containingSector?.FloorHeight ?? 0;
+		var ceiling = containingSector?.CeilingHeight ?? 0;
+		var collisionHeight = info?.Height ?? ThingMeshBuilder.FallbackHeight;
+
+		if (info?.Hangs ?? false)
+		{
+			var z = ceiling - collisionHeight;
+			if (thing.Height > 0) z -= thing.Height;
+			if (z < floor) z = Math.Min(floor, ceiling - collisionHeight);
+			return z;
+		}
+		else
+		{
+			var z = floor;
+			if (thing.Height > 0) z += thing.Height;
+			var maxZ = ceiling - collisionHeight;
+			if (z > maxZ) z = Math.Max(floor, maxZ);
+			return z;
+		}
+	}
+
+	/// <summary>
+	/// The real pick box <see cref="MapRaycaster"/>/<see cref="TargetHighlight"/>
+	/// need for a Thing (see <see cref="ThingPickBounds"/>'s own remarks) -
+	/// its type's own real radius/height (the same fallback dimensions
+	/// <see cref="ThingMeshBuilder"/> uses for its rendered mesh when the
+	/// type's unrecognized, for consistency between what's drawn and
+	/// what's clickable) plus the same floor-standing/ceiling-hanging
+	/// world Z its rendered billboard already uses - read directly off
+	/// that already-positioned mesh instance rather than recomputed via
+	/// <see cref="ResolveThingWorldZ"/> (and the <see cref="SectorHitTest.FindContaining"/>
+	/// it needs) from scratch. That recompute is genuinely expensive -
+	/// <see cref="SectorHitTest.FindContaining"/>'s own remarks document it
+	/// as a brute-force scan meant to run "once per Thing at load/rebuild
+	/// time, never per-frame" - and this method runs once per *candidate*
+	/// Thing on every ~80ms pick tick (<see cref="MapRaycaster.FindTarget"/>),
+	/// which is exactly the per-frame-ish hot path that contract warns
+	/// against: a real, caught-immediately performance regression (a
+	/// visibly laggy 3D view with more than a handful of Things around)
+	/// from the first version of this method, which called both directly.
+	/// <see cref="_thingMeshes"/>'s own position is already correct at
+	/// this point for exactly the same reason it's safe for rendering -
+	/// the dirty-things sync loop in <see cref="_Process"/> keeps it so
+	/// the moment a Thing actually needs it recomputed, not fresh on every
+	/// read. <see cref="ThingPickBounds.Sector"/> is left <c>null</c> -
+	/// nothing in this project currently reads a Thing target's own
+	/// containing sector, so there's no reason to pay for it at all here.
+	/// </summary>
+	private ThingPickBounds ResolveThingPickBounds(Thing thing)
+	{
+		var info = _gameConfiguration.GetThingType(thing.Type);
+		var radius = info?.Radius ?? ThingMeshBuilder.FallbackRadius;
+		var height = info?.Height ?? ThingMeshBuilder.FallbackHeight;
+
+		var worldZ = _thingMeshes.TryGetValue(thing, out var instance)
+			? instance.Position.Y
+			: ResolveThingWorldZ(thing, info);
+
+		return new ThingPickBounds(radius, height, worldZ, Sector: null);
 	}
 
 	/// <summary>
@@ -782,6 +1021,18 @@ public partial class MapView : Node3D
 			return;
 		}
 
+		// Texture-offset nudging (UDB's own real movetextureleft/right/up/down*
+		// actions all set `repeat = true` - held-down-arrow-keeps-nudging is
+		// the real behavior, not a single-shot press) - handled here, before
+		// the `Echo: false` filter every other keyboard action goes through
+		// below, same reason the mouse-wheel height adjustment above isn't
+		// gated by it either.
+		if (_in3D && @event is InputEventKey { Pressed: true } nudgeKey && nudgeKey.Keycode is Key.Left or Key.Right or Key.Up or Key.Down)
+		{
+			HandleTextureNudge(nudgeKey.Keycode, nudgeKey.AltPressed, nudgeKey.CtrlPressed);
+			return;
+		}
+
 		if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
 		switch (key.Keycode)
@@ -791,6 +1042,14 @@ public partial class MapView : Node3D
 				break;
 			case Key.Y when key.CtrlPressed:
 				_undoStack.Redo();
+				break;
+			case Key.A when _in3D:
+				// UDB's own real default keybinds, verified against its
+				// Actions.cfg/UDBuilder.default.cfg: plain A = X only,
+				// Shift+A = Y only, Ctrl+A = both (the one most mappers
+				// actually reach for) - none of the three are `repeat`d,
+				// unlike the arrow-key nudges above.
+				HandleTextureAutoAlign(alignX: !key.ShiftPressed, alignY: key.ShiftPressed || key.CtrlPressed);
 				break;
 			case Key.Tab:
 				// Computed *before* any Current flag changes below, while
@@ -821,6 +1080,8 @@ public partial class MapView : Node3D
 					_selectedSectors3D.UnionWith(_map.GetSelectedSectors());
 					_selectedLinedefs3D.Clear();
 					_selectedLinedefs3D.UnionWith(_map.GetSelectedLinedefs());
+					_selectedThings3D.Clear();
+					_selectedThings3D.UnionWith(_map.GetSelectedThings());
 				}
 				else
 				{
@@ -830,11 +1091,13 @@ public partial class MapView : Node3D
 					// next time 3D mode is entered.
 					_map.ClearSelectedSectors();
 					_map.ClearSelectedLinedefs();
+					_map.ClearSelectedThings();
 					foreach (var sector in _selectedSectors3D) _map.ToggleSelect(sector);
 					foreach (var linedef in _selectedLinedefs3D) _map.ToggleSelect(linedef);
+					foreach (var thing in _selectedThings3D) _map.ToggleSelect(thing);
 
 					_currentTarget = null;
-					_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, MapVector2.Zero);
+					_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
 				}
 
 				break;

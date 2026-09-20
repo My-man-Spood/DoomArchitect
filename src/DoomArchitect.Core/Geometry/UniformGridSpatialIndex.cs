@@ -24,8 +24,19 @@ public sealed class UniformGridSpatialIndex : IMapSpatialIndex
 {
     private const float CellSize = 256f;
 
+    // Things have no real bounds of their own here (their actual pick
+    // radius is a per-type game-configuration value MapRaycaster's own
+    // caller resolves, not something this Core.Geometry-only index knows
+    // about) - a generous fixed margin around each Thing's point position
+    // keeps a ray that passes near (but not exactly through) a cell
+    // boundary from missing a real Thing sitting just past it. Comfortably
+    // covers every real DoomEd thing-type radius, which rarely exceeds a
+    // few dozen map units even for large decorations.
+    private const float ThingCellMargin = 128f;
+
     private readonly Dictionary<(int X, int Y), List<Sector>> _sectorCells = new();
     private readonly Dictionary<(int X, int Y), List<Linedef>> _linedefCells = new();
+    private readonly Dictionary<(int X, int Y), List<Thing>> _thingCells = new();
 
     private bool _hasContent;
     private Vector2 _boundsMin;
@@ -35,6 +46,7 @@ public sealed class UniformGridSpatialIndex : IMapSpatialIndex
     {
         _sectorCells.Clear();
         _linedefCells.Clear();
+        _thingCells.Clear();
         _hasContent = false;
         _boundsMin = Vector2.Zero;
         _boundsMax = Vector2.Zero;
@@ -55,16 +67,26 @@ public sealed class UniformGridSpatialIndex : IMapSpatialIndex
             ExpandBounds(min, max);
             InsertIntoCells(_linedefCells, linedef, min, max);
         }
+
+        foreach (var thing in map.Things)
+        {
+            var margin = new Vector2(ThingCellMargin, ThingCellMargin);
+            var min = thing.Position - margin;
+            var max = thing.Position + margin;
+            ExpandBounds(min, max);
+            InsertIntoCells(_thingCells, thing, min, max);
+        }
     }
 
     public SpatialQueryResult QueryAlongRay(Vector2 origin, Vector2 direction)
     {
         var sectors = new HashSet<Sector>();
         var linedefs = new HashSet<Linedef>();
+        var things = new HashSet<Thing>();
 
         if (!_hasContent || !TryIntersectBounds(origin, direction, out var tEntry, out var tExit))
         {
-            return new SpatialQueryResult(sectors, linedefs);
+            return new SpatialQueryResult(sectors, linedefs, things);
         }
 
         WalkCells(origin, direction, Math.Max(tEntry, 0), tExit, cell =>
@@ -78,9 +100,14 @@ public sealed class UniformGridSpatialIndex : IMapSpatialIndex
             {
                 foreach (var linedef in cellLinedefs) linedefs.Add(linedef);
             }
+
+            if (_thingCells.TryGetValue(cell, out var cellThings))
+            {
+                foreach (var thing in cellThings) things.Add(thing);
+            }
         });
 
-        return new SpatialQueryResult(sectors, linedefs);
+        return new SpatialQueryResult(sectors, linedefs, things);
     }
 
     private static bool TryGetSectorBounds(Sector sector, out Vector2 min, out Vector2 max)

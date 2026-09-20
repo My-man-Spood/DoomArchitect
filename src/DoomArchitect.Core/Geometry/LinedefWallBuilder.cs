@@ -39,8 +39,29 @@ namespace DoomArchitect.Core.Geometry;
 /// math above is already computed in that same scaled space (see
 /// <see cref="GetPartTransform"/>), so the App layer using an
 /// unscaled pixel size instead would desync the two.
+///
+/// <see cref="PartKind"/> is which UDMF per-part offset field
+/// (<c>offsetx_top</c>/<c>_bottom</c>/<c>_mid</c>, see
+/// <see cref="GetPartTransform"/>'s own remarks) this segment's own
+/// offset came from - a masked middle is always <see cref="WallPartKind.Middle"/>
+/// (matching <see cref="IsMasked"/> exactly, since only a masked middle
+/// ever sets it), letting a caller that needs to *write back* to the
+/// right field (texture-offset nudging, auto-align) resolve it directly
+/// from the segment instead of re-deriving it from which of
+/// <c>Side.UpperTexture</c>/<c>LowerTexture</c>/<c>MiddleTexture</c>
+/// happens to match <see cref="Texture"/> - unreliable if two of them
+/// happen to share a name, the same hazard already flagged for
+/// <see cref="Side"/> itself.
 /// </summary>
-public readonly record struct WallSegment(Vertex Start, Vertex End, double Bottom, double Top, string Texture, Sidedef Side, double VerticalTextureOffset, double HorizontalTextureOffset, double TextureScaleX, double TextureScaleY, bool IsMasked);
+public readonly record struct WallSegment(Vertex Start, Vertex End, double Bottom, double Top, string Texture, Sidedef Side, double VerticalTextureOffset, double HorizontalTextureOffset, double TextureScaleX, double TextureScaleY, bool IsMasked, WallPartKind PartKind);
+
+/// <summary>Which of a sidedef's three texture slots a <see cref="WallSegment"/> came from - see its own remarks.</summary>
+public enum WallPartKind
+{
+    Upper,
+    Lower,
+    Middle,
+}
 
 /// <summary>
 /// Computes which wall quads exist for a linedef and their vertical
@@ -134,14 +155,14 @@ public static class LinedefWallBuilder
 
         if (ceiling - floor <= MinimumHeight) return Array.Empty<WallSegment>();
 
-        var transform = GetPartTransform(side, "mid");
+        var transform = GetPartTransform(side, WallPartKind.Middle);
         var verticalTextureOffset = transform.OffsetY;
         if (IsLowerUnpegged(linedef) && textureHeightLookup != null)
         {
             verticalTextureOffset = textureHeightLookup(side.MiddleTexture) / transform.ScaleY - (ceiling - floor) + transform.OffsetY;
         }
 
-        return new[] { new WallSegment(linedef.Start, linedef.End, floor, ceiling, side.MiddleTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false) };
+        return new[] { new WallSegment(linedef.Start, linedef.End, floor, ceiling, side.MiddleTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false, WallPartKind.Middle) };
     }
 
     private static IReadOnlyList<WallSegment> BuildTwoSided(
@@ -193,14 +214,14 @@ public static class LinedefWallBuilder
         var bottom = Math.Max(otherCeiling, side.Sector.FloorHeight);
         if (sideCeiling - bottom <= MinimumHeight) return;
 
-        var transform = GetPartTransform(side, "top");
+        var transform = GetPartTransform(side, WallPartKind.Upper);
         var verticalTextureOffset = transform.OffsetY;
         if (!IsUpperUnpegged(linedef) && textureHeightLookup != null)
         {
             verticalTextureOffset = textureHeightLookup(side.UpperTexture) / transform.ScaleY - (sideCeiling - otherCeiling) + transform.OffsetY;
         }
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, sideCeiling, side.UpperTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false));
+        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, sideCeiling, side.UpperTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false, WallPartKind.Upper));
     }
 
     /// <summary>
@@ -223,12 +244,12 @@ public static class LinedefWallBuilder
         var top = Math.Min(otherFloor, side.Sector.CeilingHeight);
         if (top - sideFloor <= MinimumHeight) return;
 
-        var transform = GetPartTransform(side, "bottom");
+        var transform = GetPartTransform(side, WallPartKind.Lower);
         var verticalTextureOffset = IsLowerUnpegged(linedef)
             ? side.Sector.CeilingHeight - otherFloor + transform.OffsetY
             : transform.OffsetY;
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, sideFloor, top, side.LowerTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false));
+        segments.Add(new WallSegment(linedef.Start, linedef.End, sideFloor, top, side.LowerTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: false, WallPartKind.Lower));
     }
 
     /// <summary>
@@ -263,8 +284,9 @@ public static class LinedefWallBuilder
     /// (if only in the wrong place). Near-zero/zero scale field values
     /// are clamped to 1 rather than dividing by (near) zero.
     /// </summary>
-    private static (double OffsetX, double OffsetY, double ScaleX, double ScaleY) GetPartTransform(Sidedef side, string partSuffix)
+    public static (double OffsetX, double OffsetY, double ScaleX, double ScaleY) GetPartTransform(Sidedef side, WallPartKind part)
     {
+        var partSuffix = PartSuffix(part);
         var scaleX = Math.Abs(side.Fields.GetFloat($"scalex_{partSuffix}", 1.0));
         var scaleY = Math.Abs(side.Fields.GetFloat($"scaley_{partSuffix}", 1.0));
         if (scaleX < 0.001) scaleX = 1.0;
@@ -275,6 +297,31 @@ public static class LinedefWallBuilder
 
         return (offsetX, offsetY, scaleX, scaleY);
     }
+
+    /// <summary>
+    /// The real UDMF per-part field-name suffix (<c>offsetx_&lt;suffix&gt;</c>/
+    /// <c>scaley_&lt;suffix&gt;</c> etc, see <see cref="GetPartTransform"/>'s
+    /// own remarks) for a <see cref="WallPartKind"/> - the single source of
+    /// truth for that mapping, so a caller that needs to *write* a part's
+    /// offset field directly (texture-offset nudging, auto-align) spells it
+    /// exactly the same way this class's own reads do.
+    /// </summary>
+    public static string PartSuffix(WallPartKind part) => part switch
+    {
+        WallPartKind.Upper => "top",
+        WallPartKind.Lower => "bottom",
+        WallPartKind.Middle => "mid",
+        _ => throw new ArgumentOutOfRangeException(nameof(part)),
+    };
+
+    /// <summary>The texture name a <see cref="WallPartKind"/> reads from a given sidedef - <see cref="Sidedef.UpperTexture"/>/<see cref="Sidedef.LowerTexture"/>/<see cref="Sidedef.MiddleTexture"/> respectively.</summary>
+    public static string GetPartTexture(Sidedef side, WallPartKind part) => part switch
+    {
+        WallPartKind.Upper => side.UpperTexture,
+        WallPartKind.Lower => side.LowerTexture,
+        WallPartKind.Middle => side.MiddleTexture,
+        _ => throw new ArgumentOutOfRangeException(nameof(part)),
+    };
 
     /// <summary>
     /// UDB's own real classic <c>ML_DONTPEGBOTTOM</c> bit (value 16,
@@ -330,7 +377,7 @@ public static class LinedefWallBuilder
         var openingBottom = Math.Max(side.Sector.FloorHeight, other.Sector.FloorHeight);
         if (openingTop - openingBottom <= MinimumHeight) return;
 
-        var transform = GetPartTransform(side, "mid");
+        var transform = GetPartTransform(side, WallPartKind.Middle);
         var textureHeight = textureHeightLookup(side.MiddleTexture) / transform.ScaleY;
         var textureTop = IsLowerUnpegged(linedef)
             ? openingBottom + transform.OffsetY + textureHeight
@@ -346,6 +393,6 @@ public static class LinedefWallBuilder
         // short texture, pushed part of it outside the opening.
         var verticalTextureOffset = textureTop - top;
 
-        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, top, side.MiddleTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: true));
+        segments.Add(new WallSegment(linedef.Start, linedef.End, bottom, top, side.MiddleTexture, side, verticalTextureOffset, transform.OffsetX, transform.ScaleX, transform.ScaleY, IsMasked: true, WallPartKind.Middle));
     }
 }

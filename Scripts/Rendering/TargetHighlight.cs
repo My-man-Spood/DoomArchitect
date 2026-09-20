@@ -10,12 +10,15 @@ namespace DoomArchitect.Rendering;
 
 /// <summary>
 /// Every highlighted surface in the 3D view: the current hover/crosshair
-/// target, plus every selected Sector/Linedef - rebuilt as a pool of
+/// target, plus every selected Sector/Linedef/Thing - rebuilt as a pool of
 /// child <see cref="MeshInstance3D"/>s each time <see cref="UpdateHighlights"/>
 /// is called (see its own remarks), rather than as one single mesh the
 /// way this class originally worked when it only ever showed one target
 /// at a time. Reuses the exact same Core.Geometry triangulation already
-/// used for the real geometry, offset slightly to avoid z-fighting.
+/// used for the real geometry, offset slightly to avoid z-fighting - a
+/// Thing highlight instead draws its own real pick-box dimensions (see
+/// <see cref="AddThing"/>'s own remarks), which never coincides with any
+/// opaque surface, so it needs no such offset.
 /// </summary>
 public partial class TargetHighlight : Node3D
 {
@@ -46,6 +49,9 @@ public partial class TargetHighlight : Node3D
     /// <summary>Same lookup <c>MapView</c> already gives its <see cref="MapRaycaster"/> - needed to size a two-sided linedef's masked middle texture. Set once from <c>MapView._Ready</c>.</summary>
     public Func<string, double> MiddleTextureHeightLookup { get; set; }
 
+    /// <summary>Same lookup <c>MapView</c> already gives its <see cref="MapRaycaster"/> - needed to draw a Thing's own real pick-box dimensions. Set once from <c>MapView._Ready</c>.</summary>
+    public Func<Thing, ThingPickBounds> ThingPickBoundsLookup { get; set; }
+
     public override void _Ready()
     {
         _hoverMaterial = BuildMaterial(HoverColor);
@@ -63,6 +69,19 @@ public partial class TargetHighlight : Node3D
         // lighting to get right (Unshaded), so simply disabling
         // backface culling is enough to stay visible from both sides.
         CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        // A Thing's own box highlight (see AddThing) genuinely surrounds
+        // its billboard sprite - two transparent objects at overlapping
+        // depths, which Godot's default distance-from-camera sort has no
+        // reliable way to order consistently (the box's own faces span
+        // both nearer and farther than the sprite depending on viewing
+        // angle, so its centroid-based sort position flips back and forth
+        // as the camera moves). Explicitly lower than every other
+        // transparent material's own default (0) forces this to always
+        // draw first regardless of distance, so the sprite - drawn after -
+        // always composites on top instead of flickering between the two,
+        // matching what a "here's the box, and here's the thing inside
+        // it, always visible" highlight should look like.
+        RenderPriority = -1,
     };
 
     /// <summary>
@@ -76,7 +95,8 @@ public partial class TargetHighlight : Node3D
     /// <c>MapOverlay</c>'s 2D view uses.
     /// </summary>
     public void UpdateHighlights(
-        MapTarget? hoverTarget, IEnumerable<Sector> selectedSectors, IEnumerable<Linedef> selectedLinedefs, MapVector2 viewerPosition)
+        MapTarget? hoverTarget, IEnumerable<Sector> selectedSectors, IEnumerable<Linedef> selectedLinedefs,
+        IEnumerable<Thing> selectedThings, MapVector2 viewerPosition)
     {
         foreach (var instance in _highlightInstances) instance.QueueFree();
         _highlightInstances.Clear();
@@ -86,6 +106,9 @@ public partial class TargetHighlight : Node3D
             : null;
         var hoverLinedef = hoverTarget is { Kind: TargetSurfaceKind.Wall }
             ? hoverTarget.Value.WallSegment!.Value.Side.Linedef
+            : null;
+        var hoverThing = hoverTarget is { Kind: TargetSurfaceKind.Thing }
+            ? hoverTarget.Value.Thing
             : null;
 
         foreach (var sector in selectedSectors)
@@ -104,16 +127,25 @@ public partial class TargetHighlight : Node3D
             }
         }
 
+        foreach (var thing in selectedThings)
+        {
+            if (thing == hoverThing) continue;
+            AddThing(thing, _selectedMaterial);
+        }
+
         switch (hoverTarget)
         {
             case { Kind: TargetSurfaceKind.Floor } target:
-                AddFlat(target.Sector, target.Sector.FloorHeight, FloorCeilingOffset, _hoverMaterial);
+                AddFlat(target.Sector!, target.Sector!.FloorHeight, FloorCeilingOffset, _hoverMaterial);
                 break;
             case { Kind: TargetSurfaceKind.Ceiling } target:
-                AddFlat(target.Sector, target.Sector.CeilingHeight, -FloorCeilingOffset, _hoverMaterial);
+                AddFlat(target.Sector!, target.Sector!.CeilingHeight, -FloorCeilingOffset, _hoverMaterial);
                 break;
             case { Kind: TargetSurfaceKind.Wall } target:
                 AddWall(target.WallSegment!.Value, viewerPosition, _hoverMaterial);
+                break;
+            case { Kind: TargetSurfaceKind.Thing } target:
+                AddThing(target.Thing!, _hoverMaterial);
                 break;
         }
     }
@@ -181,6 +213,60 @@ public partial class TargetHighlight : Node3D
         surfaceTool.GenerateNormals();
 
         AddInstance(surfaceTool.Commit(), material);
+    }
+
+    /// <summary>
+    /// A translucent axis-aligned box matching the Thing's own real pick
+    /// bounds (<see cref="ThingPickBoundsLookup"/> - same dimensions
+    /// <see cref="MapRaycaster"/> actually hit-tests against, so this is
+    /// an honest "here's what you're clicking" affordance, not just a
+    /// decorative marker) - the same idea as UDB's own real "thing cage"
+    /// display, just filled rather than wireframe to match this class's
+    /// existing flat/wall highlight look. Deliberately axis-aligned, not
+    /// billboarded to the camera the way the Thing's own rendered sprite
+    /// is - matching the pick box itself, which isn't billboarded either.
+    /// A no-op if <see cref="ThingPickBoundsLookup"/> was never wired up.
+    /// </summary>
+    private void AddThing(Thing thing, StandardMaterial3D material)
+    {
+        if (ThingPickBoundsLookup == null) return;
+        var bounds = ThingPickBoundsLookup(thing);
+
+        var min = new MapVector2((float)(thing.Position.X - bounds.Radius), (float)(thing.Position.Y - bounds.Radius));
+        var max = new MapVector2((float)(thing.Position.X + bounds.Radius), (float)(thing.Position.Y + bounds.Radius));
+        var bottom = (float)bounds.WorldZ;
+        var top = (float)(bounds.WorldZ + bounds.Height);
+
+        var p000 = new MapVector2(min.X, min.Y).ToWorld(bottom);
+        var p100 = new MapVector2(max.X, min.Y).ToWorld(bottom);
+        var p010 = new MapVector2(min.X, max.Y).ToWorld(bottom);
+        var p110 = new MapVector2(max.X, max.Y).ToWorld(bottom);
+        var p001 = new MapVector2(min.X, min.Y).ToWorld(top);
+        var p101 = new MapVector2(max.X, min.Y).ToWorld(top);
+        var p011 = new MapVector2(min.X, max.Y).ToWorld(top);
+        var p111 = new MapVector2(max.X, max.Y).ToWorld(top);
+
+        var surfaceTool = new SurfaceTool();
+        surfaceTool.Begin(Mesh.PrimitiveType.Triangles);
+        AddQuad(surfaceTool, p000, p100, p110, p010); // bottom
+        AddQuad(surfaceTool, p001, p011, p111, p101); // top
+        AddQuad(surfaceTool, p000, p010, p011, p001); // -X side
+        AddQuad(surfaceTool, p100, p101, p111, p110); // +X side
+        AddQuad(surfaceTool, p000, p001, p101, p100); // -Y side
+        AddQuad(surfaceTool, p010, p110, p111, p011); // +Y side
+        surfaceTool.GenerateNormals();
+
+        AddInstance(surfaceTool.Commit(), material);
+    }
+
+    private static void AddQuad(SurfaceTool surfaceTool, Vector3 a, Vector3 b, Vector3 c, Vector3 d)
+    {
+        surfaceTool.AddVertex(a);
+        surfaceTool.AddVertex(b);
+        surfaceTool.AddVertex(c);
+        surfaceTool.AddVertex(a);
+        surfaceTool.AddVertex(c);
+        surfaceTool.AddVertex(d);
     }
 
     private void AddInstance(ArrayMesh mesh, StandardMaterial3D material)

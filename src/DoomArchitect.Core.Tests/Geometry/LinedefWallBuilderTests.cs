@@ -676,4 +676,35 @@ public class LinedefWallBuilderTests
         Assert.Equal(88, middle.Bottom);
         Assert.Equal(128, middle.Top);
     }
+
+    [Fact]
+    public void Build_OneSided_TagsMiddlePartKind()
+    {
+        var (map, a, b) = TwoVertices();
+        var sector = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(WallPartKind.Middle, segment.PartKind);
+    }
+
+    [Fact]
+    public void Build_TwoSided_TagsUpperLowerAndMaskedMiddlePartKinds()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(16, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+        linedef.Front!.LowerTexture = "SUPPORT2";
+        linedef.Back!.MiddleTexture = "MIDBARS1";
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        Assert.Equal(WallPartKind.Upper, Assert.Single(segments, s => s.Texture == "BROWN1").PartKind);
+        Assert.Equal(WallPartKind.Lower, Assert.Single(segments, s => s.Texture == "SUPPORT2").PartKind);
+        Assert.Equal(WallPartKind.Middle, Assert.Single(segments, s => s.Texture == "MIDBARS1").PartKind);
+    }
 }
