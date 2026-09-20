@@ -65,7 +65,7 @@ public sealed class DrawOverlayHandler
 
 	private readonly List<DrawPoint> _points = new();
 	private bool _hasCursor;
-	private Vector2 _cursorScreen;
+	private DrawPoint _previewPoint;
 	private Vertex _hoveredVertex;
 	private Linedef _hoveredLinedef;
 
@@ -87,9 +87,18 @@ public sealed class DrawOverlayHandler
 				break;
 			case InputEventMouseMotion motion:
 				_hasCursor = true;
-				_cursorScreen = motion.Position;
-				_hoveredVertex = FindNearVertex(motion.Position);
-				_hoveredLinedef = _hoveredVertex == null ? FindNearLinedef(motion.Position) : null;
+				// Resolved through the exact same snap/stitch/cardinal-lock
+				// logic a click would use - previously this only read the
+				// raw, unsnapped cursor position, so the live rubber-band
+				// preview (and the hover highlight, via _hoveredVertex/
+				// _hoveredLinedef below) never actually showed the
+				// cardinal-direction lock (or grid/vertex/linedef snap)
+				// while aiming, only after the click itself already landed
+				// snapped - a real, reported bug ("i dont see any
+				// snapping"), not just a cosmetic gap.
+				_previewPoint = ResolveDrawPoint(motion.Position);
+				_hoveredVertex = _previewPoint.ExistingVertex;
+				_hoveredLinedef = _previewPoint.SplitLinedef;
 				break;
 			case InputEventKey { Pressed: true, Keycode: Key.Escape }:
 				// UDB's own real OnCancel guard: continuous drawing blocks
@@ -176,7 +185,7 @@ public sealed class DrawOverlayHandler
 	/// right there (<see cref="MapOverlay.StartDrawingAt"/>) rather than
 	/// requiring a separate mode switch first. Seeds the rubber-band
 	/// cursor state too, not just the point itself - <see cref="_hasCursor"/>/
-	/// <see cref="_cursorScreen"/> otherwise stay at whatever they were
+	/// <see cref="_previewPoint"/> otherwise stay at whatever they were
 	/// last left at (motion events never reach this handler outside Draw
 	/// mode at all), which without this produced a brief, wrong rubber-
 	/// band line rendered from that stale leftover position on the very
@@ -187,7 +196,7 @@ public sealed class DrawOverlayHandler
 		_points.Clear();
 		_points.Add(ResolveDrawPoint(screenPosition));
 		_hasCursor = true;
-		_cursorScreen = screenPosition;
+		_previewPoint = _points[0];
 	}
 
 	/// <summary>UDB's own real <c>Alt+Shift</c> cardinal/45-degree direction lock (<see cref="CardinalSnapper"/>) - a live modifier read, same shape as <see cref="MapOverlay.EffectiveSnap"/>'s own <c>Input.IsKeyPressed(Key.Shift)</c>.</summary>
@@ -332,10 +341,8 @@ public sealed class DrawOverlayHandler
 
 		if (_hasCursor)
 		{
-			var cursorMapPosition = _camera.Unproject(_cursorScreen);
-			var stitches = _hoveredVertex != null || _hoveredLinedef != null;
-			DrawSegment(target, _camera.Project(_points[^1].Position), _cursorScreen, stitches ? MapOverlayColors.Hover : MapOverlayColors.Selected);
-			DrawLengthLabel(target, _points[^1].Position, cursorMapPosition);
+			DrawSegment(target, _camera.Project(_points[^1].Position), _camera.Project(_previewPoint.Position), StitchColor(_previewPoint));
+			DrawLengthLabel(target, _points[^1].Position, _previewPoint.Position);
 		}
 	}
 
