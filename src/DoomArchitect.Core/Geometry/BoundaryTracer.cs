@@ -26,19 +26,18 @@ namespace DoomArchitect.Core.Geometry;
 /// (<see cref="Loop"/>'s constructor is <c>internal</c>, not
 /// <c>private</c>).
 ///
-/// A known, deliberate simplification versus UDB's real algorithm: UDB's
-/// own <c>FindOuterLines</c> retries from a different starting edge (found
-/// via a rightward ray-cast) when its first attempted trace turns out to
-/// be an inner loop rather than the true outer boundary. That retry step
-/// is not implemented here yet - a trace that lands on the wrong loop on
-/// its first attempt returns <c>null</c> (treated as "no potential
-/// sector found here") rather than retrying. Flagged in TODO.md as a
-/// known gap, not silently dropped.
+/// <see cref="FindOuterLines"/> retries from a different starting edge
+/// (found via a rightward ray-cast from the wrongly-traced loop's own
+/// right-most vertex) when its first attempted trace turns out to be an
+/// inner loop rather than the true outer boundary - UDB's own real
+/// retry, ported directly rather than left as the "just fail" gap this
+/// class used to have (see its own remarks for the full algorithm).
 /// </summary>
 public static class BoundaryTracer
 {
     private const int MaxTraceCountAtDeadEnd = 3;
     private const int MaxPathLength = 4096;
+    private const int MaxOuterRetries = 4096;
 
     /// <summary>
     /// The full boundary a new sector (or an existing one being joined)
@@ -52,13 +51,30 @@ public static class BoundaryTracer
     public static IReadOnlyList<LinedefSide>? FindPotentialSectorAt(MapData map, Linedef startLinedef, bool front)
     {
         var start = new LinedefSide(startLinedef, front);
-        var outer = FindOuterLines(start);
+        var outer = FindOuterLines(map, start);
         if (outer == null) return null;
 
         var allLines = new List<LinedefSide>(outer.Value.Lines);
         FindInnerLines(map, outer.Value.Loop, allLines);
         return allLines;
     }
+
+    /// <summary>
+    /// UDB's own real two-endpoint <c>Tools.FindClosestPath</c> - walks
+    /// from <paramref name="startLinedef"/>'s own <paramref name="startFront"/>
+    /// side until it reaches <paramref name="endLinedef"/>'s own
+    /// <paramref name="endFront"/> side, over the map's raw vertex/linedef
+    /// topology (the same walk <see cref="FindPotentialSectorAt"/>'s own
+    /// self-closing trace already uses via <see cref="Walk"/> - that one
+    /// is just this same method's <c>start == end</c> special case). Used
+    /// by <see cref="DrawGapCloser"/> to route a genuinely open drawn
+    /// polyline's own two loose ends back together *through* existing map
+    /// geometry (UDB's own real gap-closing, as opposed to the "crosses
+    /// existing lines along its own straight path" case the stitch pass
+    /// already handles). <c>null</c> if no such path exists.
+    /// </summary>
+    public static IReadOnlyList<LinedefSide>? FindClosestPath(Linedef startLinedef, bool startFront, Linedef endLinedef, bool endFront, bool turnAtEnds = true) =>
+        Walk(new LinedefSide(startLinedef, startFront), new LinedefSide(endLinedef, endFront), turnAtEnds);
 
     /// <summary>
     /// UDB's own real per-linedef interior/exterior determination
@@ -95,19 +111,129 @@ public static class BoundaryTracer
     /// <summary>
     /// Traces from <paramref name="start"/> and validates the result is
     /// actually the outer boundary containing <paramref name="start"/>'s
-    /// own side-point, not some other loop the walk happened to close on.
+    /// own side-point, not some other loop the walk happened to close on -
+    /// UDB's own real <c>FindOuterLines</c>: when a trace closes on the
+    /// wrong loop (an inner/hole boundary rather than the true outer one
+    /// containing <paramref name="start"/>'s own side-point), it doesn't
+    /// just fail - it retries from a different starting edge, found by
+    /// casting a ray rightward from the wrongly-traced loop's own
+    /// right-most vertex to the next linedef it crosses, and continues
+    /// scanning rightward from there until either a trace succeeds or the
+    /// ray runs off the edge of the map with nothing left to cross.
+    /// <paramref name="start"/>'s own side-point stays fixed for every
+    /// retry - only which edge/side the trace itself starts from changes.
     /// </summary>
-    private static (IReadOnlyList<LinedefSide> Lines, Loop Loop)? FindOuterLines(LinedefSide start)
+    private static (IReadOnlyList<LinedefSide> Lines, Loop Loop)? FindOuterLines(MapData map, LinedefSide start)
     {
-        var path = Walk(start, start, turnAtEnds: true);
-        if (path == null) return null;
-
-        var lines = TrimClosingDuplicate(path);
-        var loop = BuildLoop(lines);
-        if (loop == null) return null;
-
         var sidePoint = SidePoint(start);
-        return loop.Contains(sidePoint) ? (lines, loop) : null;
+        var scan = start;
+
+        // MaxOuterRetries is a defensive safety net beyond what's
+        // confirmed of UDB's own real behavior (which retries
+        // unboundedly, trusting real map geometry to always terminate) -
+        // same reasoning as Walk's own MaxPathLength, guaranteeing
+        // termination on pathological/malformed input instead of hanging.
+        for (var retry = 0; retry < MaxOuterRetries; retry++)
+        {
+            var path = Walk(scan, scan, turnAtEnds: true);
+            if (path == null) return null;
+
+            var lines = TrimClosingDuplicate(path);
+            var loop = BuildLoop(lines);
+
+            if (loop != null && loop.Contains(sidePoint)) return (lines, loop);
+
+            var rightmost = FindRightmostVertex(lines);
+            var crossing = FindNextLinedefToTheRight(map, rightmost);
+            if (crossing == null) return null;
+
+            scan = new LinedefSide(crossing, GeometryMath.SideOfLine(crossing.Start.Position, crossing.End.Position, rightmost.Position) < 0);
+        }
+
+        return null;
+    }
+
+    /// <summary>The right-most vertex touched by any line in a (wrongly-traced) loop - UDB's own real seed for the rightward ray-cast retry below.</summary>
+    private static Vertex FindRightmostVertex(IReadOnlyList<LinedefSide> lines)
+    {
+        Vertex best = lines[0].Linedef.Start;
+
+        foreach (var side in lines)
+        {
+            if (side.Linedef.Start.Position.X > best.Position.X) best = side.Linedef.Start;
+            if (side.Linedef.End.Position.X > best.Position.X) best = side.Linedef.End;
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// UDB's own real rightward ray-cast: the closest linedef (by
+    /// crossing X, strictly to the right of <paramref name="from"/>) that
+    /// crosses the horizontal ray running rightward from
+    /// <paramref name="from"/> - "all sectors are closed" is the
+    /// assumption this relies on (the very next thing the ray hits is
+    /// necessarily a real boundary edge to continue tracing from). A tie
+    /// (two lines crossing at the same X) prefers whichever is closer to
+    /// parallel with the x-axis - UDB's own real
+    /// <c>GetRelativeAngle</c>-based tie-break, approximated here directly
+    /// via each candidate's own acute angle from horizontal rather than
+    /// re-derived byte-for-byte (a genuinely rare exact-tie case).
+    /// </summary>
+    private static Linedef? FindNextLinedefToTheRight(MapData map, Vertex from)
+    {
+        Linedef? best = null;
+        var bestCrossX = float.MaxValue;
+
+        foreach (var linedef in map.Linedefs)
+        {
+            if (linedef.Start.Position.X <= from.Position.X && linedef.End.Position.X <= from.Position.X) continue;
+            if (!TryGetHorizontalCrossingX(linedef, from.Position, out var crossX)) continue;
+            if (crossX <= from.Position.X + 0.00001f) continue;
+
+            if (crossX < bestCrossX - 0.0001f)
+            {
+                best = linedef;
+                bestCrossX = crossX;
+            }
+            else if (best != null && MathF.Abs(crossX - bestCrossX) <= 0.0001f && AngleFromHorizontal(linedef) < AngleFromHorizontal(best))
+            {
+                best = linedef;
+                bestCrossX = crossX;
+            }
+        }
+
+        return best;
+    }
+
+    /// <summary>Where <paramref name="linedef"/>'s own bounded segment crosses the horizontal line through <paramref name="from"/>, if at all (parallel-to-the-ray lines never cross it at a single point).</summary>
+    private static bool TryGetHorizontalCrossingX(Linedef linedef, Vector2 from, out float crossX)
+    {
+        var a = linedef.Start.Position;
+        var b = linedef.End.Position;
+
+        if (a.Y == b.Y)
+        {
+            crossX = 0f;
+            return false;
+        }
+
+        var t = (from.Y - a.Y) / (b.Y - a.Y);
+        if (t is < 0f or > 1f)
+        {
+            crossX = 0f;
+            return false;
+        }
+
+        crossX = a.X + (b.X - a.X) * t;
+        return true;
+    }
+
+    private static float AngleFromHorizontal(Linedef linedef)
+    {
+        var delta = linedef.End.Position - linedef.Start.Position;
+        var angle = MathF.Abs(MathF.Atan2(delta.Y, delta.X));
+        return angle > MathF.PI / 2f ? MathF.PI - angle : angle;
     }
 
     /// <summary>

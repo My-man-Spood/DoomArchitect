@@ -223,6 +223,25 @@ public partial class MapOverlay : Control
 	/// </summary>
 	public bool SnapEnabled { get; set; } = true;
 
+	/// <summary>
+	/// UDB's own real "continuous drawing" (a Draw Lines options-panel
+	/// checkbox, <c>drawlinesmode.continuousdrawing</c>) - when on,
+	/// finishing or cancelling a drawn polyline stays in
+	/// <see cref="EditMode.Draw"/> and clears the in-progress points for a
+	/// fresh one, instead of <see cref="ReturnFromDraw"/>'s own normal
+	/// return to whatever mode was active before. Read directly by
+	/// <see cref="DrawOverlayHandler"/>'s own finish/cancel paths, not this
+	/// property itself - <see cref="Mode"/>'s setter still runs its usual
+	/// <see cref="_drawHandler"/>.CancelDraw()/mode-switch machinery
+	/// unconditionally on every *other* trigger (e.g. clicking a toolbar
+	/// mode button while continuous drawing is on genuinely does leave
+	/// Draw mode, matching UDB - this toggle only changes what a drawn
+	/// polyline's own finish/cancel do, not every way to leave the mode).
+	/// Session-only, like every other toolbar toggle here - no
+	/// settings-persistence layer exists yet (see TODO.md).
+	/// </summary>
+	public bool ContinuousDrawing { get; set; }
+
 	public bool DynamicGridSizeEnabled
 	{
 		get => _grid.DynamicGridSizeEnabled;

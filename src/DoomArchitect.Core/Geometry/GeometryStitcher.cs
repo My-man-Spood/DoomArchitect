@@ -386,4 +386,23 @@ public static class GeometryStitcher
             });
         }
     }
+
+    /// <summary>UDB's own real <c>MapSet.NearestLinedef</c> - the candidate whose own bounded segment lies closest to a point, a plain linear scan (UDB's own version shortcuts through its blockmap first; this project has no equivalent spatial index for 2D edit-mode geometry queries yet).</summary>
+    internal static Linedef? FindNearestLinedef(IReadOnlyList<Linedef> candidates, Vector2 point)
+    {
+        Linedef? nearest = null;
+        var nearestDistanceSquared = float.MaxValue;
+
+        foreach (var linedef in candidates)
+        {
+            var distanceSquared = GeometryMath.DistanceToSegmentSquared(linedef.Start.Position, linedef.End.Position, point);
+            if (distanceSquared < nearestDistanceSquared)
+            {
+                nearestDistanceSquared = distanceSquared;
+                nearest = linedef;
+            }
+        }
+
+        return nearest;
+    }
 }

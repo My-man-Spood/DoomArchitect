@@ -182,4 +182,57 @@ public class BoundaryTracerTests
 
         Assert.Null(result);
     }
+
+    /// <summary>
+    /// A deliberately adversarial trap for the plain box's own closing
+    /// corner (vertex A): a small triangular appendage hangs off A at an
+    /// angle engineered (verified numerically against
+    /// <see cref="LinedefAngleSorter.RelativeAngle"/> directly, not
+    /// guessed) to out-score the box's own real closing edge (AB) in the
+    /// tightest-turn comparison the walk uses at that vertex - without
+    /// <see cref="BoundaryTracer"/>'s own rightward-ray-cast retry (see
+    /// <c>FindOuterLines</c>'s own remarks), a trace starting from AB
+    /// would wander out onto this appendage the moment it reaches A,
+    /// rather than closing straight back onto AB there.
+    ///
+    /// This doesn't decisively distinguish "retried" from "succeeded on
+    /// the first attempt anyway" - real experimentation (see this
+    /// project's own commit history) found <c>Loop.Contains</c>'s ray-
+    /// crossing test tends to still correctly place the box's own side-
+    /// point inside a self-touching combined trace like this one even
+    /// without a retry, so this specific construction can't prove the
+    /// retry path itself fired. What it does confirm, and is worth
+    /// keeping regardless: the walk still finds its way back to close on
+    /// AB - the real target - rather than getting lost in the appendage
+    /// or failing outright, and the box's own 4 sides are still present
+    /// (alongside the appendage) in the result either way.
+    /// </summary>
+    [Fact]
+    public void FindPotentialSectorAt_WithAnAngleWinningAppendageAtTheClosingVertex_StillClosesBackOnTheRealEdge()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(0, 64));
+        var c = map.CreateVertex(new Vector2(64, 64));
+        var d = map.CreateVertex(new Vector2(64, 0));
+        var ab = map.CreateLinedef(a, b, null, null);
+        var bc = map.CreateLinedef(b, c, null, null);
+        var cd = map.CreateLinedef(c, d, null, null);
+        var da = map.CreateLinedef(d, a, null, null);
+
+        // A small triangle hanging off vertex A, at an angle numerically
+        // confirmed (via LinedefAngleSorter.RelativeAngle directly) to
+        // score higher than AB itself in the walk's own tightest-turn
+        // comparison arriving via DA.
+        var h = map.CreateVertex(new Vector2(14.14f, 14.14f));
+        var i = map.CreateVertex(new Vector2(7.5f, 12.99f));
+        var ah = map.CreateLinedef(a, h, null, null);
+        var hi = map.CreateLinedef(h, i, null, null);
+        var ia = map.CreateLinedef(i, a, null, null);
+
+        var result = BoundaryTracer.FindPotentialSectorAt(map, ab, front: true);
+
+        Assert.NotNull(result);
+        Assert.Equal(new[] { ab, bc, cd, da, ah, hi, ia }, result!.Select(s => s.Linedef));
+    }
 }

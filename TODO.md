@@ -2459,7 +2459,7 @@ file just tracks what's built and what's next.
       selection on any casing mismatch between a map's stored texture
       name and the resource's own real lump casing - now case-insensitive,
       matching every other name lookup in this codebase.
-- [ ] Drawing mode (UDB's real "Draw Lines" mode) - **Phases 1+2 done
+- [x] Drawing mode (UDB's real "Draw Lines" mode) - **Phases 1+2 done
       2026-09-17**, geometry-stitching rewritten 1:1 against UDB's real
       source **2026-09-19** (see that entry below for the full writeup);
       **Phase 3 (auto-close-across-geometry specifically, plus cardinal-
@@ -2634,21 +2634,149 @@ file just tracks what's built and what's next.
       highlight isn't textured content at all, so per the user's own
       explicit call, only walls needed this fix.
 
-      **Phase 3 (not started)**: cardinal-direction constrained drawing,
-      full auto-close across existing geometry (the general case beyond
-      "two consecutive drawn points share an already-existing edge",
-      fixed above - splitting a drawn line's path across *several*
-      existing linedefs/vertices along an arbitrary route still isn't
-      supported, matching UDB's own real `autoclosedrawing` scope),
-      `SplitOuterSectors`-equivalent post-pass, continuous drawing mode, a
-      real dashed rubber-band line (none exists anywhere in this
-      codebase), and `BoundaryTracer`'s own real gap (a trace that lands
-      on the wrong loop on its first attempt returns "not found" rather
-      than UDB's real rightward-ray-cast retry - see that file's own doc
-      comment). Genuinely open (non-closed) polylines aren't supported
-      either - `DrawLoopCommand` always closes back to the first point,
-      unlike UDB's own real `Tools.DrawLines` (see the right-click audit
-      entry below, which ran into this directly).
+      **Phase 3, done 2026-09-20**: cardinal-direction constrained
+      drawing, full gap-closing across existing geometry, a
+      `SplitOuterSectors`-equivalent post-pass, continuous drawing mode,
+      a real rubber-band line, `BoundaryTracer`'s own rightward-ray-cast
+      retry, and genuinely open (non-closed) polylines. Researched
+      directly against UDB's real source
+      (`DrawGeometryMode`/`Tools.DrawLines`/`Tools.FindClosestPath`/
+      `Tools.FindPotentialSectorAt`/`Tools.SplitOuterSectors`) via a full
+      Plan Mode cycle before implementation, not guessed.
+
+      **One correction to this entry's own earlier wording**: "a real
+      dashed rubber-band line" turned out to be wrong - UDB's actual
+      rubber-band (`DrawGeometryMode.Update`/`Renderer2D.RenderLine`) is
+      solid, not dashed, color-coded by whether the segment will stitch
+      onto existing geometry (stitch color vs. new-geometry color), with
+      a short perpendicular direction-indicator tick at its midpoint.
+      That's what got built (`DrawOverlayHandler.DrawSegment`/
+      `DrawDirectionTick`), replacing the old plain-solid, placed-vs-
+      rubber-band-only coloring.
+
+      **Cardinal-direction (45°) snap**: new `Geometry/CardinalSnapper.cs`
+      (pure function, mirrors `GridSnapper`'s own shape), wired into
+      `DrawOverlayHandler.ResolveDrawPoint` behind `Alt+Shift`
+      (`CardinalSnapEnabled`, live `Input.IsKeyPressed` read, same
+      pattern as `MapOverlay.EffectiveSnap`'s own Shift-inverts-the-
+      toggle convention), active only once at least one point is placed
+      (matches UDB - no cardinal lock for the very first point). A stitch
+      candidate is only accepted while locked if it actually lies on the
+      locked direction line (`IsOnLockedLine`, matching UDB's own real
+      `ourline.GetSideOfLine(nv.Position) == 0` gate - cardinal lock
+      takes priority over stitching to arbitrary nearby geometry).
+      Deliberately not ported: UDB's own "grid offset kept relative to
+      the first point" refinement when cardinal-lock and grid-snap
+      combine (that exact source detail wasn't fully recoverable) - grid
+      snap, when also active, applies directly via the existing
+      `GridSnapper`/`SnapIfEnabled` to the already-locked point instead.
+
+      **Continuous drawing mode**: per the user's own explicit choice (a
+      UI toggle button, not a keybind, since this project has no
+      settings-persistence layer yet - matches the same gap already
+      flagged for keybinding config above), a new `ContinuousDrawToggleButton`
+      next to `DrawModeButton` in `Main.tscn`, wired in `ModeToolbar.cs`
+      exactly like `GridToolbar.cs` already wires `SnapToggleButton`, into
+      a new plain session-only `MapOverlay.ContinuousDrawing` property.
+      `DrawOverlayHandler.FinishDraw`/Escape both check it: when on,
+      finishing or cancelling clears the in-progress points and stays in
+      Draw mode (UDB's own real `OnAccept`/`OnCancel` continuous-drawing
+      branches) instead of the normal `ReturnFromDraw`.
+
+      **Open (non-closed) polylines**: `DrawLoopCommand` gained a
+      `closeLoop` constructor parameter (default `true`, preserving every
+      existing caller's behavior unchanged) - `DrawOverlayHandler`
+      decides it from *which gesture* committed the draw (clicking back
+      near the first point vs. a plain right-click/too-few-points-to-
+      close), a deliberate simplification of UDB's own real detection
+      (purely geometric, `firstline.Start == lastline.End` after
+      resolution - this project's own Draw mode never adds a literal
+      duplicate closing point the way UDB's real `DrawPointAt` does, so
+      there's no vertex-identity signal to detect closure from after the
+      fact). When open, `Do()` ports UDB's real `splittingonly` check
+      (`IsSplittingOnly`, new `GeometryStitcher.FindNearestLinedef`
+      helper) - gates a genuinely-new-out-of-the-void sector from being
+      created alongside a plain sector-interior split
+      (`ResolveInteriorSide`'s new `splittingOnly` parameter) - and UDB's
+      real sideless-leftover-linedef cleanup rule (only clean up once
+      *something* in the draw got a real sector; a fully-unstitched open
+      draw into the void keeps its raw lines).
+
+      **Gap-closing through existing geometry**: new
+      `Geometry/DrawGapCloser.cs` (pure search, touches no `MapData` at
+      all) ports UDB's real "try every combination of stitched start/end
+      candidate, keep the shortest path" search from `Tools.DrawLines`,
+      built on a new public two-endpoint `BoundaryTracer.FindClosestPath`
+      (UDB's own real `Tools.FindClosestPath` - turned out to already
+      exist as `BoundaryTracer`'s own private `Walk`, whose existing
+      self-closing calls are just its `start == end` special case, so
+      this only needed a thin public wrapper, not new tracing logic).
+      Unlike UDB's own real version (a pure-geometry function that has to
+      *re-discover* what a drawn endpoint stitches onto via a fresh
+      distance search), this project still has the original `DrawPoint`'s
+      own `ExistingVertex`/`SplitLinedef` reference available at this
+      point and uses that directly - simpler and immune to a dense-area
+      distance search finding a different line/vertex than the one
+      actually clicked. `DrawLoopCommand.AppendClosingPath` turns a found
+      path into real new vertices/linedefs along its own waypoints (UDB's
+      own real behavior: NOT reusing the traced existing linedefs
+      directly, just their positions as a new chain that the ordinary
+      stitch pass right after this merges into the existing geometry).
+
+      **`BoundaryTracer` rightward-ray-cast retry**: `FindOuterLines`
+      no longer just fails when a trace lands on the wrong (inner) loop -
+      it retries from a different starting edge, found by casting a ray
+      rightward from the wrongly-traced loop's own right-most vertex to
+      the next linedef it crosses (UDB's own real algorithm, ported
+      directly, capped at a defensive `MaxOuterRetries` beyond what's
+      confirmed of UDB's own real unbounded-retry behavior). The tie-break
+      for two lines crossing at the same point (UDB's own real
+      `GetRelativeAngle`-based rule, "prefer whichever is closer to
+      parallel with the x-axis") is approximated directly via each
+      candidate's own acute angle from horizontal rather than re-derived
+      byte-for-byte - source for the exact comparator wasn't available,
+      and an exact tie is a genuinely rare case. Verified against a
+      deliberately adversarial regression test (a small triangle
+      appendage at a box's own closing vertex, its own angle numerically
+      confirmed via `LinedefAngleSorter.RelativeAngle` directly - not
+      guessed - to out-score the box's real closing edge in the walk's
+      own tightest-turn comparison) - real experimentation (not just
+      hand-derivation) found this doesn't decisively prove the retry path
+      itself fired, since `Loop.Contains`'s own ray-crossing test tends to
+      still correctly place the relevant side-point inside a self-
+      touching combined trace even without retrying - so what it actually
+      confirms is that the walk still finds its way back to the real
+      closing edge rather than getting lost or failing outright, not that
+      the retry specifically executed. A cleaner decisive test wasn't
+      found despite real effort (see `BoundaryTracerTests`'s own remarks
+      on this specific test) - flagged rather than overclaimed.
+
+      **`SplitOuterSectors`-equivalent post-pass**: new private
+      `DrawLoopCommand.SplitOuterSectors`, run last in `Do()` (matching
+      UDB's own real invocation point - `DrawGeometryMode.OnAccept`,
+      *after* `Tools.DrawLines` itself fully completes). Reuses
+      `PolygonNesting.BuildTree(SectorTracer.Trace(sector)).Count > 1` as
+      the "is this sector's own polygon disconnected into multiple
+      islands" test (UDB's own real `Sector.Triangles.IslandVertices.Count
+      > 1`, no equivalent existed here yet), and reuses
+      `CreateAndPopulateSector`/`CopySectorProperties` directly rather
+      than re-deriving UDB's own separate `MakeSector` machinery. Two
+      flagged simplifications versus UDB's own real `MakeSector`/
+      `SectorWasInvalid` (neither's exact source was available to verify
+      byte-for-byte): the carved-out sector copies its properties
+      directly from the sector it's split from, rather than UDB's own
+      separate trace-based property search; and a split that leaves the
+      *original* sector with fewer than 3 sides of its own isn't
+      specially disposed of - a real, narrower-than-UDB gap. Verified via
+      a regression test confirming the common false-positive risk doesn't
+      happen (a plain split inside one island of a pre-existing multi-
+      island sector correctly leaves the *other*, untouched island
+      alone) - a decisive *positive* end-to-end test (this draw's own
+      operation being what actually creates a multi-island split) wasn't
+      constructed; naturally triggering that through `DrawLoopCommand`'s
+      own emergent interior/exterior resolution turned out to need a
+      topology this session couldn't cleanly hand-build in the time
+      available, flagged rather than skipped silently.
 
       **Right-click audit, 2026-09-18**: user's own muscle memory
       ("press right click to draw... in vertex mode") turned out to be

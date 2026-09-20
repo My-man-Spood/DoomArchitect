@@ -574,6 +574,132 @@ public class DrawLoopCommandTests
         Assert.Equal(4, loop.Vertices.Count);
     }
 
+    /// <summary>
+    /// Phase 3: a genuinely open (non-closed) polyline - UDB's own real
+    /// <c>Tools.DrawLines</c> supports drawing a raw, unclosed line with
+    /// no sector-fill attempt at all, unlike Phase 1/2's own
+    /// always-wraps-to-the-first-point behavior. A single 2-point segment
+    /// touching nothing existing at all never resolves any side on either
+    /// interior/exterior trace (a dangling line is a dead end both ways),
+    /// so <c>sidesCreated</c> stays false and UDB's own real cleanup rule
+    /// (only remove sideless leftovers once *something* in the draw did
+    /// get a real sector) correctly leaves it in the map rather than
+    /// deleting it.
+    /// </summary>
+    [Fact]
+    public void Do_OpenTwoPointPolylineTouchingNothing_LeavesARawSidelessLinedefInTheMap()
+    {
+        var map = new MapData();
+        var points = new[]
+        {
+            DrawPoint.AtNewPosition(new Vector2(0, 0)),
+            DrawPoint.AtNewPosition(new Vector2(64, 0)),
+        };
+        var command = new DrawLoopCommand(map, points, closeLoop: false);
+
+        command.Do();
+
+        var linedef = Assert.Single(map.Linedefs);
+        Assert.Null(linedef.Front);
+        Assert.Null(linedef.Back);
+        Assert.Empty(map.Sectors);
+    }
+
+    [Fact]
+    public void Undo_OpenTwoPointPolylineTouchingNothing_RemovesEverythingItCreated()
+    {
+        var map = new MapData();
+        var points = new[]
+        {
+            DrawPoint.AtNewPosition(new Vector2(0, 0)),
+            DrawPoint.AtNewPosition(new Vector2(64, 0)),
+        };
+        var command = new DrawLoopCommand(map, points, closeLoop: false);
+        command.Do();
+
+        command.Undo();
+
+        Assert.Empty(map.Linedefs);
+        Assert.Empty(map.Vertices);
+    }
+
+    /// <summary>
+    /// An open polyline whose two ends both stitch onto the same existing
+    /// sector's own walls splits it in two - the common real "divide this
+    /// room with one new wall" operation, and the case UDB's own real
+    /// "splitting only" check exists for in the first place (this segment's
+    /// own center point lands inside the original sector's already-
+    /// occupied interior). Both halves border the original sector's own
+    /// untouched walls on their own exterior trace, so this doesn't
+    /// decisively exercise the "never conjure a sector out of the void
+    /// while splitting-only" suppression on its own (see
+    /// <see cref="DrawLoopCommand"/>'s own remarks on that gate) - it does
+    /// confirm the surrounding open-polyline resolution machinery
+    /// (interior/exterior trace, sideless cleanup) works end-to-end for a
+    /// real sector split.
+    /// </summary>
+    [Fact]
+    public void Do_OpenPolylineSplittingAnExistingSector_CreatesATwoSidedDividingWallAndTwoSectors()
+    {
+        var map = new MapData();
+        var (originalSector, box) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 100), new Vector2(100, 100), new Vector2(100, 0));
+        originalSector.FloorTexture = "MYFLOOR";
+        var leftWall = map.Linedefs.Single(l =>
+            (l.Start == box[0] && l.End == box[1]) || (l.Start == box[1] && l.End == box[0]));
+        var rightWall = map.Linedefs.Single(l =>
+            (l.Start == box[2] && l.End == box[3]) || (l.Start == box[3] && l.End == box[2]));
+
+        var points = new[]
+        {
+            DrawPoint.OnLinedef(leftWall, new Vector2(0, 50)),
+            DrawPoint.OnLinedef(rightWall, new Vector2(100, 50)),
+        };
+        var command = new DrawLoopCommand(map, points, closeLoop: false);
+
+        command.Do();
+
+        var dividingWall = map.Linedefs.Single(l =>
+            (l.Start.Position == new Vector2(0, 50) && l.End.Position == new Vector2(100, 50))
+            || (l.Start.Position == new Vector2(100, 50) && l.End.Position == new Vector2(0, 50)));
+        Assert.NotNull(dividingWall.Front);
+        Assert.NotNull(dividingWall.Back);
+
+        Assert.Equal(2, map.Sectors.Count);
+        var newSector = map.Sectors.Single(s => s != originalSector);
+        Assert.Equal("MYFLOOR", newSector.FloorTexture); // inherited from the split original
+    }
+
+    [Fact]
+    public void Undo_OpenPolylineSplittingAnExistingSector_FullyRestoresTheOriginalSector()
+    {
+        var map = new MapData();
+        var (originalSector, box) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 100), new Vector2(100, 100), new Vector2(100, 0));
+        var leftWall = map.Linedefs.Single(l =>
+            (l.Start == box[0] && l.End == box[1]) || (l.Start == box[1] && l.End == box[0]));
+        var rightWall = map.Linedefs.Single(l =>
+            (l.Start == box[2] && l.End == box[3]) || (l.Start == box[3] && l.End == box[2]));
+        var vertexCountBefore = map.Vertices.Count;
+        var linedefCountBefore = map.Linedefs.Count;
+
+        var points = new[]
+        {
+            DrawPoint.OnLinedef(leftWall, new Vector2(0, 50)),
+            DrawPoint.OnLinedef(rightWall, new Vector2(100, 50)),
+        };
+        var command = new DrawLoopCommand(map, points, closeLoop: false);
+        command.Do();
+
+        command.Undo();
+
+        Assert.Equal(vertexCountBefore, map.Vertices.Count);
+        Assert.Equal(linedefCountBefore, map.Linedefs.Count);
+        Assert.Single(map.Sectors);
+        var loop = Assert.Single(SectorTracer.Trace(originalSector));
+        Assert.Equal(4, loop.Vertices.Count);
+    }
+
     [Fact]
     public void Undo_NewEdgePassesThroughAnExistingTJunctionVertexWithNoExplicitSnapping_FullyRestoresTheOriginalGeometry()
     {
@@ -606,5 +732,41 @@ public class DrawLoopCommandTests
         Assert.Contains(junction, map.Vertices);
         var loop = Assert.Single(SectorTracer.Trace(originalSector));
         Assert.Equal(5, loop.Vertices.Count); // 4 box corners + the junction vertex
+    }
+
+    /// <summary>
+    /// Phase 3: <c>SplitOuterSectors</c> - a real, if unusual, pre-existing
+    /// map state (one sector spanning two entirely disconnected islands -
+    /// <see cref="MapDataTestExtensions.CreateClosedBoundary"/>'s own real
+    /// use is normally a *hole*, but attaching a second same-winding outer
+    /// loop instead produces exactly this) shouldn't get touched by a
+    /// draw operation that has nothing to do with it: splitting the FIRST
+    /// island alone with a plain diagonal correctly carves out its own new
+    /// interior triangle (the ordinary <c>ResolveInteriorSide</c> path,
+    /// unrelated to <c>SplitOuterSectors</c>), while the original sector -
+    /// still spanning the untouched second island plus this split's own
+    /// exterior remnant - is deliberately left alone, since none of the
+    /// second island's own sides were themselves drawn by this operation
+    /// (matching UDB's own real "only split what this draw actually
+    /// touched" rule).
+    /// </summary>
+    [Fact]
+    public void Do_DiagonalSplitInsideOnlyOneIslandOfAPreExistingMultiIslandSector_LeavesTheUntouchedIslandAlone()
+    {
+        var map = new MapData();
+        var (sector, box1) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 64), new Vector2(64, 64), new Vector2(64, 0));
+        map.CreateClosedBoundary(sector, new Vector2(200, 0), new Vector2(200, 64), new Vector2(264, 64), new Vector2(264, 0));
+
+        var a = box1[0]; // (0, 0)
+        var c = box1[2]; // (64, 64)
+
+        var points = new[] { DrawPoint.AtExistingVertex(a), DrawPoint.AtExistingVertex(c) };
+        var command = new DrawLoopCommand(map, points, closeLoop: false);
+
+        command.Do();
+
+        Assert.Equal(2, map.Sectors.Count); // the original (still multi-island) sector, plus one new interior triangle
+        Assert.Contains(sector, map.Sectors);
     }
 }

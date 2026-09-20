@@ -1,31 +1,32 @@
 using System.Collections.Generic;
+using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Undo;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
 
 /// <summary>
-/// Draw Lines mode - see the project plan for the deferred Phase 3
-/// (cardinal-direction snap, auto-close across existing geometry,
-/// continuous drawing, and other polish). Left-click places new points;
-/// clicking back near the first one closes and commits the loop, same as
-/// right-click (<c>finishdraw</c> in UDB's own real default keybinds) -
-/// UDB's finish action commits from wherever the cursor currently is,
-/// with no "must be near the first point" requirement, but this project's
-/// <see cref="DrawLoopCommand"/> always closes back to the first point
-/// (it has no genuinely-open-polyline support yet, unlike UDB's own real
-/// <c>Tools.DrawLines</c> - see TODO.md), so right-click here is really
-/// "close the loop right now" rather than UDB's more general "commit
-/// whatever's drawn, open or closed." Escape (UDB's own real
+/// Draw Lines mode - Phase 3 (cardinal-direction snap, auto-close across
+/// existing geometry, continuous drawing, and the rest) is done; see
+/// TODO.md for the full writeup. Left-click places new points; clicking
+/// back near the first one closes and commits a ring, same as right-click
+/// (<c>finishdraw</c> in UDB's own real default keybinds) - but right-click
+/// (or too few points to close) commits whatever's drawn as a genuinely
+/// open polyline instead (<see cref="DrawLoopCommand"/>'s own
+/// <c>closeLoop</c> parameter, UDB's own real <c>Tools.DrawLines</c> open-
+/// polyline support), matching UDB's own real "commit whatever's drawn,
+/// open or closed" - not the "close the loop right now" special case this
+/// used to be before open-polyline support existed. Escape (UDB's own real
 /// <c>cancelmode</c>) discards the in-progress loop entirely instead -
 /// genuinely distinct from finish, not a synonym for it, matching UDB
-/// exactly. Either way - finish or cancel - control returns to whichever
-/// mode was active before Draw mode was entered
-/// (<see cref="MapOverlay.ReturnFromDraw"/>, UDB's own real
-/// <c>PreviousStableMode</c>), never leaving the user parked in Draw mode
-/// itself. Doesn't touch the map at all until a loop actually commits;
-/// nothing is undoable before that point because nothing has happened
-/// yet.
+/// exactly (unless <see cref="MapOverlay.ContinuousDrawing"/> is on, which
+/// changes what both finish and cancel do afterward - see
+/// <see cref="FinishDraw"/>'s own remarks). Either way - finish or cancel -
+/// control normally returns to whichever mode was active before Draw mode
+/// was entered (<see cref="MapOverlay.ReturnFromDraw"/>, UDB's own real
+/// <c>PreviousStableMode</c>). Doesn't touch the map at all until a loop
+/// actually commits; nothing is undoable before that point because nothing
+/// has happened yet.
 ///
 /// A placed point snaps onto an existing vertex or existing linedef
 /// (projected exactly onto the line) before falling back to a plain new
@@ -48,8 +49,10 @@ public sealed class DrawOverlayHandler
 	private const float CloseMapEpsilon = 0.5f; // a snapped click landing this close (map units) to the first point counts as closing too, even if the raw click wasn't within ClosePickRadius on screen
 	private const float VertexPickRadius = 10f; // matches VertexOverlayHandler's own VertexPickRadius
 	private const float LinedefPickRadius = 6f; // matches LinedefOverlayHandler's own LinedefPickRadius
+	private const float CardinalLineEpsilon = 0.5f; // matches CloseMapEpsilon's own map-unit snapping tolerance
 	private const float PointMarkerSize = 6f;
 	private const float LineWidth = 2f;
+	private const float DirectionTickLengthPixels = 10f; // UDB's own RenderLinedefDirectionIndicator, screen-space fixed length like DrawLengthLabel's own offset
 	private const float LabelOffsetPixels = 12f;
 	private const int LabelFontSize = 13;
 	private const float LabelPadding = 3f;
@@ -80,7 +83,7 @@ public sealed class DrawOverlayHandler
 				OnLeftClick(button.Position);
 				break;
 			case InputEventMouseButton { Pressed: true, ButtonIndex: MouseButton.Right }:
-				FinishDraw();
+				FinishDraw(closeLoop: false);
 				break;
 			case InputEventMouseMotion motion:
 				_hasCursor = true;
@@ -89,7 +92,13 @@ public sealed class DrawOverlayHandler
 				_hoveredLinedef = _hoveredVertex == null ? FindNearLinedef(motion.Position) : null;
 				break;
 			case InputEventKey { Pressed: true, Keycode: Key.Escape }:
-				_owner.ReturnFromDraw();
+				// UDB's own real OnCancel guard: continuous drawing blocks
+				// leaving Draw mode entirely via Escape - only the
+				// in-progress shape itself is discarded, matching UDB's
+				// `if(continuousdrawing) { return; }` before its own
+				// mode-change call.
+				if (_owner.ContinuousDrawing) CancelDraw();
+				else _owner.ReturnFromDraw();
 				break;
 			case InputEventKey { Pressed: true, Keycode: Key.Backspace } when _points.Count > 0:
 				_points.RemoveAt(_points.Count - 1);
@@ -101,7 +110,7 @@ public sealed class DrawOverlayHandler
 	{
 		if (_points.Count > 0 && _camera.Project(_points[0].Position).DistanceTo(screenPosition) <= ClosePickRadius)
 		{
-			FinishDraw();
+			FinishDraw(closeLoop: true);
 			return;
 		}
 
@@ -118,7 +127,7 @@ public sealed class DrawOverlayHandler
 		// point until manually cancelled).
 		if (_points.Count > 0 && MapVector2.DistanceSquared(point.Position, _points[0].Position) < CloseMapEpsilon * CloseMapEpsilon)
 		{
-			FinishDraw();
+			FinishDraw(closeLoop: true);
 			return;
 		}
 
@@ -126,28 +135,39 @@ public sealed class DrawOverlayHandler
 	}
 
 	/// <summary>
-	/// Commits the loop drawn so far - clicking back near the first point,
-	/// or right-click (<see cref="HandleInput"/>'s own Right button case,
-	/// matching UDB's own real <c>finishdraw</c> default). Fewer than 3
-	/// points isn't a closed shape <see cref="DrawLoopCommand"/> can build
-	/// anything from, so there's nothing meaningful to commit - discarded
-	/// the same as a plain cancel rather than left as a stray point.
-	/// Either way, returns to whichever mode was active before Draw mode
-	/// was entered (<see cref="MapOverlay.ReturnFromDraw"/>, UDB's own
-	/// real behavior - <c>PreviousStableMode</c> - for both its
-	/// <c>OnAccept</c> and <c>OnCancel</c>), which is also what actually
-	/// clears <see cref="_points"/> here (the <see cref="MapOverlay.Mode"/>
-	/// setter's own existing "leaving Draw mode discards it" cleanup, not
-	/// a separate clear of its own).
+	/// Commits the drawing so far - clicking back near the first point
+	/// (<paramref name="closeLoop"/> true, wraps back to a closed ring), or
+	/// right-click (<see cref="HandleInput"/>'s own Right button case,
+	/// matching UDB's own real <c>finishdraw</c> default - <paramref name="closeLoop"/>
+	/// false, a genuinely open polyline, UDB's own real <c>Tools.DrawLines</c>
+	/// support for it - <see cref="DrawLoopCommand"/>'s own remarks on this
+	/// parameter). A closed loop needs at least 3 points to be a real
+	/// shape; an open polyline needs only 2 (a single segment) - fewer
+	/// than that isn't anything <see cref="DrawLoopCommand"/> can build,
+	/// discarded the same as a plain cancel rather than left as a stray
+	/// point.
+	///
+	/// Normally returns to whichever mode was active before Draw mode was
+	/// entered (<see cref="MapOverlay.ReturnFromDraw"/>, UDB's own real
+	/// behavior - <c>PreviousStableMode</c> - for both its <c>OnAccept</c>
+	/// and <c>OnCancel</c>), which is also what actually clears
+	/// <see cref="_points"/> in that case (the <see cref="MapOverlay.Mode"/>
+	/// setter's own existing "leaving Draw mode discards it" cleanup, not a
+	/// separate clear of its own). With <see cref="MapOverlay.ContinuousDrawing"/>
+	/// on, stays in Draw mode instead and clears <see cref="_points"/>
+	/// directly - UDB's own real <c>OnAccept</c>:
+	/// <c>points.Clear(); ... RedrawDisplay();</c> rather than changing mode.
 	/// </summary>
-	private void FinishDraw()
+	private void FinishDraw(bool closeLoop)
 	{
-		if (_points.Count >= 3)
+		var canCommit = closeLoop ? _points.Count >= 3 : _points.Count >= 2;
+		if (canCommit)
 		{
-			_owner.UndoStack.Execute(new DrawLoopCommand(_owner.Map, new List<DrawPoint>(_points)));
+			_owner.UndoStack.Execute(new DrawLoopCommand(_owner.Map, new List<DrawPoint>(_points), closeLoop));
 		}
 
-		_owner.ReturnFromDraw();
+		if (_owner.ContinuousDrawing) CancelDraw();
+		else _owner.ReturnFromDraw();
 	}
 
 	/// <summary>
@@ -170,19 +190,64 @@ public sealed class DrawOverlayHandler
 		_cursorScreen = screenPosition;
 	}
 
+	/// <summary>UDB's own real <c>Alt+Shift</c> cardinal/45-degree direction lock (<see cref="CardinalSnapper"/>) - a live modifier read, same shape as <see cref="MapOverlay.EffectiveSnap"/>'s own <c>Input.IsKeyPressed(Key.Shift)</c>.</summary>
+	private static bool CardinalSnapEnabled => Input.IsKeyPressed(Key.Alt) && Input.IsKeyPressed(Key.Shift);
+
+	/// <summary>
+	/// Vertex/linedef stitch-snap takes priority over grid snap entirely
+	/// (see this class's own remarks) - and, per UDB's own real rule, over
+	/// the cardinal-direction lock too, but *only* when the candidate
+	/// itself actually lies on the locked direction line; a stitch
+	/// candidate off that line is rejected outright rather than silently
+	/// breaking the lock, matching UDB's own real
+	/// <c>ourline.GetSideOfLine(nv.Position) == 0</c> gate.
+	/// </summary>
 	private DrawPoint ResolveDrawPoint(Vector2 screenPosition)
 	{
+		var mapPosition = _camera.Unproject(screenPosition);
+		MapVector2? cardinalLock = CardinalSnapEnabled && _points.Count > 0
+			? CardinalSnapper.Snap(_points[^1].Position, mapPosition)
+			: null;
+
 		var vertex = FindNearVertex(screenPosition);
-		if (vertex != null) return DrawPoint.AtExistingVertex(vertex);
+		if (vertex != null && (cardinalLock == null || IsOnLockedLine(_points[^1].Position, cardinalLock.Value, vertex.Position)))
+		{
+			return DrawPoint.AtExistingVertex(vertex);
+		}
 
 		var linedef = FindNearLinedef(screenPosition);
 		if (linedef != null)
 		{
-			var projected = ProjectOntoLinedef(linedef, _camera.Unproject(screenPosition));
-			return DrawPoint.OnLinedef(linedef, projected);
+			var projected = ProjectOntoLinedef(linedef, mapPosition);
+			if (cardinalLock == null || IsOnLockedLine(_points[^1].Position, cardinalLock.Value, projected))
+			{
+				return DrawPoint.OnLinedef(linedef, projected);
+			}
 		}
 
-		return DrawPoint.AtNewPosition(_owner.SnapIfEnabled(_camera.Unproject(screenPosition)));
+		var finalPosition = cardinalLock ?? mapPosition;
+
+		// Cardinal lock forces grid snap on too, matching UDB's own real
+		// `snaptogrid = snaptocardinaldirection || ...` - applied directly
+		// via GridSnapper here rather than through _owner.SnapIfEnabled,
+		// since Shift is already structurally consumed by the Alt+Shift
+		// cardinal chord and would otherwise flip EffectiveSnap's own
+		// persistent-toggle inversion the wrong way (see this file's class
+		// remarks for the one deliberately-unported refinement here).
+		return DrawPoint.AtNewPosition(cardinalLock != null
+			? GridSnapper.Snap(finalPosition, _owner.GridSize)
+			: _owner.SnapIfEnabled(finalPosition));
+	}
+
+	private static bool IsOnLockedLine(MapVector2 from, MapVector2 lockedPoint, MapVector2 candidate)
+	{
+		var direction = lockedPoint - from;
+		var lengthSquared = direction.LengthSquared();
+		if (lengthSquared <= 0f) return true;
+
+		var cross = (candidate.X - from.X) * direction.Y - (candidate.Y - from.Y) * direction.X;
+		var perpendicularDistance = System.MathF.Abs(cross) / System.MathF.Sqrt(lengthSquared);
+		return perpendicularDistance <= CardinalLineEpsilon;
 	}
 
 	private Vertex FindNearVertex(Vector2 screenPosition)
@@ -260,7 +325,7 @@ public sealed class DrawOverlayHandler
 
 			if (i > 0)
 			{
-				target.DrawLine(_camera.Project(_points[i - 1].Position), center, MapOverlayColors.Selected, LineWidth);
+				DrawSegment(target, _camera.Project(_points[i - 1].Position), center, StitchColor(_points[i]));
 				DrawLengthLabel(target, _points[i - 1].Position, _points[i].Position);
 			}
 		}
@@ -268,9 +333,44 @@ public sealed class DrawOverlayHandler
 		if (_hasCursor)
 		{
 			var cursorMapPosition = _camera.Unproject(_cursorScreen);
-			target.DrawLine(_camera.Project(_points[^1].Position), _cursorScreen, MapOverlayColors.Hover, LineWidth);
+			var stitches = _hoveredVertex != null || _hoveredLinedef != null;
+			DrawSegment(target, _camera.Project(_points[^1].Position), _cursorScreen, stitches ? MapOverlayColors.Hover : MapOverlayColors.Selected);
 			DrawLengthLabel(target, _points[^1].Position, cursorMapPosition);
 		}
+	}
+
+	/// <summary>Whether this placed point snapped onto existing geometry - the same distinction the rubber-band's own live cursor state uses (<see cref="_hoveredVertex"/>/<see cref="_hoveredLinedef"/>).</summary>
+	private static bool Stitches(DrawPoint point) => point.ExistingVertex != null || point.SplitLinedef != null;
+
+	private static Color StitchColor(DrawPoint endPoint) => Stitches(endPoint) ? MapOverlayColors.Hover : MapOverlayColors.Selected;
+
+	/// <summary>
+	/// A placed segment or the live rubber-band, colored by whether its
+	/// own end point stitches onto existing geometry - UDB's own real
+	/// <c>DrawGeometryMode.Update</c> colors each segment identically
+	/// (<c>stitchcolor</c>/<c>losecolor</c>) rather than distinguishing
+	/// "placed" from "rubber-band" the way an earlier version of this
+	/// method did (every placed segment plain red, the rubber-band always
+	/// plain orange regardless of what it would actually snap onto).
+	/// Solid, not dashed - see this file's own class remarks on the
+	/// "dashed" premise in TODO.md having been wrong.
+	/// </summary>
+	private void DrawSegment(CanvasItem target, Vector2 screenStart, Vector2 screenEnd, Color color)
+	{
+		target.DrawLine(screenStart, screenEnd, color, LineWidth);
+		DrawDirectionTick(target, screenStart, screenEnd, color);
+	}
+
+	/// <summary>UDB's own real <c>RenderLinedefDirectionIndicator</c>: a short tick off the segment's own midpoint, along its screen-space perpendicular - drawn toward the opposite side from <see cref="DrawLengthLabel"/>'s own offset so the two never overlap.</summary>
+	private static void DrawDirectionTick(CanvasItem target, Vector2 screenStart, Vector2 screenEnd, Color color)
+	{
+		var screenDelta = screenEnd - screenStart;
+		if (screenDelta.LengthSquared() < 1f) return;
+
+		var direction = screenDelta.Normalized();
+		var perpendicular = new Vector2(-direction.Y, direction.X);
+		var midpoint = (screenStart + screenEnd) / 2f;
+		target.DrawLine(midpoint, midpoint - perpendicular * DirectionTickLengthPixels, color, LineWidth);
 	}
 
 	/// <summary>
