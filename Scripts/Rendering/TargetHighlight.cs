@@ -19,8 +19,15 @@ namespace DoomArchitect.Rendering;
 /// </summary>
 public partial class TargetHighlight : Node3D
 {
-    private const float FloorCeilingOffset = 0.5f;
-    private const float WallOffset = 0.5f;
+    // Small enough to stay basically imperceptible face-on, but still
+    // enough separation from the real geometry to avoid z-fighting at
+    // typical view distances - 0.5 was clearing the depth test with a lot
+    // to spare, which is exactly what made the highlight visibly float
+    // off the surface at a shallow/grazing viewing angle (the same
+    // absolute offset reads as a much bigger apparent gap once
+    // foreshortened almost edge-on).
+    private const float FloorCeilingOffset = 0.1f;
+    private const float WallOffset = 0.1f;
 
     private static readonly Color HoverColor = new(1f, 0.5f, 0f, 0.03f);
 

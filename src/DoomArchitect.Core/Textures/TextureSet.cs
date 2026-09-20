@@ -112,6 +112,23 @@ public sealed class TextureSet
     /// defined in TEXTURES override ones in 'textures' folder" - the same
     /// first-write-wins precedence applies to <c>TEXTURE1</c>/<c>TEXTURE2</c>,
     /// which this project resolves before ever consulting the folder).
+    ///
+    /// Only after both of those miss does this fall back to resolving
+    /// <paramref name="name"/> as a *flat* instead (reusing
+    /// <see cref="GetFlatTexture"/>'s own resolution directly, rather than
+    /// duplicating it) - real UDB's own <c>DataManager.GetTextureBitmap</c>
+    /// does the same, gated behind a game-configuration
+    /// <c>MixTexturesFlats</c> flag that's <c>true</c> for every ZDoom-
+    /// family config UDB ships (vanilla/Boom-style configs keep it
+    /// <c>false</c>, since those engines never search across the classic
+    /// wall/flat namespace split at all) - a real, deliberate mapping
+    /// technique (using a flat's own detailed texture as a wall's lower/
+    /// upper/middle face, not just a genuine floor/ceiling) this project's
+    /// UDMF-oriented focus makes near-universal in practice, so with no
+    /// game-configuration system to make it conditional, it's hardcoded
+    /// on - the same precedent <c>CompositeTextureBuilder</c>/
+    /// <c>LinedefWallBuilder</c> already set for their own always-true
+    /// vanilla/ZDoom compatibility flags.
     /// </summary>
     public PixelImage GetWallTexture(string name)
     {
@@ -128,6 +145,10 @@ public sealed class TextureSet
             if (folderImage != null)
             {
                 result = ResolveAsModernImage(folderImage.Data);
+            }
+            else if (_resources.FindLump(name) != null)
+            {
+                result = GetFlatTexture(name);
             }
             else
             {
@@ -175,12 +196,27 @@ public sealed class TextureSet
     public IResourceContainer? WallTextureSource => _resources.FindLumpSource("TEXTURE1") ?? _resources.FindLumpSource("TEXTURE2");
 
     /// <summary>
-    /// Tries the raw headerless 64x64 classic flat format first, then
-    /// falls back to a modern image (e.g. a PNG sitting in a PK3's
-    /// <c>flats/</c> folder) - real GZDoom/UDB treat flats and wall
-    /// textures symmetrically for decode-format detection (both go
-    /// through the same <c>PK3FileImage</c> loader in UDB), so this
-    /// project doesn't special-case one over the other either.
+    /// Sniffs for a modern image format first (e.g. a PNG flat, common in
+    /// a GZDoom-oriented PK3/resource pack), only falling back to the raw
+    /// headerless classic flat format if that finds nothing - real
+    /// GZDoom/UDB treat flats and wall textures symmetrically for decode-
+    /// format detection (both go through the same signature-sniff-first
+    /// dispatch, <c>ImageDataFormat.TryLoadImage</c>, in UDB), so this
+    /// project doesn't special-case one over the other either. Order
+    /// matters here in a way it doesn't for
+    /// <see cref="PatchImageResolver.TryResolvePatch"/>'s own two
+    /// candidates: unlike the classic *patch* format (which has enough
+    /// internal structure - a column-offset table that must itself point
+    /// somewhere sane - to often reject a modern-format lump handed to it
+    /// by mistake, especially once <c>DoomPictureReader</c> got its own
+    /// validation gate), the classic *flat* format is just raw indexed
+    /// bytes with no header or signature to validate against at all -
+    /// <see cref="DoomFlatReader.TryRead"/> "successfully" reads *any*
+    /// sufficiently large lump, including a PNG-encoded one, as pure
+    /// noise. A real, previously-missed gap here (this method used to try
+    /// <see cref="DoomFlatReader"/> first, unlike every other patch/image
+    /// lookup in this class): a PNG-format flat decoded as garbage instead
+    /// of routing to the real image decoder.
     /// </summary>
     public PixelImage GetFlatTexture(string name)
     {
@@ -192,6 +228,10 @@ public sealed class TextureSet
         {
             _warnings.Add($"Unknown flat '{name}' - using the placeholder.");
             result = Placeholder;
+        }
+        else if (_patchResolver.TryResolveModernImage(lump.Data, out var modernImage))
+        {
+            result = modernImage!;
         }
         else
         {
@@ -232,6 +272,16 @@ public sealed class TextureSet
     /// often, not a load failure the placeholder is meant to signal.
     /// Callers decide their own fallback (the generic Thing placeholder
     /// icon).
+    ///
+    /// Goes through the same <see cref="_patchResolver"/> every other
+    /// patch lookup uses (format-sniffed first, classic Doom picture only
+    /// as the fallback) rather than calling <see cref="DoomPictureReader"/>
+    /// directly - a real, previously-missed gap: a modern PK3/resource-pack
+    /// actor whose sprite frames are plain PNGs (common for
+    /// decorations/monsters pulled from a resource pack rather than drawn
+    /// as classic patches) never decoded at all, since its PNG bytes were
+    /// only ever handed to the classic reader, which has no way to
+    /// recognize them.
     /// </summary>
     public PixelImage? TryGetSpriteTexture(string spriteName)
     {
@@ -241,8 +291,7 @@ public sealed class TextureSet
         var lump = _spriteRange.FirstOrDefault(l => l.Name.Equals(spriteName, StringComparison.OrdinalIgnoreCase));
         if (lump == null) return null;
 
-        var image = DoomPictureReader.TryRead(lump.Data, _palette);
-        if (image == null) return null;
+        if (!_patchResolver.TryResolvePatch(lump.Data, out var image, out _) || image == null) return null;
 
         _spriteCache[spriteName] = image;
         return image;

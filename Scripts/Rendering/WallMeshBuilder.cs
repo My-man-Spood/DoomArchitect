@@ -106,18 +106,26 @@ public static class WallMeshBuilder
         var endTop = segment.End.Position.ToWorld(top);
 
         var textureSize = segment.Texture == "-" ? NoTextureSize : textures.GetWallTextureSize(segment.Texture);
-        var textureWidth = Mathf.Max(textureSize.X, 1);
-        var textureHeight = Mathf.Max(textureSize.Y, 1);
+        // Divided by the segment's own real per-part scale (see
+        // WallSegment's own remarks) rather than the raw pixel size - a
+        // scaled texture is drawn physically larger/smaller on the wall,
+        // which is exactly what dividing its pixel size by the scale
+        // before using it as a UV denominator produces; LinedefWallBuilder's
+        // own offset/height math is already computed in this same scaled
+        // space, so using anything else here would desync the two.
+        var textureWidth = Mathf.Max(textureSize.X / (float)segment.TextureScaleX, 1);
+        var textureHeight = Mathf.Max(textureSize.Y / (float)segment.TextureScaleY, 1);
         var length = (segment.End.Position - segment.Start.Position).Length();
 
-        var uStart = segment.Side.OffsetX / (float)textureWidth;
-        var uEnd = ((float)length + segment.Side.OffsetX) / textureWidth;
-
-        // VerticalTextureOffset, not Side.OffsetY directly - already the
-        // correct V-origin for both cases (identical to OffsetY for a
-        // plain upper/lower/single wall; the visible-clip offset for a
-        // masked middle, whose own OffsetY already went into computing
-        // Top/Bottom themselves - see WallSegment's own remarks).
+        // HorizontalTextureOffset/VerticalTextureOffset, not Side.OffsetX/
+        // OffsetY directly - already the correct U/V origin for every wall
+        // part (folds in the real per-part UDMF offset fields on top of
+        // the shared Side.OffsetX/OffsetY - see WallSegment's own
+        // remarks); for a masked middle, VerticalTextureOffset is instead
+        // the visible-clip offset, since its own Y offset already went
+        // into computing Top/Bottom themselves.
+        var uStart = (float)segment.HorizontalTextureOffset / textureWidth;
+        var uEnd = ((float)length + (float)segment.HorizontalTextureOffset) / textureWidth;
         var vTop = (float)segment.VerticalTextureOffset / textureHeight;
         var vBottom = ((top - bottom) + (float)segment.VerticalTextureOffset) / textureHeight;
 

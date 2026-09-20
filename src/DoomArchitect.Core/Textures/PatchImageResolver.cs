@@ -19,6 +19,29 @@ public sealed class PatchImageResolver
         _modernDecoder = modernDecoder ?? new ImageSharpModernImageDecoder();
     }
 
+    /// <summary>
+    /// Just the "is this actually a modern image format" half of
+    /// <see cref="TryResolvePatch"/>'s own dispatch, with no classic-patch
+    /// fallback baked in - for a caller whose own classic fallback isn't
+    /// the column-post patch format (<see cref="TextureSet.GetFlatTexture"/>'s
+    /// raw-indexed-bytes flat reader has no signature of its own to
+    /// distinguish real flat data from a modern-format lump that merely
+    /// happens to also decode "successfully" as garbage, so it must be
+    /// tried only after this one has already ruled a modern format out -
+    /// see that method's own remarks).
+    /// </summary>
+    public bool TryResolveModernImage(byte[] data, out PixelImage? image)
+    {
+        var kind = ImageFormatSniffer.Detect(data);
+        if (kind is ImageFormatKind.Png or ImageFormatKind.Jpeg && _modernDecoder.TryDecode(data, kind, out image))
+        {
+            return true;
+        }
+
+        image = null;
+        return false;
+    }
+
     public bool TryResolvePatch(byte[] data, out PixelImage? image, out string? warning)
     {
         var kind = ImageFormatSniffer.Detect(data);

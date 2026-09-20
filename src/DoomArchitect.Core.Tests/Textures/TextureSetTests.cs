@@ -35,6 +35,29 @@ public class TextureSetTests
         Assert.Contains(set.Warnings, w => w.Contains("NOSUCHFLAT"));
     }
 
+    /// <summary>
+    /// A modern PK3/resource-pack flat is often a plain PNG rather than
+    /// raw indexed bytes - this must decode exactly like any other
+    /// PNG-format lump (format-sniffed first), not fall into
+    /// <see cref="DoomFlatReader"/>, which has no signature of its own to
+    /// reject a non-conforming lump and would instead "successfully"
+    /// decode the PNG's own compressed bytes as pure noise (a real,
+    /// previously-missed gap - see <see cref="TextureSet.GetFlatTexture"/>'s
+    /// own remarks).
+    /// </summary>
+    [Fact]
+    public void GetFlatTexture_PngEncodedLump_DecodesItInsteadOfTreatingItAsRawIndexedNoise()
+    {
+        var wad = BuildWad(("PLAYPAL", Playpal((9, 9, 9))), ("MYFLAT", PngBytes()));
+        var set = TextureSet.Load(wad);
+
+        var image = set.GetFlatTexture("MYFLAT");
+
+        Assert.Equal(1, image.Width);
+        Assert.Equal(1, image.Height);
+        Assert.Empty(set.Warnings);
+    }
+
     [Fact]
     public void GetFlatTexture_SameNameRequestedTwice_ReturnsSameCachedInstance()
     {
@@ -70,6 +93,28 @@ public class TextureSetTests
         Assert.Equal(1, image.Width);
         Assert.Equal(8, image.Height);
         Assert.Empty(set.Warnings);
+    }
+
+    /// <summary>
+    /// A real, deliberate mapping technique (not a bug in the source WAD):
+    /// using a flat's own texture directly on a wall face, relying on real
+    /// GZDoom/ZDoom's unified texture namespace (<c>MixTexturesFlats</c>) -
+    /// see <see cref="TextureSet.GetWallTexture"/>'s own remarks. A name
+    /// that's only ever defined as a flat (never a <c>TEXTURE1</c>/
+    /// <c>TEXTURE2</c> entry) must still resolve as a wall texture, not
+    /// fall to the placeholder.
+    /// </summary>
+    [Fact]
+    public void GetWallTexture_NameOnlyDefinedAsAFlat_ResolvesItAnywayInsteadOfThePlaceholder()
+    {
+        var wad = BuildWad(("PLAYPAL", Playpal((9, 9, 9))), ("MYFLAT", Flat(64, 64, 7)));
+        var set = TextureSet.Load(wad);
+
+        var image = set.GetWallTexture("MYFLAT");
+
+        Assert.Equal(64, image.Width);
+        Assert.Equal(64, image.Height);
+        Assert.DoesNotContain(set.Warnings, w => w.Contains("MYFLAT"));
     }
 
     [Fact]
@@ -117,6 +162,31 @@ public class TextureSetTests
         var set = TextureSet.Load(wad);
 
         Assert.Null(set.TryGetSpriteTexture("POSSA1"));
+    }
+
+    /// <summary>
+    /// A modern PK3/resource-pack actor's sprite frames are often plain
+    /// PNGs rather than classic patches - this must decode exactly like
+    /// any other PNG-format patch lump (format-sniffed first, the same
+    /// dispatch every other patch lookup already uses), not silently fail
+    /// the way handing raw PNG bytes straight to the classic Doom-picture
+    /// reader would (a real, previously-missed gap - see
+    /// <see cref="TextureSet.TryGetSpriteTexture"/>'s own remarks).
+    /// </summary>
+    [Fact]
+    public void TryGetSpriteTexture_PngEncodedLump_DecodesItInsteadOfFailing()
+    {
+        var wad = BuildWad(
+            ("PLAYPAL", Playpal((9, 9, 9))),
+            ("S_START", Array.Empty<byte>()),
+            ("TRE1A0", PngBytes()),
+            ("S_END", Array.Empty<byte>()));
+        var set = TextureSet.Load(wad);
+
+        var image = set.TryGetSpriteTexture("TRE1A0");
+
+        Assert.NotNull(image);
+        Assert.Equal(1, image!.Width);
     }
 
     [Fact]

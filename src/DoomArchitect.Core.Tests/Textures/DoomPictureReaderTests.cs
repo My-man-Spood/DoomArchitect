@@ -112,6 +112,49 @@ public class DoomPictureReaderTests
         Assert.Null(image);
     }
 
+    /// <summary>
+    /// Mirrors UDB's real <c>Validate()</c> gate, which normally runs
+    /// *before* this reader is ever invoked at all (see this class's own
+    /// remarks) - a lump that isn't really patch-format data, but reaches
+    /// this reader as a fallback anyway, must be rejected outright rather
+    /// than decoded into whatever bytes its bogus column offsets happen
+    /// to land on (previously surfacing as a texture full of "random
+    /// multicolor noise" instead of a clean miss).
+    /// </summary>
+    [Fact]
+    public void TryRead_ColumnOffsetPointsBeforeTheHeaderAndOffsetTable_ReturnsNull()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write((short)1); // width
+        writer.Write((short)4); // height
+        writer.Write((short)0); // offsetX
+        writer.Write((short)0); // offsetY
+        writer.Write(0); // column offset - points at byte 0, inside the header itself
+
+        var image = DoomPictureReader.TryRead(stream.ToArray(), Palette);
+
+        Assert.Null(image);
+    }
+
+    [Fact]
+    public void TryRead_ColumnOffsetPointsPastTheEndOfTheLump_ReturnsNull()
+    {
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write((short)1); // width
+        writer.Write((short)4); // height
+        writer.Write((short)0); // offsetX
+        writer.Write((short)0); // offsetY
+        writer.Write(9000); // column offset - nowhere near this lump's own data
+
+        var image = DoomPictureReader.TryRead(stream.ToArray(), Palette);
+
+        Assert.Null(image);
+    }
+
     [Fact]
     public void TryRead_NonZeroOffsets_ArePopulatedOnThePixelImage()
     {

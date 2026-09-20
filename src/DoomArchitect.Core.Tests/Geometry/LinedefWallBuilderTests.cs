@@ -395,4 +395,285 @@ public class LinedefWallBuilderTests
         Assert.Equal(128, middle.Top); // clipped to the opening's own top
         Assert.Equal(20, middle.VerticalTextureOffset); // the visible top edge is 20 units below the texture's own natural top
     }
+
+    [Fact]
+    public void Build_OneSided_Default_IsTopPegged()
+    {
+        var (map, a, b) = TwoVertices();
+        var sector = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 40));
+
+        Assert.Equal(0, segment.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_OneSided_LowerUnpeggedFlagSet_AnchorsTextureBottomToTheSectorFloor()
+    {
+        var (map, a, b) = TwoVertices();
+        var sector = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+        linedef.Fields.SetInteger("flags", 16); // ML_DONTPEGBOTTOM
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 40));
+
+        Assert.Equal(-88, segment.VerticalTextureOffset); // 40 - (128 - 0)
+    }
+
+    [Fact]
+    public void Build_OneSided_LowerUnpeggedFlagSet_NoTextureHeightLookup_FallsBackToTopPegged()
+    {
+        var (map, a, b) = TwoVertices();
+        var sector = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+        linedef.Fields.SetInteger("flags", 16);
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(0, segment.Bottom);
+        Assert.Equal(128, segment.Top);
+        Assert.Equal(0, segment.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperWall_Default_IsBottomPeggedToTheOtherSideCeiling()
+    {
+        // Front's upper wall: front ceiling 200, back ceiling 128 - a 72
+        // unit gap. Default (upper-unpegged flag clear) anchors the
+        // texture's own bottom edge to the back's own ceiling (128) and
+        // hangs up, matching VisualUpper.Setup's real default - the
+        // mirror image of every other wall part's own top-pegged default.
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+
+        var upper = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 64));
+
+        Assert.Equal(128, upper.Bottom);
+        Assert.Equal(200, upper.Top);
+        Assert.Equal(-8, upper.VerticalTextureOffset); // 64 - (200 - 128)
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperWall_UpperUnpeggedFlagSet_IsTopPeggedToOwnCeiling()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+        linedef.Fields.SetInteger("flags", 8); // ML_DONTPEGTOP
+
+        var upper = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 64));
+
+        Assert.Equal(0, upper.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperWall_UdmfDontPegTopField_IsTopPeggedToOwnCeiling()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+        linedef.Fields.SetBool("dontpegtop", true);
+
+        var upper = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 64));
+
+        Assert.Equal(0, upper.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperWall_NoTextureHeightLookup_FallsBackToOffsetYOnly()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+        linedef.Front!.OffsetY = 5;
+
+        var upper = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(128, upper.Bottom);
+        Assert.Equal(200, upper.Top);
+        Assert.Equal(5, upper.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_LowerWall_Default_IsTopPegged()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(32, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.LowerTexture = "SUPPORT2";
+
+        var lower = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(0, lower.VerticalTextureOffset);
+    }
+
+    [Fact]
+    public void Build_TwoSided_LowerWall_LowerUnpeggedFlagSet_AnchorsTextureTopToOwnCeilingMinusOtherFloor()
+    {
+        // Front's lower wall: front ceiling 128, back floor 32 - flag set
+        // anchors the texture's own top edge to (own ceiling - other
+        // floor) = 96, needing no texture height at all (VisualLower's
+        // own real formula), unlike the upper wall's default case.
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(32, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.LowerTexture = "SUPPORT2";
+        linedef.Fields.SetInteger("flags", 16); // ML_DONTPEGBOTTOM
+
+        var lower = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(96, lower.VerticalTextureOffset); // 128 - 32
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_UdmfPerPartOffsetField_AddsOnTopOfTheSharedOffset()
+    {
+        // Regression case for a real bug report: a corpse/gore decoration
+        // (a common masked-middle placement technique) used the UDMF
+        // offsetx_mid/offsety_mid fields - a sidedef's own per-part offset,
+        // additive with the shared OffsetX/OffsetY - to precisely position
+        // itself, and this codebase silently ignored those fields
+        // entirely, always rendering the part at the shared-offset-only
+        // position instead.
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Front!.OffsetY = 10;
+        linedef.Front!.OffsetX = 3;
+        linedef.Front!.Fields.SetFloat("offsety_mid", -20);
+        linedef.Front!.Fields.SetFloat("offsetx_mid", 7);
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 40);
+
+        var middle = Assert.Single(segments);
+        Assert.Equal(78, middle.Bottom); // 128 - (10 + -20) - 40
+        Assert.Equal(118, middle.Top); // 128 - (10 + -20)
+        Assert.Equal(10, middle.HorizontalTextureOffset); // 3 + 7
+    }
+
+    [Fact]
+    public void Build_TwoSided_UpperWall_UdmfPerPartOffsetField_AddsOnTopOfTheSharedOffset()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 200);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.UpperTexture = "BROWN1";
+        linedef.Front!.OffsetY = 2;
+        linedef.Front!.Fields.SetFloat("offsety_top", 5);
+
+        var upper = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 64));
+
+        Assert.Equal(-1, upper.VerticalTextureOffset); // 64 - (200 - 128) + (2 + 5)
+    }
+
+    [Fact]
+    public void Build_TwoSided_LowerWall_UdmfPerPartOffsetField_AddsOnTopOfTheSharedOffset()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(32, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.LowerTexture = "SUPPORT2";
+        linedef.Front!.OffsetX = 4;
+        linedef.Front!.Fields.SetFloat("offsetx_bottom", 6);
+
+        var lower = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(10, lower.HorizontalTextureOffset); // 4 + 6
+    }
+
+    [Fact]
+    public void Build_OneSided_UdmfPerPartOffsetField_AddsOnTopOfTheSharedOffset()
+    {
+        var (map, a, b) = TwoVertices();
+        var sector = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, sector, null);
+        linedef.Front!.MiddleTexture = "STARTAN2";
+        linedef.Front!.OffsetY = 1;
+        linedef.Front!.Fields.SetFloat("offsety_mid", 9);
+
+        var segment = Assert.Single(LinedefWallBuilder.Build(linedef));
+
+        Assert.Equal(10, segment.VerticalTextureOffset); // 1 + 9
+    }
+
+    /// <summary>
+    /// Regression case for a real bug report: a door decoration used
+    /// scalex_mid/scaley_mid = 2 together with a large offsety_mid (-493)
+    /// authored assuming that offset gets divided by the scale (real
+    /// UDMF/GZDoom "scaled texture offsets" convention) against a
+    /// correspondingly *half-height* effective texture (128px / 2 = 64).
+    /// Applying the raw, unscaled offset against the raw, unscaled height
+    /// pushed the whole quad below the sector's own floor - a real
+    /// regression the per-part-offset fix above introduced by finally
+    /// applying an offset that was only ever authored for a scaled
+    /// texture.
+    /// </summary>
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_ScaledOffsetAndHeight_AnchorsCorrectlyInsideTheOpening()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(-104, 208);
+        var back = map.CreateSector(-104, 208);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Back!.MiddleTexture = "ODOORE05";
+        linedef.Back!.Fields.SetFloat("offsety_mid", -493);
+        linedef.Back!.Fields.SetFloat("scaley_mid", 2);
+
+        var segments = LinedefWallBuilder.Build(linedef, _ => 128);
+
+        var middle = Assert.Single(segments);
+        Assert.True(middle.Top > middle.Bottom, "the quad must have real visible height, not have vanished");
+        Assert.Equal(2, middle.TextureScaleY);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_NoScaleFieldSet_DefaultsToOne()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+
+        var middle = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 40));
+
+        Assert.Equal(1, middle.TextureScaleX);
+        Assert.Equal(1, middle.TextureScaleY);
+    }
+
+    [Fact]
+    public void Build_TwoSided_MaskedMiddle_ZeroScaleField_ClampsToOneInsteadOfDividingByZero()
+    {
+        var (map, a, b) = TwoVertices();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 128);
+        var linedef = map.CreateLinedef(a, b, front, back);
+        linedef.Front!.MiddleTexture = "MIDBARS1";
+        linedef.Front!.Fields.SetFloat("scaley_mid", 0);
+
+        var middle = Assert.Single(LinedefWallBuilder.Build(linedef, _ => 40));
+
+        Assert.Equal(1, middle.TextureScaleY);
+        Assert.Equal(88, middle.Bottom);
+        Assert.Equal(128, middle.Top);
+    }
 }
