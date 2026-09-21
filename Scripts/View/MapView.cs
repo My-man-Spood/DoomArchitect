@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
+using DoomArchitect.Core.Input;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
+using DoomArchitect.Input;
 using DoomArchitect.Interop;
 using DoomArchitect.Rendering;
 using Godot;
@@ -72,8 +74,8 @@ public partial class MapView : Node3D
 	/// carry their own local <c>selected</c> flag, distinct from
 	/// <c>MapElement.Selected</c>). Bridged with the classic selection
 	/// only at the moment of entering/leaving 3D mode (see the
-	/// <c>Key.Tab</c> case in <see cref="_UnhandledInput"/>), not shared
-	/// live the way an earlier version of this feature did.
+	/// <c>toggle_2d_3d</c> handling in <see cref="_UnhandledInput"/>), not
+	/// shared live the way an earlier version of this feature did.
 	/// </summary>
 	private readonly HashSet<Sector> _selectedSectors3D = new();
 	private readonly HashSet<Linedef> _selectedLinedefs3D = new();
@@ -81,6 +83,8 @@ public partial class MapView : Node3D
 
 	public override void _Ready()
 	{
+		KeyBindings.Bootstrap();
+
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
 		_perspectiveCamera = GetNode<Camera3D>("PerspectiveCamera");
 		_overlay = GetNode<MapOverlay>("Overlay/MapOverlay");
@@ -431,7 +435,10 @@ public partial class MapView : Node3D
 	/// don't mark dirty at all - a real, separate, pre-existing gap, not
 	/// something to silently inherit here).
 	/// </summary>
-	private void HandleTextureNudge(Key key, bool alt, bool ctrl)
+	/// <summary>Which nudge action fired - a semantic direction rather than a literal <see cref="Key"/>, since <c>texture_nudge_left</c>/etc. are independently rebindable and might not even be bound to arrow keys anymore.</summary>
+	private enum NudgeDirection { Left, Right, Up, Down }
+
+	private void HandleTextureNudge(NudgeDirection direction, bool alt, bool ctrl)
 	{
 		if (_currentTarget is not { Kind: TargetSurfaceKind.Wall } target) return;
 
@@ -440,13 +447,13 @@ public partial class MapView : Node3D
 		var suffix = LinedefWallBuilder.PartSuffix(segment.PartKind);
 
 		double delta = alt ? 8 : ctrl ? _overlay.GridSize : 1;
-		double dx = key switch { Key.Left => -delta, Key.Right => delta, _ => 0 };
+		double dx = direction switch { NudgeDirection.Left => -delta, NudgeDirection.Right => delta, _ => 0 };
 		// Up needs +delta, Down needs -delta to read the way a mapper
 		// expects - confirmed live. Never camera-relative: a wall is
 		// always vertical and this project's camera never rolls, so
 		// world-up is unambiguous regardless of which way you're facing,
 		// unlike X below.
-		double dy = key switch { Key.Up => delta, Key.Down => -delta, _ => 0 };
+		double dy = direction switch { NudgeDirection.Up => delta, NudgeDirection.Down => -delta, _ => 0 };
 		if (dx == 0 && dy == 0) return;
 
 		// X, unlike Y, *is* camera-relative: "Left"/"Right" should always
@@ -978,22 +985,18 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// Ctrl+Z/Ctrl+Y match UDB's own default undo/redo keys exactly
-	/// (verified against its default keybind config, not guessed). V/L/S/T
-	/// switch edit mode - matches UDB's own real defaults
-	/// (<c>Assets/Common/UDBuilder.default.cfg</c>:
-	/// <c>buildermodes_verticesmode/linedefsmode/sectorsmode/thingsmode =
-	/// 86/76/83/84</c>, i.e. the raw key codes for V/L/S/T). An earlier
-	/// version of this method used 1/2/3 for the first three modes - an
-	/// uncorrected divergence from UDB's real defaults, found and fixed
-	/// once Things mode needed a fourth key. The rest are grid/snap
-	/// controls on <see cref="_overlay"/>. <c>[</c>/<c>]</c> (double/halve,
-	/// 1..1024) and <c>G</c> (snap toggle) match UDB's own keys and bounds,
-	/// except <c>G</c> and <c>D</c> themselves - UDB binds neither by
-	/// default, since both are toolbar checkboxes there. Manually resizing
-	/// the grid disables dynamic sizing, matching UDB's own
-	/// <c>DisableDynamicGridResize</c>. None of this is user-rebindable
-	/// yet - see TODO.md.
+	/// Every keyboard action here is a real, independently rebindable
+	/// <see cref="KeyBindingRegistry"/> entry (see TODO.md's "Keybinding
+	/// management" writeup) - <see cref="KeyBindings.Bootstrap"/> registers
+	/// each one's default binding (or a saved user override) with Godot's
+	/// own <see cref="InputMap"/> before this method can ever run.
+	/// Deliberately matched with <c>exactMatch: false</c> (Godot's own
+	/// default) everywhere, not <c>true</c>: every site here already only
+	/// checks the *specific* modifier(s) it cares about and tolerates any
+	/// other modifier being incidentally also held, exactly like the raw
+	/// <c>key.CtrlPressed</c>/<c>key.ShiftPressed</c> checks this replaced
+	/// did - <c>exactMatch: true</c> would be a real, if subtle, behavior
+	/// change (rejecting e.g. Ctrl+Alt+Z), not a faithful migration of it.
 	/// </summary>
 	public override void _UnhandledInput(InputEvent @event)
 	{
@@ -1027,108 +1030,120 @@ public partial class MapView : Node3D
 		// the `Echo: false` filter every other keyboard action goes through
 		// below, same reason the mouse-wheel height adjustment above isn't
 		// gated by it either.
-		if (_in3D && @event is InputEventKey { Pressed: true } nudgeKey && nudgeKey.Keycode is Key.Left or Key.Right or Key.Up or Key.Down)
+		if (_in3D && @event is InputEventKey { Pressed: true } nudgeKey)
 		{
-			HandleTextureNudge(nudgeKey.Keycode, nudgeKey.AltPressed, nudgeKey.CtrlPressed);
-			return;
+			// allowEcho: true - these are the one place in this method that
+			// deliberately reads a held-down key repeatedly (UDB's own real
+			// `repeat = true` on movetextureleft/right/up/down*), unlike
+			// IsActionPressed's own default of rejecting OS key-repeat.
+			NudgeDirection? direction = nudgeKey switch
+			{
+				_ when nudgeKey.IsActionPressed("texture_nudge_left", allowEcho: true) => NudgeDirection.Left,
+				_ when nudgeKey.IsActionPressed("texture_nudge_right", allowEcho: true) => NudgeDirection.Right,
+				_ when nudgeKey.IsActionPressed("texture_nudge_up", allowEcho: true) => NudgeDirection.Up,
+				_ when nudgeKey.IsActionPressed("texture_nudge_down", allowEcho: true) => NudgeDirection.Down,
+				_ => null,
+			};
+
+			if (direction != null)
+			{
+				HandleTextureNudge(
+					direction.Value,
+					Input.IsActionPressed("texture_nudge_amount_x8_modifier"),
+					Input.IsActionPressed("texture_nudge_amount_grid_modifier"));
+				return;
+			}
 		}
 
 		if (@event is not InputEventKey { Pressed: true, Echo: false } key) return;
 
-		switch (key.Keycode)
+		if (key.IsActionPressed("undo"))
 		{
-			case Key.Z when key.CtrlPressed:
-				_undoStack.Undo();
-				break;
-			case Key.Y when key.CtrlPressed:
-				_undoStack.Redo();
-				break;
-			case Key.A when _in3D:
-				// UDB's own real default keybinds, verified against its
-				// Actions.cfg/UDBuilder.default.cfg: plain A = X only,
-				// Shift+A = Y only, Ctrl+A = both (the one most mappers
-				// actually reach for) - none of the three are `repeat`d,
-				// unlike the arrow-key nudges above.
-				HandleTextureAutoAlign(alignX: !key.ShiftPressed, alignY: key.ShiftPressed || key.CtrlPressed);
-				break;
-			case Key.Tab:
-				// Computed *before* any Current flag changes below, while
-				// _topDownCamera is still definitely the viewport's own
-				// active camera - Camera3D's ray-projection methods appear
-				// to depend on a camera actually being the current one for
-				// an up-to-date projection matrix (the likely real cause
-				// behind this being unreliable/imprecise when it ran after
-				// the Current swap instead: a stale matrix from whatever
-				// frame the top-down camera was last actually active,
-				// rather than genuinely wrong math).
-				if (!_in3D) PlacePerspectiveCameraAtMouse();
-
-				_in3D = !_in3D;
-				_topDownCamera.Current = !_in3D;
-				_perspectiveCamera.Current = _in3D;
-				_overlay.Visible = !_in3D;
-				_modeToolbar.Visible = !_in3D;
-				_statusBar.Visible = !_in3D;
-				_crosshair.Visible = _in3D;
-				Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
-				if (_in3D)
-				{
-					// Entering 3D - seed the local 3D selection from
-					// whatever's currently selected in 2D (UDB's real
-					// sync-on-entry bridge between the two selections).
-					_selectedSectors3D.Clear();
-					_selectedSectors3D.UnionWith(_map.GetSelectedSectors());
-					_selectedLinedefs3D.Clear();
-					_selectedLinedefs3D.UnionWith(_map.GetSelectedLinedefs());
-					_selectedThings3D.Clear();
-					_selectedThings3D.UnionWith(_map.GetSelectedThings());
-				}
-				else
-				{
-					// Leaving 3D - write the local 3D selection back out
-					// (the matching sync-on-exit bridge), then don't leave
-					// a stale highlight showing and force a fresh pick
-					// next time 3D mode is entered.
-					_map.ClearSelectedSectors();
-					_map.ClearSelectedLinedefs();
-					_map.ClearSelectedThings();
-					foreach (var sector in _selectedSectors3D) _map.ToggleSelect(sector);
-					foreach (var linedef in _selectedLinedefs3D) _map.ToggleSelect(linedef);
-					foreach (var thing in _selectedThings3D) _map.ToggleSelect(thing);
-
-					_currentTarget = null;
-					_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
-				}
-
-				break;
-			case Key.V:
-				_overlay.Mode = EditMode.Vertices;
-				break;
-			case Key.L:
-				_overlay.Mode = EditMode.Linedefs;
-				break;
-			case Key.S:
-				_overlay.Mode = EditMode.Sectors;
-				break;
-			case Key.T:
-				_overlay.Mode = EditMode.Things;
-				break;
-			case Key.W:
-				_overlay.Mode = EditMode.Draw;
-				break;
-			case Key.G:
-				_overlay.SnapEnabled = !_overlay.SnapEnabled;
-				break;
-			case Key.D:
-				_overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled;
-				break;
-			case Key.Bracketleft:
-				_overlay.IncreaseGridSize();
-				break;
-			case Key.Bracketright:
-				_overlay.DecreaseGridSize();
-				break;
+			_undoStack.Undo();
+			return;
 		}
+
+		if (key.IsActionPressed("redo"))
+		{
+			_undoStack.Redo();
+			return;
+		}
+
+		if (_in3D && key.IsActionPressed("texture_auto_align"))
+		{
+			// UDB's own real default keybinds, verified against its
+			// Actions.cfg/UDBuilder.default.cfg: plain A = X only,
+			// Shift+A = Y only, Ctrl+A = both (the one most mappers
+			// actually reach for) - none of the three are `repeat`d,
+			// unlike the arrow-key nudges above.
+			var axisSwap = Input.IsActionPressed("texture_auto_align_axis_swap_modifier");
+			var both = Input.IsActionPressed("texture_auto_align_both_modifier");
+			HandleTextureAutoAlign(alignX: !axisSwap, alignY: axisSwap || both);
+			return;
+		}
+
+		if (key.IsActionPressed("toggle_2d_3d"))
+		{
+			// Computed *before* any Current flag changes below, while
+			// _topDownCamera is still definitely the viewport's own
+			// active camera - Camera3D's ray-projection methods appear
+			// to depend on a camera actually being the current one for
+			// an up-to-date projection matrix (the likely real cause
+			// behind this being unreliable/imprecise when it ran after
+			// the Current swap instead: a stale matrix from whatever
+			// frame the top-down camera was last actually active,
+			// rather than genuinely wrong math).
+			if (!_in3D) PlacePerspectiveCameraAtMouse();
+
+			_in3D = !_in3D;
+			_topDownCamera.Current = !_in3D;
+			_perspectiveCamera.Current = _in3D;
+			_overlay.Visible = !_in3D;
+			_modeToolbar.Visible = !_in3D;
+			_statusBar.Visible = !_in3D;
+			_crosshair.Visible = _in3D;
+			Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+			if (_in3D)
+			{
+				// Entering 3D - seed the local 3D selection from
+				// whatever's currently selected in 2D (UDB's real
+				// sync-on-entry bridge between the two selections).
+				_selectedSectors3D.Clear();
+				_selectedSectors3D.UnionWith(_map.GetSelectedSectors());
+				_selectedLinedefs3D.Clear();
+				_selectedLinedefs3D.UnionWith(_map.GetSelectedLinedefs());
+				_selectedThings3D.Clear();
+				_selectedThings3D.UnionWith(_map.GetSelectedThings());
+			}
+			else
+			{
+				// Leaving 3D - write the local 3D selection back out
+				// (the matching sync-on-exit bridge), then don't leave
+				// a stale highlight showing and force a fresh pick
+				// next time 3D mode is entered.
+				_map.ClearSelectedSectors();
+				_map.ClearSelectedLinedefs();
+				_map.ClearSelectedThings();
+				foreach (var sector in _selectedSectors3D) _map.ToggleSelect(sector);
+				foreach (var linedef in _selectedLinedefs3D) _map.ToggleSelect(linedef);
+				foreach (var thing in _selectedThings3D) _map.ToggleSelect(thing);
+
+				_currentTarget = null;
+				_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
+			}
+
+			return;
+		}
+
+		if (key.IsActionPressed("mode_vertices")) { _overlay.Mode = EditMode.Vertices; return; }
+		if (key.IsActionPressed("mode_linedefs")) { _overlay.Mode = EditMode.Linedefs; return; }
+		if (key.IsActionPressed("mode_sectors")) { _overlay.Mode = EditMode.Sectors; return; }
+		if (key.IsActionPressed("mode_things")) { _overlay.Mode = EditMode.Things; return; }
+		if (key.IsActionPressed("mode_draw")) { _overlay.Mode = EditMode.Draw; return; }
+		if (key.IsActionPressed("toggle_snap")) { _overlay.SnapEnabled = !_overlay.SnapEnabled; return; }
+		if (key.IsActionPressed("toggle_dynamic_grid")) { _overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled; return; }
+		if (key.IsActionPressed("grid_size_decrease")) { _overlay.DecreaseGridSize(); return; }
+		if (key.IsActionPressed("grid_size_increase")) { _overlay.IncreaseGridSize(); return; }
 	}
 
 	// A 256x256 room with a 64x64 pillar hole in the middle - enough to

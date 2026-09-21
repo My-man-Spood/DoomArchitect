@@ -100,7 +100,7 @@ public sealed class DrawOverlayHandler
 				_hoveredVertex = _previewPoint.ExistingVertex;
 				_hoveredLinedef = _previewPoint.SplitLinedef;
 				break;
-			case InputEventKey { Pressed: true, Keycode: Key.Escape }:
+			case InputEventKey { Pressed: true } key when key.IsActionPressed("draw_cancel"):
 				// UDB's own real OnCancel guard: continuous drawing blocks
 				// leaving Draw mode entirely via Escape - only the
 				// in-progress shape itself is discarded, matching UDB's
@@ -109,7 +109,7 @@ public sealed class DrawOverlayHandler
 				if (_owner.ContinuousDrawing) CancelDraw();
 				else _owner.ReturnFromDraw();
 				break;
-			case InputEventKey { Pressed: true, Keycode: Key.Backspace } when _points.Count > 0:
+			case InputEventKey { Pressed: true } key when _points.Count > 0 && key.IsActionPressed("draw_remove_last_point"):
 				_points.RemoveAt(_points.Count - 1);
 				break;
 		}
@@ -199,8 +199,15 @@ public sealed class DrawOverlayHandler
 		_previewPoint = _points[0];
 	}
 
-	/// <summary>UDB's own real <c>Alt+Shift</c> cardinal/45-degree direction lock (<see cref="CardinalSnapper"/>) - a live modifier read, same shape as <see cref="MapOverlay.EffectiveSnap"/>'s own <c>Input.IsKeyPressed(Key.Shift)</c>.</summary>
-	private static bool CardinalSnapEnabled => Input.IsKeyPressed(Key.Alt) && Input.IsKeyPressed(Key.Shift);
+	/// <summary>
+	/// UDB's own real <c>Alt+Shift</c> cardinal/45-degree direction lock
+	/// (<see cref="CardinalSnapper"/>) - a live poll of the real,
+	/// independently rebindable <c>draw_cardinal_lock_modifier</c> action
+	/// (default Alt, with Shift as an additional qualifier on that same
+	/// bound event - see TODO.md's "Keybinding management" writeup for why
+	/// a single action rather than two).
+	/// </summary>
+	private static bool CardinalSnapEnabled => Input.IsActionPressed("draw_cardinal_lock_modifier");
 
 	/// <summary>
 	/// Vertex/linedef stitch-snap takes priority over grid snap entirely

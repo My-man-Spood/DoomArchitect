@@ -255,9 +255,11 @@ public partial class MapOverlay : Control
 	/// <summary>
 	/// Ported from UDB's own <c>ShiftState ^ SnapToGrid</c> pattern (used
 	/// identically across every one of its classic edit modes): holding
-	/// Shift inverts whatever the persistent toggle is currently set to.
+	/// the real, independently rebindable <c>grid_snap_invert_modifier</c>
+	/// action (default Shift) inverts whatever the persistent toggle is
+	/// currently set to.
 	/// </summary>
-	public bool EffectiveSnap => SnapEnabled ^ Input.IsKeyPressed(Key.Shift);
+	public bool EffectiveSnap => SnapEnabled ^ Input.IsActionPressed("grid_snap_invert_modifier");
 
 	/// <summary>Internal (not private) so each per-element handler can pass it as a delegate - see <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>'s own constructor.</summary>
 	internal MapVector2 SnapIfEnabled(MapVector2 position) =>
@@ -308,7 +310,7 @@ public partial class MapOverlay : Control
 		// chance of also starting a select/drag/marquee gesture while
 		// panning, which is straightforwardly better than replicating
 		// UDB's own partial guard.
-		if (Input.IsKeyPressed(Key.Space))
+		if (Input.IsActionPressed("pan_view_modifier"))
 		{
 			if (@event is InputEventMouseMotion motion) _camera.PanView(motion);
 			return;

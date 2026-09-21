@@ -1,14 +1,17 @@
+using DoomArchitect.Core.Input;
+
 namespace DoomArchitect.Core.Configuration;
 
 /// <summary>
 /// DoomArchitect's own global, app-wide settings - not tied to any
-/// specific map/WAD (see <see cref="MapSettings"/> for that). Currently
-/// just a default resource list per game configuration, so a user only
-/// has to point at their IWAD once rather than for every single map of
-/// the same game - mirrors UDB's own real per-configuration default
-/// resources (<c>ConfigurationInfo.Resources</c>), minus the settings
-/// this project doesn't have an equivalent concept for yet (no UI theme/
-/// keybind/plugin settings live here).
+/// specific map/WAD (see <see cref="MapSettings"/> for that): a default
+/// resource list per game configuration (so a user only has to point at
+/// their IWAD once rather than for every single map of the same game -
+/// mirrors UDB's own real per-configuration default resources,
+/// <c>ConfigurationInfo.Resources</c>) and a user's own keybind overrides
+/// (see <see cref="KeyBindingOverrides"/>) - minus the settings this
+/// project doesn't have an equivalent concept for yet (no UI theme/plugin
+/// settings live here).
 /// </summary>
 public sealed class AppSettings
 {
@@ -36,5 +39,24 @@ public sealed class AppSettings
         var updatedEntry = entry.WithBlock("resources", OrderedResourceList.Write(paths));
         var updatedGameConfigs = gameConfigs.WithBlock(kind.ToString(), updatedEntry);
         return new AppSettings(_root.WithBlock("gameconfigs", updatedGameConfigs));
+    }
+
+    /// <summary>Every action whose binding differs from <see cref="KeyBindingRegistry"/>'s own compiled-in default - an action with no entry here just uses that default.</summary>
+    public IReadOnlyDictionary<string, KeyBinding> GetKeyBindingOverrides() =>
+        KeyBindingOverrides.Read(_root.FindBlock("keybinds"));
+
+    public AppSettings WithKeyBindingOverride(string action, KeyBinding binding)
+    {
+        var overrides = new Dictionary<string, KeyBinding>(GetKeyBindingOverrides()) { [action] = binding };
+        return new AppSettings(_root.WithBlock("keybinds", KeyBindingOverrides.Write(overrides)));
+    }
+
+    /// <summary>Reverts a single action back to its compiled-in default by dropping its override, if any.</summary>
+    public AppSettings WithKeyBindingReset(string action)
+    {
+        var overrides = new Dictionary<string, KeyBinding>(GetKeyBindingOverrides());
+        if (!overrides.Remove(action)) return this;
+
+        return new AppSettings(_root.WithBlock("keybinds", KeyBindingOverrides.Write(overrides)));
     }
 }

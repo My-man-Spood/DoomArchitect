@@ -125,8 +125,8 @@ public partial class StepperLineEdit : HBoxContainer
 		if (NumericFieldExpression.IsRelativeExpression(_lineEdit.Text)) return;
 
 		var current = NumericFieldExpression.Resolve(_lineEdit.Text, 0) ?? 0;
-		var ctrl = Input.IsKeyPressed(Key.Ctrl);
-		var shift = Input.IsKeyPressed(Key.Shift);
+		var ctrl = Input.IsActionPressed("stepper_small_step_modifier");
+		var shift = Input.IsActionPressed("stepper_big_step_modifier");
 		var amount = ctrl ? StepSmall : shift ? StepBig : Step;
 		var result = current + direction * amount;
 

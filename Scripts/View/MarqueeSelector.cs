@@ -39,11 +39,11 @@ public sealed class MarqueeSelector
 
 	public bool IsSelecting { get; private set; }
 
-	/// <summary>Ported from UDB's real <c>BaseClassicMode.GetMultiSelectionMode</c>.</summary>
+	/// <summary>Ported from UDB's real <c>BaseClassicMode.GetMultiSelectionMode</c> - the two modifier roles are real, independently rebindable actions (<c>marquee_subtract_modifier</c>/<c>marquee_add_modifier</c>).</summary>
 	public static MarqueeSelectionMode GetSelectionMode()
 	{
-		var ctrl = Input.IsKeyPressed(Key.Ctrl);
-		var shift = Input.IsKeyPressed(Key.Shift);
+		var ctrl = Input.IsActionPressed("marquee_subtract_modifier");
+		var shift = Input.IsActionPressed("marquee_add_modifier");
 		if (ctrl && shift) return MarqueeSelectionMode.Intersect;
 		if (ctrl) return MarqueeSelectionMode.Subtract;
 		if (shift) return MarqueeSelectionMode.Add;

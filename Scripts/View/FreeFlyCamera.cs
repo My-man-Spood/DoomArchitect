@@ -4,6 +4,14 @@ using Godot;
 // exact look direction (including pitch), mouse looks around while
 // captured. Only acts while this camera is Current, so it's inert
 // whenever the top-down camera is active instead.
+//
+// Movement is driven by the real, independently rebindable camera_forward/
+// backward/strafe_left/strafe_right/fly_up/fly_down actions (see
+// TODO.md's "Keybinding management" writeup) - Escape-releases-the-mouse
+// below deliberately stays a plain hardcoded Key.Escape check, not an
+// action: it's a universal "get my cursor back" safety hatch, the kind of
+// thing most editors/games keep non-rebindable on purpose, not an
+// oversight.
 public partial class FreeFlyCamera : Camera3D
 {
 	[Export] public float MoveSpeed = 200f;
@@ -43,12 +51,12 @@ public partial class FreeFlyCamera : Camera3D
 		if (!Current) return;
 
 		var direction = Vector3.Zero;
-		if (Input.IsKeyPressed(Key.W)) direction -= Transform.Basis.Z;
-		if (Input.IsKeyPressed(Key.S)) direction += Transform.Basis.Z;
-		if (Input.IsKeyPressed(Key.A)) direction -= Transform.Basis.X;
-		if (Input.IsKeyPressed(Key.D)) direction += Transform.Basis.X;
-		if (Input.IsKeyPressed(Key.Space)) direction += Vector3.Up;
-		if (Input.IsKeyPressed(Key.Shift)) direction -= Vector3.Up;
+		if (Input.IsActionPressed("camera_forward")) direction -= Transform.Basis.Z;
+		if (Input.IsActionPressed("camera_backward")) direction += Transform.Basis.Z;
+		if (Input.IsActionPressed("camera_strafe_left")) direction -= Transform.Basis.X;
+		if (Input.IsActionPressed("camera_strafe_right")) direction += Transform.Basis.X;
+		if (Input.IsActionPressed("camera_fly_up")) direction += Vector3.Up;
+		if (Input.IsActionPressed("camera_fly_down")) direction -= Vector3.Up;
 
 		if (direction != Vector3.Zero)
 		{
