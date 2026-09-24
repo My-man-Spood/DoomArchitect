@@ -63,6 +63,7 @@ public partial class MapOverlay : Control
 	private readonly SectorOverlayHandler _sectorHandler;
 	private readonly ThingOverlayHandler _thingHandler;
 	private readonly DrawOverlayHandler _drawHandler;
+	private readonly TagIndicatorOverlayHandler _tagIndicatorHandler;
 
 	public MapOverlay()
 	{
@@ -74,6 +75,14 @@ public partial class MapOverlay : Control
 		_sectorHandler = new SectorOverlayHandler(this, _camera, _marquee);
 		_thingHandler = new ThingOverlayHandler(this, _camera, _marquee);
 		_drawHandler = new DrawOverlayHandler(this, _camera);
+		_tagIndicatorHandler = new TagIndicatorOverlayHandler(this, _camera, _linedefHandler, _sectorHandler);
+	}
+
+	/// <summary>UDB's own real <c>GZShowEventLines</c>/<c>ViewSelectionEffects</c> toggle, combined - see <see cref="TagIndicatorOverlayHandler"/>'s own remarks. Exposed here so the toolbar button and the Godot-InputMap-backed keybind action both have one place to read/write.</summary>
+	public bool TagIndicatorsEnabled
+	{
+		get => _tagIndicatorHandler.Enabled;
+		set => _tagIndicatorHandler.Enabled = value;
 	}
 
 	public MapData Map { get; set; }
@@ -349,6 +358,7 @@ public partial class MapOverlay : Control
 		_grid.Draw(this);
 		_sectorHandler.Draw(this);
 		_linedefHandler.Draw(this);
+		_tagIndicatorHandler.Draw(this);
 		_vertexHandler.Draw(this);
 		_thingHandler.Draw(this);
 		_drawHandler.Draw(this);

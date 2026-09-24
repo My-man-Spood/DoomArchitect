@@ -119,4 +119,41 @@ public class MapDataTagQueriesTests
         Assert.Equal(new HashSet<long> { 5, 20 }, used);
         Assert.DoesNotContain(20L, map.GetUsedSectorTags());
     }
+
+    [Fact]
+    public void GetSectorsWithTag_MatchesOnPrimaryOrExtraTag()
+    {
+        var map = new MapData();
+        var a = map.CreateSector(0, 128);
+        a.Fields.SetInteger("id", 5);
+        var b = map.CreateSector(0, 128);
+        b.Fields.SetInteger("id", 9);
+        b.Fields.SetString("moreids", "10 11", "");
+        var c = map.CreateSector(0, 128); // untagged
+
+        Assert.Equal(new[] { a }, map.GetSectorsWithTag(5));
+        Assert.Equal(new[] { b }, map.GetSectorsWithTag(11));
+        Assert.Empty(map.GetSectorsWithTag(999));
+        Assert.DoesNotContain(c, map.GetSectorsWithTag(0));
+    }
+
+    [Fact]
+    public void GetLinedefsWithTag_MatchesOnPrimaryOrExtraTag()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var v1 = map.CreateVertex(new System.Numerics.Vector2(0, 0));
+        var v2 = map.CreateVertex(new System.Numerics.Vector2(64, 0));
+        var v3 = map.CreateVertex(new System.Numerics.Vector2(64, 64));
+        var a = map.CreateLinedef(v1, v2, front: sector, back: null);
+        a.Fields.SetInteger("id", 5);
+        var b = map.CreateLinedef(v2, v3, front: sector, back: null);
+        b.Fields.SetString("moreids", "5", "");
+
+        var matches = map.GetLinedefsWithTag(5).ToList();
+
+        Assert.Equal(2, matches.Count);
+        Assert.Contains(a, matches);
+        Assert.Contains(b, matches);
+    }
 }

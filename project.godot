@@ -24,7 +24,7 @@ project/assembly_name="DoomArchitect"
 
 [editor]
 
-run/main_run_args="--file=/home/spood/Doom/MENTICIDE.WAD --map=MAP01"
+run/main_run_args="--file=/home/spood/Doom/CustomMaps/ProjectReaper/maps/MAP01.wad --map=MAP01"
 
 [gui]
 

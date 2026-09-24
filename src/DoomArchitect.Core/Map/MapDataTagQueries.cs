@@ -45,6 +45,21 @@ public static class MapDataTagQueries
         return used;
     }
 
+    /// <summary>
+    /// Every sector whose own tag(s) include <paramref name="tag"/> - the
+    /// reverse of <see cref="ParseTags"/>, needed by the 2D tag-arrow
+    /// indicator (find what a hovered linedef's tag actually points at).
+    /// A plain linear scan, matching every other "find" operation in this
+    /// codebase (<c>MapData</c> keeps no index of any kind over its own
+    /// element lists).
+    /// </summary>
+    public static IEnumerable<Sector> GetSectorsWithTag(this MapData map, long tag) =>
+        map.Sectors.Where(sector => ParseTags(sector.Fields).Contains(tag));
+
+    /// <summary>Mirrors <see cref="GetSectorsWithTag"/> for linedefs - the reverse direction (hovering a tagged sector, finding what points at it).</summary>
+    public static IEnumerable<Linedef> GetLinedefsWithTag(this MapData map, long tag) =>
+        map.Linedefs.Where(linedef => ParseTags(linedef.Fields).Contains(tag));
+
     private static void CollectSectorTags(MapData map, HashSet<long> used)
     {
         foreach (var sector in map.Sectors)

@@ -20,4 +20,7 @@ public static class MapOverlayColors
 
 	/// <summary>Persistent multi-selection tint - always drawn in place of the base color, but hover always wins over it.</summary>
 	public static readonly Color Selected = new(0.9f, 0.15f, 0.15f);
+
+	/// <summary>UDB's own real <c>General.Colors.InfoLine</c> default (<c>#C6C6FF</c>) - a sector's own tag-number label and the tag-arrow indicator both use this, so it lives here rather than duplicated in each.</summary>
+	public static readonly Color InfoLine = new(0.776f, 0.776f, 1f);
 }

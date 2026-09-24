@@ -23,6 +23,20 @@ public sealed class LinedefOverlayHandler
 	private static readonly Color OneSidedColor = new(0.9f, 0.9f, 0.9f);
 	private static readonly Color TwoSidedColor = new(0.55f, 0.55f, 0.6f);
 
+	/// <summary>
+	/// UDB's own real default linedef-action tint - not a user preference
+	/// this project is choosing to skip, a genuine, always-on UDB
+	/// behavior: <c>ConfigurationInfo</c>'s own real load path seeds
+	/// exactly one hardcoded "Linedef Colors" preset whenever a user has
+	/// never customized their own (the overwhelmingly common case) -
+	/// <c>Action == -1</c> ("any non-zero action", UDB's own real
+	/// sentinel) → <c>System.Drawing.Color.PaleGreen</c>
+	/// (<c>(152, 251, 152)</c>). Selection still wins over it, matching
+	/// <c>Renderer2D.DetermineLinedefColor</c>'s own real priority
+	/// (<c>if(l.Selected) return Selection;</c> runs first).
+	/// </summary>
+	private static readonly Color ActionTintColor = new(0.596f, 0.984f, 0.596f);
+
 	private readonly MapOverlay _owner;
 	private readonly MapOverlayCamera _camera;
 	private readonly ElementOverlayHandler<Linedef, Vertex> _input;
@@ -44,6 +58,16 @@ public sealed class LinedefOverlayHandler
 	}
 
 	public void HandleInput(InputEvent @event) => _input.HandleInput(@event);
+
+	/// <summary>
+	/// The linedef currently under the cursor - only actually updates
+	/// while Linedefs mode is active (<c>HandleInput</c>, which is what
+	/// refreshes it, is only ever called while this handler owns input at
+	/// all), matching UDB's own real per-mode <c>Highlight()</c>: its own
+	/// tag-arrow feature is likewise only live while the matching classic
+	/// mode is engaged, not a mode-agnostic global hover.
+	/// </summary>
+	public Linedef Hovered => _input.Hovered;
 
 	private Linedef FindNear(Vector2 screenPosition)
 	{
@@ -76,8 +100,10 @@ public sealed class LinedefOverlayHandler
 		foreach (var linedef in _owner.Map.Linedefs)
 		{
 			var isHighlighted = _owner.Mode == EditMode.Linedefs && linedef == _input.Hovered;
+			var hasAction = linedef.Fields.GetInteger("special", 0) != 0;
 			var baseColor = isHighlighted ? MapOverlayColors.Hover
 				: linedef.IsSelected ? MapOverlayColors.Selected
+				: hasAction ? ActionTintColor
 				: linedef.Back == null ? OneSidedColor : TwoSidedColor;
 			var color = new Color(baseColor, alpha);
 			DrawWorldLine(target, linedef.Start.Position, linedef.End.Position, color, LinedefWidth);

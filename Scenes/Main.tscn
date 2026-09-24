@@ -16,6 +16,7 @@
 [ext_resource type="Texture2D" uid="uid://ctaxvynhdsd46" path="res://Assets/Icons/icon_thing_nodir.svg" id="13"]
 [ext_resource type="Texture2D" path="res://Assets/Icons/mode_draw.svg" id="14"]
 [ext_resource type="Texture2D" path="res://Assets/Icons/mode_draw_continuous.svg" id="15"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/icon_tag.svg" id="16"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -224,6 +225,16 @@ layout_mode = 2
 tooltip_text = "Double grid size ([)"
 focus_mode = 0
 text = "+"
+
+[node name="TagIndicatorsToggleButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/GridToolbar/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(28, 28)
+layout_mode = 2
+tooltip_text = "Toggle tag indicators (I) - sector tag labels and hover tag arrows"
+focus_mode = 0
+toggle_mode = true
+button_pressed = true
+icon = ExtResource("16")
+expand_icon = true
 
 [node name="OpenMapMenu" type="PanelContainer" parent="UI" unique_id=483051088]
 visible = false

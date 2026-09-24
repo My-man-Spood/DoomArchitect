@@ -40,6 +40,9 @@ public sealed class SectorOverlayHandler
 
 	public void HandleInput(InputEvent @event) => _input.HandleInput(@event);
 
+	/// <summary>The sector currently under the cursor - only actually updates while Sectors mode is active, same reasoning as <see cref="LinedefOverlayHandler.Hovered"/>'s own remarks.</summary>
+	public Sector Hovered => _input.Hovered;
+
 	private Sector FindNear(Vector2 screenPosition)
 	{
 		var point = _camera.Unproject(screenPosition);
@@ -64,17 +67,29 @@ public sealed class SectorOverlayHandler
 			if (sector != _input.Hovered && !sector.IsSelected) continue;
 
 			var color = sector == _input.Hovered ? HighlightColor : SelectedHighlightColor;
-			var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(sector)));
-			foreach (var polygon in polygons)
+			Fill(target, _camera, sector, color);
+		}
+	}
+
+	/// <summary>
+	/// The actual fill-triangle loop, public/static so
+	/// <see cref="TagIndicatorOverlayHandler"/> can highlight a tag-arrow's
+	/// own target sector(s) with the identical technique, regardless of
+	/// which mode (or whether this handler's own <see cref="Draw"/> would
+	/// otherwise draw anything at all) is currently active.
+	/// </summary>
+	public static void Fill(CanvasItem target, MapOverlayCamera camera, Sector sector, Color color)
+	{
+		var polygons = PolygonCutter.Cut(PolygonNesting.BuildTree(SectorTracer.Trace(sector)));
+		foreach (var polygon in polygons)
+		{
+			foreach (var (a, b, c) in EarClipper.Clip(polygon))
 			{
-				foreach (var (a, b, c) in EarClipper.Clip(polygon))
-				{
-					var pa = _camera.Project(a);
-					var pb = _camera.Project(b);
-					var pc = _camera.Project(c);
-					if (IsDegenerateTriangle(pa, pb, pc)) continue;
-					target.DrawColoredPolygon(new[] { pa, pb, pc }, color);
-				}
+				var pa = camera.Project(a);
+				var pb = camera.Project(b);
+				var pc = camera.Project(c);
+				if (IsDegenerateTriangle(pa, pb, pc)) continue;
+				target.DrawColoredPolygon(new[] { pa, pb, pc }, color);
 			}
 		}
 	}

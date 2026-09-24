@@ -54,10 +54,7 @@ public sealed class DrawOverlayHandler
 	private const float LineWidth = 2f;
 	private const float DirectionTickLengthPixels = 10f; // UDB's own RenderLinedefDirectionIndicator, screen-space fixed length like DrawLengthLabel's own offset
 	private const float LabelOffsetPixels = 12f;
-	private const int LabelFontSize = 13;
-	private const float LabelPadding = 3f;
 
-	private static readonly Color LabelBackgroundColor = new(0f, 0f, 0f, 0.6f);
 	private static readonly Color LabelTextColor = Colors.White;
 
 	private readonly MapOverlay _owner;
@@ -425,14 +422,9 @@ public sealed class DrawOverlayHandler
 		var screenPerpendicular = new Vector2(-screenDirection.Y, screenDirection.X);
 		var midpoint = (screenStart + screenEnd) / 2f + screenPerpendicular * LabelOffsetPixels;
 
-		var font = ThemeDB.FallbackFont;
-		var textSize = font.GetStringSize(text, HorizontalAlignment.Left, -1, LabelFontSize);
+		var textSize = ScreenLabel.Measure(text);
 		var baseline = midpoint - new Vector2(textSize.X / 2f, 0f);
-
-		target.DrawRect(
-			new Rect2(baseline - new Vector2(LabelPadding, textSize.Y + LabelPadding), textSize + new Vector2(LabelPadding, LabelPadding) * 2f),
-			LabelBackgroundColor);
-		target.DrawString(font, baseline, text, HorizontalAlignment.Left, -1, LabelFontSize, LabelTextColor);
+		ScreenLabel.Draw(target, baseline, text, LabelTextColor);
 	}
 
 	/// <summary>Highlights whichever existing vertex/linedef the next click would snap onto - the same <see cref="MapOverlayColors.Hover"/> every other mode already uses for this exact purpose.</summary>
