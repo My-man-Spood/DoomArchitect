@@ -762,6 +762,27 @@ public partial class MapView : Node3D
 		_overlay.NamedResources = _namedResources;
 	}
 
+	// The top-down camera is orthogonal, so Near/Far only pick which depth
+	// slab gets rendered - unlike Size (the actual zoom, driven separately
+	// by the scroll wheel - see MapOverlayCamera.ZoomAt), they have zero
+	// effect on how big anything looks on screen. And since this camera
+	// only ever renders the floor layer (see ThreeDOnlyRenderLayer's
+	// remarks) - one flat, non-overlapping surface per screen pixel with
+	// nothing else competing for that same depth - there's no fine-grained
+	// depth sorting for a huge range to ruin. So rather than keeping the
+	// camera's height/clip range in sync with whatever the map's current
+	// tallest/lowest sector happens to be (a fixed range silently clips
+	// any floor above it out of the top-down view entirely - it renders
+	// fine in 3D, where there's no such fixed ceiling, but vanishes from
+	// the 2D view, which looks exactly like a missing/transparent floor
+	// texture despite the sector's data being completely correct), it's
+	// simplest to just park the camera far above any Doom map's plausible
+	// height range and give it a matching Far - comfortably covering the
+	// classic format's int16 coordinate range (+/-32768) many times over
+	// - and never think about it again.
+	private const float TopDownCameraHeight = 50000f;
+	private const float TopDownCameraFar = 100000f;
+
 	private void FitTopDownCameraToMap(MapData map)
 	{
 		if (map.Vertices.Count == 0) return;
@@ -780,8 +801,9 @@ public partial class MapView : Node3D
 		// Goes through ToWorld rather than constructing the position by
 		// hand, so this can't independently drift from the shared Doom ->
 		// Godot mapping the way it once did (see ToWorld's own remarks).
-		_topDownCamera.Position = center.ToWorld(_topDownCamera.Position.Y);
+		_topDownCamera.Position = center.ToWorld(TopDownCameraHeight);
 		_topDownCamera.Size = Mathf.Max(size, 64f);
+		_topDownCamera.Far = TopDownCameraFar;
 	}
 
 	private void CreateSectorMeshInstances(Sector sector)
@@ -1144,6 +1166,7 @@ public partial class MapView : Node3D
 		if (key.IsActionPressed("toggle_dynamic_grid")) { _overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled; return; }
 		if (key.IsActionPressed("grid_size_decrease")) { _overlay.DecreaseGridSize(); return; }
 		if (key.IsActionPressed("grid_size_increase")) { _overlay.IncreaseGridSize(); return; }
+		if (key.IsActionPressed("toggle_tag_indicators")) { _overlay.TagIndicatorsEnabled = !_overlay.TagIndicatorsEnabled; return; }
 	}
 
 	// A 256x256 room with a 64x64 pillar hole in the middle - enough to
