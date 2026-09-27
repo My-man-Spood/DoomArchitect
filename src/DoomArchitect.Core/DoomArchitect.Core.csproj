@@ -16,6 +16,7 @@
          by DoomArchitect.Core.Tests with no Godot dependency, the same way
          every other Core resource in this project is testable. -->
     <EmbeddedResource Include="Configuration\GameConfigs\**\*.cfg" />
+    <EmbeddedResource Include="Textures\InternalSprites\**\*.png" />
   </ItemGroup>
 
 </Project>

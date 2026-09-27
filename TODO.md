@@ -1040,6 +1040,25 @@ file just tracks what's built and what's next.
       wrong; it defines the classic 5 (skill/ambush/multiplayer) - all
       corrected to match the real data instead of the old guesses.
 
+      **Update, "internal:" sprite icons (2026):** the real `.cfg` data
+      revealed a genuine gap this project's own hand-authored starter set
+      never surfaced: 30 thing types across the GZDoom/ZDoom/Boom layers
+      (`MapSpot`, `Camera`, `Teleport`, `Slope`, `SilentSector`,
+      `SkyboxViewpoint`, ... - editor-only markers with no real in-game
+      sprite) store a `sprite` field like `"internal:MapSpot"` instead of
+      a real WAD lump name, UDB's own `DataManager.INTERNAL_PREFIX`
+      convention for its own bundled marker icons. This project had zero
+      handling for that prefix, so all 30 silently fell through to the
+      generic missing-sprite placeholder. Fixed with a new
+      `Core.Textures.InternalSprites`, backed by UDB's own real icon PNGs
+      (`Assets/Common/Sprites/*.png`, all confirmed present for every name
+      actually used) bundled as embedded resources and matched
+      case-insensitively (real data spells some of these lowercase, e.g.
+      `"internal:pointpusher"`), decoded through the same
+      `PatchImageResolver` path every other modern-format image already
+      goes through. `TextureSet.TryGetSpriteTexture` checks for the
+      prefix before ever touching the loaded WAD's own sprite lumps.
+
       **Update, thing categories + 2D marker color/direction:** two more
       real UDB `.cfg` fields modeled - `arrow` (nonzero = show a facing
       indicator) and `color` (a small palette index) - both category-

@@ -165,6 +165,37 @@ public class TextureSetTests
     }
 
     /// <summary>
+    /// A game-configuration thing type with no real in-game visual (a
+    /// Camera, a Teleport destination, a MapSpot, ...) stores an
+    /// <c>"internal:"</c>-prefixed name instead of a real sprite lump -
+    /// resolved from <see cref="InternalSprites"/>'s own bundled icons
+    /// regardless of what the loaded WAD actually contains (an empty WAD
+    /// here, on purpose, to prove that).
+    /// </summary>
+    [Theory]
+    [InlineData("internal:MapSpot")]
+    [InlineData("internal:mapspot")] // real .cfg data spells some of these lowercase
+    [InlineData("internal:Camera")]
+    public void TryGetSpriteTexture_InternalName_ResolvesTheBundledEditorIcon(string spriteName)
+    {
+        var set = TextureSet.Load(BuildWad());
+
+        var image = set.TryGetSpriteTexture(spriteName);
+
+        Assert.NotNull(image);
+        Assert.True(image!.Width > 0);
+        Assert.True(image.Height > 0);
+    }
+
+    [Fact]
+    public void TryGetSpriteTexture_InternalNameWithNoBundledIcon_ReturnsNull()
+    {
+        var set = TextureSet.Load(BuildWad());
+
+        Assert.Null(set.TryGetSpriteTexture("internal:ThisIconDoesNotExist"));
+    }
+
+    /// <summary>
     /// A modern PK3/resource-pack actor's sprite frames are often plain
     /// PNGs rather than classic patches - this must decode exactly like
     /// any other PNG-format patch lump (format-sniffed first, the same

@@ -275,10 +275,22 @@ public sealed class TextureSet
     /// as classic patches) never decoded at all, since its PNG bytes were
     /// only ever handed to the classic reader, which has no way to
     /// recognize them.
+    ///
+    /// A name starting with <c>"internal:"</c> (an editor-only marker
+    /// actor with no real WAD sprite - a Camera, a Teleport destination, a
+    /// MapSpot, ...) is resolved from <see cref="InternalSprites"/>
+    /// instead of the loaded WAD entirely.
     /// </summary>
     public PixelImage? TryGetSpriteTexture(string spriteName)
     {
         if (_spriteCache.TryGetValue(spriteName, out var cached)) return cached;
+
+        if (InternalSprites.IsInternalName(spriteName))
+        {
+            var internalImage = InternalSprites.TryGet(spriteName, _patchResolver);
+            if (internalImage != null) _spriteCache[spriteName] = internalImage;
+            return internalImage;
+        }
 
         _spriteRange ??= _resources.FindNamespaceLumps(ResourceNamespace.Sprites);
         var lump = _spriteRange.FirstOrDefault(l => l.Name.Equals(spriteName, StringComparison.OrdinalIgnoreCase));
