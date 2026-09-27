@@ -987,12 +987,45 @@ file just tracks what's built and what's next.
       persistent per-WAD project-file storage of the chosen game
       configuration.
 
-      **Update, license change:** the project moved from MIT to GPLv3
-      (2026), removing the licensing half of the "why authored fresh
-      instead of copied" reasoning above - copying UDB's own real,
-      GPLv3-licensed `.cfg` files is no longer a licensing problem. Left
-      as a possible future replacement of the bundled starter set, not
-      done as part of the relicensing itself.
+      **Update, license change + real `.cfg` swap-over (2026):** the
+      project moved from MIT to GPLv3, removing the licensing half of the
+      "why authored fresh instead of copied" reasoning above - and the
+      bundled starter set was then actually replaced with UDB's own real
+      files: `Doom_DoomDoom.cfg`/`Doom_Doom2Doom.cfg`/`GZDoom_DoomUDMF.cfg`
+      and their full `include()` closure (25 more files), copied verbatim
+      from `Assets/Common/Configurations/` apart from renaming the three
+      top-level files to match this project's existing
+      `GameConfigurationKind` names. Dramatically more complete than the
+      old hand-authored set (Doom: 97 thing types/140 actions/16 sector
+      specials; Doom2: 123/140/16; GZDoom UDMF: 346/221/94, versus a
+      deliberately partial starter roster before).
+
+      Two real compatibility gaps this surfaced, both genuine parser/
+      loader bugs rather than anything specific to these particular files
+      (a synthetic test file just never happened to exercise them):
+      `FileSystemCfgFileSource`/`EmbeddedResourceCfgFileSource.ResolveRelative`
+      only handled forward slashes, but every real UDB `include()` path
+      is written with a backslash (its own Windows-native convention) -
+      normalized now, on both. `CfgValue.AsBool()` only accepted the
+      literal `true`/`false` keyword, but real data writes plenty of
+      boolean-semantic fields (`hangs`, `arrow`) as a plain `0`/`1`
+      instead - now coerced the same way `AsDouble()` already coerces an
+      int-kinded value; `AsDouble()` itself also gained a numeric-string
+      fallback (`width = "16";` shows up a handful of times, an authoring
+      inconsistency in UDB's own decades-old data, not a distinct
+      format). `GameConfigurationLoader.LoadFlagInfoDictionary` also
+      gained support for a nested-block flag entry (`linedefactivations`'
+      own `repeatspecial`/`passuse`, which carry a `name` field plus
+      metadata this project's simple key/title record doesn't model,
+      instead of the far more common plain `key = "Title";` assignment)-
+      previously silently dropped rather than erroring, so easy to miss.
+
+      A few existing tests had asserted a title/category string this
+      project had itself guessed rather than checked (`"Secret area"` vs
+      real UDB's own `"Secret"`, `"doors"` vs real UDB's own `"door"`),
+      and one had asserted vanilla Doom defines no thing flags at all -
+      wrong; it defines the classic 5 (skill/ambush/multiplayer) - all
+      corrected to match the real data instead of the old guesses.
 
       **Update, thing categories + 2D marker color/direction:** two more
       real UDB `.cfg` fields modeled - `arrow` (nonzero = show a facing

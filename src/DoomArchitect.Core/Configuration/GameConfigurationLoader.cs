@@ -144,6 +144,13 @@ public static class GameConfigurationLoader
     }
 
     /// <summary>Flat <c>fieldname = "title"</c> dictionary shape shared by <c>sectorflags</c>, <c>linedefflags</c>, and <c>linedefactivations</c> - string keys (the literal UDMF field name) rather than parsed numbers.</summary>
+    /// <summary>
+    /// Most entries are a plain <c>key = "Title";</c> assignment, but a
+    /// few real <c>linedefactivations</c> entries (<c>repeatspecial</c>,
+    /// <c>passuse</c>) are instead a nested block carrying a <c>name</c>
+    /// field plus other metadata (e.g. <c>istrigger</c>) this simple
+    /// key/title record doesn't model - only the name is read here.
+    /// </summary>
     private static Dictionary<string, SectorFlagInfo> LoadFlagInfoDictionary(CfgBlock? block)
     {
         var result = new Dictionary<string, SectorFlagInfo>();
@@ -152,6 +159,12 @@ public static class GameConfigurationLoader
         foreach (var assignment in block.Assignments)
         {
             result[assignment.Key] = new SectorFlagInfo(assignment.Key, assignment.Value.AsString());
+        }
+
+        foreach (var nested in block.Blocks)
+        {
+            var title = nested.Find("name")?.AsString();
+            if (title != null) result[nested.Key] = new SectorFlagInfo(nested.Key, title);
         }
 
         return result;

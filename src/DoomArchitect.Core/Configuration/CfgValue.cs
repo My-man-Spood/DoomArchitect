@@ -42,11 +42,20 @@ public readonly struct CfgValue
 
     public static CfgValue OfString(string value) => new(CfgValueKind.String, 0, 0, false, value);
 
-    /// <summary>Accepts an int-kinded value transparently, matching the same coercion <see cref="IO.UdmfValue.AsDouble"/> applies.</summary>
+    /// <summary>
+    /// Accepts an int-kinded value transparently, matching the same
+    /// coercion <see cref="IO.UdmfValue.AsDouble"/> applies - and, unlike
+    /// that UDMF counterpart, also a numeric-looking quoted string (real
+    /// .cfg data has a handful of <c>width = "16";</c>-style entries
+    /// alongside the far more common unquoted <c>width = 16;</c>, an
+    /// authoring inconsistency across UDB's own decades-old data rather
+    /// than a distinct format).
+    /// </summary>
     public double AsDouble() => Kind switch
     {
         CfgValueKind.Int => _intValue,
         CfgValueKind.Double => _doubleValue,
+        CfgValueKind.String when double.TryParse(_stringValue, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var parsed) => parsed,
         _ => throw new CfgTypeException(Kind, CfgValueKind.Double),
     };
 
@@ -58,9 +67,19 @@ public readonly struct CfgValue
 
     public int AsInt() => (int)AsLong();
 
-    public bool AsBool() => Kind == CfgValueKind.Bool
-        ? _boolValue
-        : throw new CfgTypeException(Kind, CfgValueKind.Bool);
+    /// <summary>
+    /// Accepts an int-kinded value transparently too (same coercion
+    /// <see cref="AsDouble"/> applies for numeric kinds) - real .cfg data
+    /// writes plenty of boolean-semantic fields (e.g. <c>hangs = 0;</c>)
+    /// as a plain 0/1 rather than the <c>true</c>/<c>false</c> keyword,
+    /// and both forms need to read the same way.
+    /// </summary>
+    public bool AsBool() => Kind switch
+    {
+        CfgValueKind.Bool => _boolValue,
+        CfgValueKind.Int => _intValue != 0,
+        _ => throw new CfgTypeException(Kind, CfgValueKind.Bool),
+    };
 
     public string AsString() => Kind == CfgValueKind.String
         ? _stringValue!

@@ -26,8 +26,14 @@ public sealed class FileSystemCfgFileSource : ICfgFileSource
 
     public string ResolveRelative(string basePath, string relativePath)
     {
+        // Real UDB .cfg files always write include() paths with a
+        // backslash (its own Windows-native convention) - Path.Combine
+        // only treats that as a separator on Windows itself, so on any
+        // other platform the whole literal "Includes\Foo.cfg" string
+        // would otherwise be read as a single (nonexistent) file name.
+        var normalizedRelativePath = relativePath.Replace('\\', Path.DirectorySeparatorChar);
         var baseDirectory = Path.GetDirectoryName(Path.GetFullPath(basePath)) ?? string.Empty;
-        return Path.GetFullPath(Path.Combine(baseDirectory, relativePath));
+        return Path.GetFullPath(Path.Combine(baseDirectory, normalizedRelativePath));
     }
 }
 
@@ -61,9 +67,15 @@ public sealed class EmbeddedResourceCfgFileSource : ICfgFileSource
 
     public string ResolveRelative(string basePath, string relativePath)
     {
+        // Real UDB .cfg files always write include() paths with a
+        // backslash (its own Windows-native convention) - this virtual
+        // path space only ever uses forward slashes, so that literal
+        // backslash needs normalizing first or it ends up baked into the
+        // resource name as-is instead of acting as a separator.
+        var normalizedRelativePath = relativePath.Replace('\\', '/');
         var lastSlash = basePath.LastIndexOf('/');
         var baseDirectory = lastSlash >= 0 ? basePath[..lastSlash] : string.Empty;
-        var combined = baseDirectory.Length > 0 ? $"{baseDirectory}/{relativePath}" : relativePath;
+        var combined = baseDirectory.Length > 0 ? $"{baseDirectory}/{normalizedRelativePath}" : normalizedRelativePath;
         return Normalize(combined);
     }
 

@@ -206,7 +206,7 @@ public class GameConfigurationLoaderTests
         var action = doom.GetAction(1);
 
         Assert.NotNull(action);
-        Assert.Equal("doors", action!.Category);
+        Assert.Equal("door", action!.Category);
     }
 
     [Fact]
@@ -217,7 +217,7 @@ public class GameConfigurationLoaderTests
         var special = doom.GetSectorSpecial(9);
 
         Assert.NotNull(special);
-        Assert.Equal("Secret area", special!.Title);
+        Assert.Equal("Secret", special!.Title);
     }
 
     [Fact]
@@ -229,7 +229,7 @@ public class GameConfigurationLoaderTests
 
         Assert.Equal(16, specials.Count);
         Assert.Equal(specials.OrderBy(s => s.Number).Select(s => s.Number), specials.Select(s => s.Number));
-        Assert.Contains(specials, s => s.Number == 9 && s.Title == "Secret area");
+        Assert.Contains(specials, s => s.Number == 9 && s.Title == "Secret");
     }
 
     [Fact]
@@ -388,11 +388,16 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
-    public void Doom_GetThingFlags_ReturnsNoneSinceVanillaConfigsDoNotDefineAny()
+    public void Doom_GetThingFlags_ReturnsTheClassicSkillAndSpawnFlags()
     {
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
-        Assert.Empty(doom.GetThingFlags());
+        var flags = doom.GetThingFlags();
+
+        Assert.Equal(5, flags.Count);
+        Assert.Contains(flags, f => f.Key == "1" && f.Title == "Easy");
+        Assert.Contains(flags, f => f.Key == "8" && f.Title == "Ambush players");
+        Assert.Contains(flags, f => f.Key == "16" && f.Title == "Multiplayer only");
     }
 
     [Fact]
