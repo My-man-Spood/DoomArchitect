@@ -987,6 +987,13 @@ file just tracks what's built and what's next.
       persistent per-WAD project-file storage of the chosen game
       configuration.
 
+      **Update, license change:** the project moved from MIT to GPLv3
+      (2026), removing the licensing half of the "why authored fresh
+      instead of copied" reasoning above - copying UDB's own real,
+      GPLv3-licensed `.cfg` files is no longer a licensing problem. Left
+      as a possible future replacement of the bundled starter set, not
+      done as part of the relicensing itself.
+
       **Update, thing categories + 2D marker color/direction:** two more
       real UDB `.cfg` fields modeled - `arrow` (nonzero = show a facing
       indicator) and `color` (a small palette index) - both category-

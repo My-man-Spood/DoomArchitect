@@ -8,8 +8,10 @@ namespace DoomArchitect.Core.Configuration;
 /// <c>Configuration/GameConfigs/*.cfg</c>) and cached for the process
 /// lifetime - these never change at runtime. Authored fresh from public,
 /// decades-established vanilla Doom knowledge rather than copied from
-/// UDB's actual <c>.cfg</c> files (UDB's are GPLv3; this repository is
-/// MIT) - see TODO.md for the full reasoning. A user-supplied external
+/// UDB's actual <c>.cfg</c> files - see TODO.md for the full reasoning
+/// (predates this project's move to GPLv3, which removes the licensing
+/// reason for that choice, though not the "grammar port, not bundled-data
+/// copy" one). A user-supplied external
 /// <c>.cfg</c> file (including a real UDB one) is a separate, not-yet-
 /// built entry point that would use the same <see cref="CfgLoader"/>/
 /// <see cref="GameConfigurationLoader"/> pipeline with a
