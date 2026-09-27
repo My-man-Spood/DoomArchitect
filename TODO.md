@@ -203,6 +203,19 @@ file just tracks what's built and what's next.
         (`MapOverlay.EffectiveSnap` had to become `public` for it to read)
       - Every button has `tooltip_text` (a stock `Control` property -
         Godot shows it on hover automatically, no script needed)
+
+      **Update, real icons (2026):** the five edit-mode toolbar icons
+      (`mode_vertex`/`mode_line`/`mode_sector`/`icon_thing_nodir`/
+      `mode_draw`) were swapped for UDB's own real `VerticesMode.png`/
+      `LinesMode.png`/`SectorsMode.png`/`ThingsMode.png`/
+      `DrawGeometryMode.png` (`Source/Plugins/BuilderModes/Resources/`),
+      now that the license change removes the reason they were hand-drawn
+      in the first place. These are native 16x16 raster icons scaled up
+      to this project's own 28x28 button size, unlike the hand-drawn SVGs
+      they replace - a real, accepted quality tradeoff (blurrier at this
+      size), not an oversight. The other icons here (checkboxes, grid,
+      tag, thing markers) have no equivalent standalone UDB icon asset to
+      swap in and stay hand-drawn.
 - [x] `Core.Undo`: command-based undo/redo stack (pure Core, no Godot).
       Deliberately NOT a port of UDB's actual `UndoManager` - that's a
       1400-line byte-level binary diff/snapshot system tightly coupled to
