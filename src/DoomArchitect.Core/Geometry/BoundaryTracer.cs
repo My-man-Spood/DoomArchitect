@@ -70,34 +70,53 @@ public static class BoundaryTracer
         Walk(new LinedefSide(startLinedef, startFront), new LinedefSide(endLinedef, endFront), turnAtEnds);
 
     /// <summary>
-    /// Per-linedef interior/exterior determination - geometry-driven,
-    /// not a global clockwise/counterclockwise polygon-winding shortcut,
-    /// which only ever works for a single simple polygon and breaks down
-    /// once stitching can produce a self-touching or multiply-connected
-    /// shape. Front is interior if tracing from the front side finds a
-    /// genuinely valid, self-containing boundary
-    /// (<see cref="FindPotentialSectorAt"/> already does the trace +
-    /// build-loop + validate-own-side-point-is-contained work this
-    /// needs); otherwise falls back to checking whether the *back* side's
-    /// own trace is valid instead - if it is, front is not interior; if
-    /// neither side traces to a valid boundary, defaults to front being
-    /// interior.
+    /// Per-linedef interior/exterior determination. Deliberately uses a
+    /// bare self-closing <see cref="Walk"/> here, not
+    /// <see cref="FindPotentialSectorAt"/> - a real, confirmed bug this
+    /// fixes: <see cref="FindPotentialSectorAt"/>'s own outer-boundary
+    /// retry (<see cref="FindOuterLines"/>'s rightward ray-cast) is meant
+    /// for actually *building* a sector once the correct side is already
+    /// known, not for *finding* which side that is. A loop drawn entirely
+    /// inside another sector, wound counter-clockwise, fails the bare
+    /// front-side trace's own containment test - reusing
+    /// <see cref="FindPotentialSectorAt"/> here would then retry outward
+    /// and "succeed" by finding the *containing* sector's own boundary
+    /// (with this loop as its hole), wrongly concluding front is interior
+    /// when it's actually the loop's exterior - punching a hole in the
+    /// parent sector instead of drawing a standalone one inside it.
     ///
-    /// One flagged simplification: UDB's own fallback check is subtly
-    /// different - it tests whether the *front* side's own point falls
-    /// inside the *back* trace's own polygon, not merely whether the back
-    /// trace is independently valid. Ported here as "does the back trace
-    /// succeed at all" instead, reusing <see cref="FindPotentialSectorAt"/>'s
-    /// own already-correct containment validation rather than re-deriving
-    /// a second, parallel polygon-area/intersection routine - should be
-    /// behaviorally equivalent in practice, not verified byte-for-byte
-    /// against every possible pathological shape.
+    /// The fix: trace only the raw loop each side of this linedef would
+    /// close on (no outward retry), and settle interior/exterior by
+    /// polygon area and containment alone - front is interior unless its
+    /// own raw trace has real area and doesn't contain its own side
+    /// point, in which case the back trace's own area/containment decides
+    /// instead. Defaults to front whenever a trace is missing/degenerate.
     /// </summary>
     public static bool DetermineFrontInterior(MapData map, Linedef linedef)
     {
-        if (FindPotentialSectorAt(map, linedef, front: true) != null) return true;
-        return FindPotentialSectorAt(map, linedef, front: false) == null;
+        var front = new LinedefSide(linedef, true);
+        var frontLoop = BuildLoop(RawTrace(front));
+        var frontSidePoint = SidePoint(front);
+
+        if (frontLoop != null && HasArea(frontLoop) && !frontLoop.Contains(frontSidePoint))
+        {
+            var back = new LinedefSide(linedef, false);
+            var backLoop = BuildLoop(RawTrace(back));
+            return backLoop == null || !HasArea(backLoop) || backLoop.Contains(frontSidePoint);
+        }
+
+        return true;
     }
+
+    /// <summary>The raw closed loop <paramref name="side"/> would trace on its own, with no outer-boundary widening - see <see cref="DetermineFrontInterior"/>'s own remarks on why that distinction matters here.</summary>
+    private static List<LinedefSide> RawTrace(LinedefSide side)
+    {
+        var path = Walk(side, side, turnAtEnds: true);
+        return path == null ? new List<LinedefSide>() : TrimClosingDuplicate(path);
+    }
+
+    private static bool HasArea(Loop loop) =>
+        MathF.Abs(PolygonWinding.SignedArea(loop.Vertices.Select(v => v.Position).ToArray())) > 0.001f;
 
     /// <summary>
     /// Traces from <paramref name="start"/> and validates the result is

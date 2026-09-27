@@ -322,14 +322,14 @@ public sealed class DrawOverlayHandler
 
 			if (i > 0)
 			{
-				DrawSegment(target, _camera.Project(_points[i - 1].Position), center, StitchColor(_points[i]));
+				DrawSegment(target, _points[i - 1].Position, _points[i].Position, StitchColor(_points[i]));
 				DrawLengthLabel(target, _points[i - 1].Position, _points[i].Position);
 			}
 		}
 
 		if (_hasCursor)
 		{
-			DrawSegment(target, _camera.Project(_points[^1].Position), _camera.Project(_previewPoint.Position), StitchColor(_previewPoint));
+			DrawSegment(target, _points[^1].Position, _previewPoint.Position, StitchColor(_previewPoint));
 			DrawLengthLabel(target, _points[^1].Position, _previewPoint.Position);
 		}
 	}
@@ -348,22 +348,39 @@ public sealed class DrawOverlayHandler
 	/// actually snap onto). Solid, not dashed - see this file's own class
 	/// remarks on the "dashed" premise in TODO.md having been wrong.
 	/// </summary>
-	private void DrawSegment(CanvasItem target, Vector2 screenStart, Vector2 screenEnd, Color color)
+	private void DrawSegment(CanvasItem target, MapVector2 start, MapVector2 end, Color color)
 	{
-		target.DrawLine(screenStart, screenEnd, color, LineWidth);
-		DrawDirectionTick(target, screenStart, screenEnd, color);
+		target.DrawLine(_camera.Project(start), _camera.Project(end), color, LineWidth);
+		DrawDirectionTick(target, start, end, color);
 	}
 
-	/// <summary>A short tick off the segment's own midpoint, along its screen-space perpendicular - drawn toward the opposite side from <see cref="DrawLengthLabel"/>'s own offset so the two never overlap.</summary>
-	private static void DrawDirectionTick(CanvasItem target, Vector2 screenStart, Vector2 screenEnd, Color color)
+	/// <summary>
+	/// A short tick off the segment's own midpoint, toward its front side -
+	/// the same map-space "right of Start-&gt;End" rule
+	/// <see cref="LinedefOverlayHandler.DrawFrontIndicator"/>/<see cref="BoundaryTracer"/>
+	/// use, so a clockwise-drawn loop shows its nubs on the inside and a
+	/// counter-clockwise one shows them on the outside, matching which
+	/// side the sector actually ends up on. Computed in map space and
+	/// projected (rather than taking a perpendicular of the already-
+	/// projected screen line) since the 2D view's projection doesn't
+	/// preserve rotational handedness - the same map-space formula applied
+	/// after projecting lands on the opposite screen side.
+	/// </summary>
+	private void DrawDirectionTick(CanvasItem target, MapVector2 start, MapVector2 end, Color color)
 	{
-		var screenDelta = screenEnd - screenStart;
-		if (screenDelta.LengthSquared() < 1f) return;
+		var delta = end - start;
+		if (delta.LengthSquared() < 0.0001f) return;
 
-		var direction = screenDelta.Normalized();
-		var perpendicular = new Vector2(-direction.Y, direction.X);
-		var midpoint = (screenStart + screenEnd) / 2f;
-		target.DrawLine(midpoint, midpoint - perpendicular * DirectionTickLengthPixels, color, LineWidth);
+		var direction = MapVector2.Normalize(delta);
+		var rightNormal = new MapVector2(direction.Y, -direction.X);
+		var midpoint = (start + end) / 2f;
+
+		var screenMidpoint = _camera.Project(midpoint);
+		var screenProbe = _camera.Project(midpoint + rightNormal);
+		var screenDirection = screenProbe - screenMidpoint;
+		if (screenDirection.LengthSquared() < 0.0001f) return;
+
+		target.DrawLine(screenMidpoint, screenMidpoint + screenDirection.Normalized() * DirectionTickLengthPixels, color, LineWidth);
 	}
 
 	/// <summary>

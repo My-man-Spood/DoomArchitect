@@ -17,6 +17,46 @@ public class DrawLoopCommandTests
     private static DrawLoopCommand StandaloneCommand(MapData map, IReadOnlyList<Vector2> positions) =>
         new(map, positions.Select(DrawPoint.AtNewPosition).ToList());
 
+    /// <summary>
+    /// The bug: a loop drawn entirely inside another sector, wound
+    /// counter-clockwise, used to punch a hole in the *parent* sector
+    /// instead of becoming its own standalone nested sector - the same
+    /// shape wound clockwise (see the pillar tests above) already worked.
+    /// Root cause was <see cref="BoundaryTracer.DetermineFrontInterior"/>
+    /// reusing <see cref="BoundaryTracer.FindPotentialSectorAt"/> (whose
+    /// outer-boundary retry is meant for actually building a sector, not
+    /// for finding which side is interior) to decide interior/exterior:
+    /// when the counter-clockwise loop's own direct trace failed its
+    /// containment check, that retry widened outward and "found" the
+    /// room's own boundary instead, wrongly concluding the loop's
+    /// exterior side was interior.
+    /// </summary>
+    [Fact]
+    public void Do_LoopEntirelyInsideAnotherSector_CreatesAStandaloneSectorRegardlessOfWindingDirection()
+    {
+        var map = new MapData();
+        var (room, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 400), new Vector2(400, 400), new Vector2(400, 0));
+
+        var clockwise = new[] { new Vector2(50, 50), new Vector2(50, 150), new Vector2(150, 150), new Vector2(150, 50) };
+        var counterclockwise = new[] { new Vector2(250, 50), new Vector2(350, 50), new Vector2(350, 150), new Vector2(250, 150) };
+        Assert.True(PolygonWinding.IsClockwise(clockwise));
+        Assert.False(PolygonWinding.IsClockwise(counterclockwise));
+
+        StandaloneCommand(map, clockwise).Do();
+        StandaloneCommand(map, counterclockwise).Do();
+
+        Assert.Equal(3, map.Sectors.Count);
+        var nested = map.Sectors.Where(s => s != room).ToList();
+        Assert.Equal(2, nested.Count);
+        Assert.All(nested, s => Assert.Equal(4, s.Sidedefs.Count));
+        Assert.All(nested, s => Assert.All(s.Sidedefs, sd => Assert.Same(room, PartnerSector(sd))));
+        // The room only ever grew by the 8 sides facing these two
+        // sectors' own exteriors - it never absorbed either one's
+        // interior as a hole in its own boundary.
+        Assert.Equal(12, room.Sidedefs.Count);
+    }
+
     [Fact]
     public void Do_StandaloneLoop_CreatesOneSelfContainedSectorMatchingPhase1Defaults()
     {
