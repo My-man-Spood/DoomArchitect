@@ -81,6 +81,10 @@ public partial class MapView : Node3D
 	private readonly HashSet<Linedef> _selectedLinedefs3D = new();
 	private readonly HashSet<Thing> _selectedThings3D = new();
 
+	/// <summary>The copied wall texture and floor/ceiling flat - see <see cref="HandleTextureCopy"/>/<see cref="HandleTexturePaste"/>.</summary>
+	private string _copiedWallTexture;
+	private string _copiedFlatTexture;
+
 	public override void _Ready()
 	{
 		KeyBindings.Bootstrap();
@@ -542,6 +546,86 @@ public partial class MapView : Node3D
 
 		_undoStack.Execute(new CommandGroup(commands));
 		foreach (var sector in dirtySectors) _map.MarkDirty(sector);
+	}
+
+	/// <summary>
+	/// Copies whichever texture is under the crosshair into both texture
+	/// buffers (<see cref="_copiedWallTexture"/>, <see cref="_copiedFlatTexture"/>)
+	/// at once - textures and flats are the same pool in every game
+	/// configuration this project targets (GZDoom/ZDoom-family UDMF), so
+	/// there's no separate-namespace case to keep them apart for, matching
+	/// the same call <see cref="DoomArchitect.Core.Textures.TextureSet.GetWallTexture"/>
+	/// already makes. Always reads the live target directly, never the
+	/// current selection, so copy is always from whatever's actually under
+	/// the mouse. A Thing target is a no-op - it isn't a textured surface.
+	/// </summary>
+	private void HandleTextureCopy()
+	{
+		if (_currentTarget is not { } target) return;
+
+		string texture;
+		if (target.Kind == TargetSurfaceKind.Wall)
+		{
+			var segment = target.WallSegment!.Value;
+			texture = LinedefWallBuilder.GetPartTexture(segment.Side, segment.PartKind);
+		}
+		else if (target.Kind == TargetSurfaceKind.Floor)
+		{
+			texture = target.Sector!.FloorTexture;
+		}
+		else if (target.Kind == TargetSurfaceKind.Ceiling)
+		{
+			texture = target.Sector!.CeilingTexture;
+		}
+		else
+		{
+			return;
+		}
+
+		_copiedWallTexture = texture;
+		_copiedFlatTexture = texture;
+	}
+
+	/// <summary>
+	/// Pastes whichever buffer matches the live target's type (see
+	/// <see cref="HandleTextureCopy"/>), doing nothing if that buffer is
+	/// still empty. Reachable via the rebindable <c>paste_selection</c>
+	/// action (Ctrl+V by default) or Middle Mouse Button.
+	///
+	/// Acts on just the live target, never the whole selection - same
+	/// reasoning as <see cref="AdjustTargetHeight"/>/<see cref="HandleTextureNudge"/>:
+	/// this project's selection model tracks which whole Linedef/Sector is
+	/// selected, never which specific surface of each.
+	/// </summary>
+	private void HandleTexturePaste()
+	{
+		if (_currentTarget is not { } target) return;
+
+		if (target.Kind == TargetSurfaceKind.Wall)
+		{
+			if (_copiedWallTexture == null) return;
+			var segment = target.WallSegment!.Value;
+			var side = segment.Side;
+			var partKind = segment.PartKind;
+			var oldTexture = LinedefWallBuilder.GetPartTexture(side, partKind);
+			_undoStack.Execute(new SetPropertyCommand<Sidedef, string>(
+				side,
+				(s, v) => LinedefWallBuilder.SetPartTexture(s, partKind, v),
+				oldTexture, _copiedWallTexture,
+				s => _map.MarkDirty(s.Sector)));
+		}
+		else if (target.Kind is TargetSurfaceKind.Floor or TargetSurfaceKind.Ceiling)
+		{
+			if (_copiedFlatTexture == null) return;
+			var sector = target.Sector!;
+			var isFloor = target.Kind == TargetSurfaceKind.Floor;
+			var oldTexture = isFloor ? sector.FloorTexture : sector.CeilingTexture;
+			_undoStack.Execute(new SetPropertyCommand<Sector, string>(
+				sector,
+				isFloor ? (s, v) => s.FloorTexture = v : (s, v) => s.CeilingTexture = v,
+				oldTexture, _copiedFlatTexture,
+				s => _map.MarkDirty(s)));
+		}
 	}
 
 	/// <summary>
@@ -1046,6 +1130,15 @@ public partial class MapView : Node3D
 			return;
 		}
 
+		// Middle Mouse Button pastes the copied texture - a raw mouse-button
+		// check rather than a rebindable action, same as select/edit above:
+		// KeyBindingRegistry/InputMap only bind keyboard InputEventKeys.
+		if (_in3D && @event is InputEventMouseButton { ButtonIndex: MouseButton.Middle, Pressed: true })
+		{
+			HandleTexturePaste();
+			return;
+		}
+
 		// Texture-offset nudging (UDB's own real movetextureleft/right/up/down*
 		// actions all set `repeat = true` - held-down-arrow-keeps-nudging is
 		// the real behavior, not a single-shot press) - handled here, before
@@ -1101,6 +1194,21 @@ public partial class MapView : Node3D
 			var axisSwap = Input.IsActionPressed("texture_auto_align_axis_swap_modifier");
 			var both = Input.IsActionPressed("texture_auto_align_both_modifier");
 			HandleTextureAutoAlign(alignX: !axisSwap, alignY: axisSwap || both);
+			return;
+		}
+
+		if (_in3D && key.IsActionPressed("texture_copy"))
+		{
+			HandleTextureCopy();
+			return;
+		}
+
+		// Ctrl+V also pastes the copied texture - this project has no
+		// general map-selection copy/paste yet, so there's nothing else
+		// for it to do in 3D mode.
+		if (_in3D && key.IsActionPressed("paste_selection"))
+		{
+			HandleTexturePaste();
 			return;
 		}
 

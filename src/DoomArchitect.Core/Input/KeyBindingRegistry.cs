@@ -45,8 +45,8 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("mode_draw", CategoryModes, "Draw Mode", "Switches to Draw Lines mode.", new KeyBinding("W")),
         new KeyBindingDefinition("toggle_2d_3d", CategoryModes, "Toggle 2D/3D View", "Switches between the 2D top-down view and the 3D visual view.", new KeyBinding("Tab")),
 
-        new KeyBindingDefinition("pan_view_modifier", CategoryView, "Pan View", "While held, moving the mouse pans the 2D view instead of interacting with the map - UDB's own real pan_view action.", new KeyBinding("Space")),
-        new KeyBindingDefinition("toggle_tag_indicators", CategoryView, "Toggle Tag Indicators", "Toggles sector tag labels and hover-triggered tag arrows - UDB's own real gztoggleeventlines/ViewSelectionEffects, combined into one toggle here.", new KeyBinding("I")),
+        new KeyBindingDefinition("pan_view_modifier", CategoryView, "Pan View", "While held, moving the mouse pans the 2D view instead of interacting with the map.", new KeyBinding("Space")),
+        new KeyBindingDefinition("toggle_tag_indicators", CategoryView, "Toggle Tag Indicators", "Toggles sector tag labels and hover-triggered tag arrows.", new KeyBinding("I")),
 
         new KeyBindingDefinition("toggle_snap", CategoryGrid, "Toggle Grid Snap", "Toggles whether new/moved geometry snaps to the grid.", new KeyBinding("G")),
         new KeyBindingDefinition("toggle_dynamic_grid", CategoryGrid, "Toggle Dynamic Grid Size", "Toggles automatically adjusting grid size with zoom level.", new KeyBinding("D")),
@@ -67,6 +67,8 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("texture_auto_align", CategoryTexture, "Auto-Align Texture", "Aligns the targeted wall's texture with its same-textured neighbors.", new KeyBinding("A")),
         new KeyBindingDefinition("texture_auto_align_axis_swap_modifier", CategoryTexture, "Auto-Align Vertically Instead", "While held, auto-align affects the texture's vertical offset instead of horizontal.", new KeyBinding("Shift")),
         new KeyBindingDefinition("texture_auto_align_both_modifier", CategoryTexture, "Auto-Align Both Axes", "While held, auto-align affects both the texture's horizontal and vertical offset.", new KeyBinding("Ctrl")),
+        new KeyBindingDefinition("texture_copy", CategoryTexture, "Copy Texture", "Copies the targeted wall/floor/ceiling's texture. Paste with Ctrl+V or Middle Mouse Button (not rebindable).", new KeyBinding("C", Ctrl: true)),
+        new KeyBindingDefinition("paste_selection", CategoryEdit, "Paste", "Pastes the copied texture onto the targeted wall/floor/ceiling.", new KeyBinding("V", Ctrl: true)),
 
         new KeyBindingDefinition("marquee_add_modifier", CategoryMarquee, "Add to Selection", "While held, a marquee selection adds to the current selection instead of replacing it.", new KeyBinding("Shift")),
         new KeyBindingDefinition("marquee_subtract_modifier", CategoryMarquee, "Subtract from Selection", "While held, a marquee selection removes from the current selection instead of replacing it - held together with Add to Selection, it intersects instead.", new KeyBinding("Ctrl")),

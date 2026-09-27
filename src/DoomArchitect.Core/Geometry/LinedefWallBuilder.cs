@@ -323,6 +323,18 @@ public static class LinedefWallBuilder
         _ => throw new ArgumentOutOfRangeException(nameof(part)),
     };
 
+    /// <summary>The write side of <see cref="GetPartTexture"/> - which of a sidedef's three texture properties a <see cref="WallPartKind"/> writes to.</summary>
+    public static void SetPartTexture(Sidedef side, WallPartKind part, string texture)
+    {
+        switch (part)
+        {
+            case WallPartKind.Upper: side.UpperTexture = texture; break;
+            case WallPartKind.Lower: side.LowerTexture = texture; break;
+            case WallPartKind.Middle: side.MiddleTexture = texture; break;
+            default: throw new ArgumentOutOfRangeException(nameof(part));
+        }
+    }
+
     /// <summary>
     /// UDB's own real classic <c>ML_DONTPEGBOTTOM</c> bit (value 16,
     /// verified directly against its own game-configuration data) for a
