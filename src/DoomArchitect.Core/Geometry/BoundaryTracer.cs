@@ -252,7 +252,7 @@ public static class BoundaryTracer
             var candidate = FindUnclaimedVertexInside(map, outerLoop, claimed, ignoredStarts);
             if (candidate == null) return;
 
-            var startSide = FirstOutgoingSide(candidate);
+            var startSide = FindOutwardSide(candidate);
             if (startSide == null)
             {
                 ignoredStarts.Add(candidate);
@@ -310,15 +310,54 @@ public static class BoundaryTracer
         return best;
     }
 
-    private static LinedefSide? FirstOutgoingSide(Vertex vertex)
+    /// <summary>
+    /// UDB's own real deterministic hole-trace starting side, at the
+    /// right-most as-yet-unclaimed vertex found inside the outer loop -
+    /// *not* whichever of its linedefs happens to come first in
+    /// <see cref="Vertex.Linedefs"/> (this project's own earlier,
+    /// incorrect approach): since every linedef touching this vertex
+    /// necessarily points away from it (it's the right-most point in
+    /// this whole region), a plain test point 100 units to its own
+    /// *right* is guaranteed to sit outside whatever loop gets traced
+    /// from here, regardless of which side of that linedef the walk
+    /// starts from - matching UDB's own real <c>FindInnerLines</c>
+    /// exactly. The wrong-side-first-found bug this fixes: an existing,
+    /// already-partially-owned island sitting inside a brand-new loop
+    /// (e.g. a pillar's own boundary, its interior side already
+    /// belonging to the pillar's own sector, when a new sector is drawn
+    /// as a border around it) could pick that already-occupied interior
+    /// side as the "start", which the very next containment check
+    /// correctly rejects as not a real hole - but with no fallback, the
+    /// whole island was then silently skipped rather than retried from
+    /// its own genuinely unclaimed exterior side, leaving the new
+    /// sector's own boundary un-holed and creating a mesh that
+    /// physically overlaps the very island it was drawn around.
+    /// </summary>
+    private static LinedefSide? FindOutwardSide(Vertex vertex)
     {
+        const float targetAngle = MathF.PI / 2f;
+
+        Linedef? found = null;
+        var bestDelta = float.MaxValue;
+
         foreach (var linedef in vertex.Linedefs)
         {
-            if (linedef.Start == vertex) return new LinedefSide(linedef, true);
-            if (linedef.End == vertex) return new LinedefSide(linedef, false);
+            var lineAngle = GeometryMath.Angle(linedef.Start.Position, linedef.End.Position);
+            if (linedef.End == vertex) lineAngle += MathF.PI;
+
+            var delta = GeometryMath.AngleDifference(targetAngle, lineAngle);
+            if (found == null || delta < bestDelta)
+            {
+                found = linedef;
+                bestDelta = delta;
+            }
         }
 
-        return null;
+        if (found == null) return null;
+
+        var testPosition = vertex.Position + new Vector2(100f, 0f);
+        var front = GeometryMath.SideOfLine(found.Start.Position, found.End.Position, testPosition) < 0f;
+        return new LinedefSide(found, front);
     }
 
     /// <summary>
@@ -422,7 +461,7 @@ public static class BoundaryTracer
     }
 
     /// <summary>A point just off to the side <paramref name="side"/> represents, used to test which traced loop actually contains it.</summary>
-    private static Vector2 SidePoint(LinedefSide side)
+    internal static Vector2 SidePoint(LinedefSide side)
     {
         const float offset = 0.1f;
 

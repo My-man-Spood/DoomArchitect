@@ -73,11 +73,14 @@ public readonly struct DrawPoint
 ///
 /// Every edge's *interior* side always resolves via
 /// <see cref="BoundaryTracer.FindPotentialSectorAt"/> into a brand-new
-/// sector - <see cref="DefaultFloorTexture"/>/etc. if the traced boundary
-/// borders nothing existing, or a full property copy from whichever
-/// existing sector the trace finds first (matching side of the boundary
-/// first, then the opposite side - UDB's own real ambiguous-neighbor
-/// resolution order, not nearest/largest). Every edge's *exterior* side
+/// sector - a full property copy from whichever existing sector the
+/// trace finds first (matching side of the boundary first, then the
+/// opposite side - UDB's own real ambiguous-neighbor resolution order,
+/// not nearest/largest); failing that, UDB's own real nearest-existing-
+/// linedef fallback (a loop drawn entirely inside another sector,
+/// touching none of its edges, still inherits that sector); and only
+/// <see cref="DefaultFloorTexture"/>/etc. if even that finds nothing at
+/// all (a shape drawn entirely into the void). Every edge's *exterior* side
 /// either joins an existing neighbor sector directly (no new sector) or
 /// stays void, exactly matching UDB's own real interior/exterior split.
 ///
@@ -226,8 +229,9 @@ public sealed class DrawLoopCommand : ICommand
         // so every interior side needs to exist before any exterior side
         // is resolved.
         var sidesCreated = false;
-        foreach (var linedef in newLinedefs) sidesCreated |= ResolveInteriorSide(linedef, front: frontInterior[linedef], splittingOnly);
-        foreach (var linedef in newLinedefs) sidesCreated |= ResolveExteriorSide(linedef, front: !frontInterior[linedef]);
+        var newLinedefSet = new HashSet<Linedef>(newLinedefs);
+        foreach (var linedef in newLinedefs) sidesCreated |= ResolveInteriorSide(linedef, front: frontInterior[linedef], splittingOnly, existingLinedefs);
+        foreach (var linedef in newLinedefs) sidesCreated |= ResolveExteriorSide(linedef, front: !frontInterior[linedef], newLinedefSet);
 
         GeometryStitcher.FlipBackwardLinedefs(newLinedefs, undoActions);
 
@@ -364,7 +368,7 @@ public sealed class DrawLoopCommand : ICommand
     /// void alongside that split. Returns whether a sector was actually
     /// created here, for the caller's own sideless-cleanup bookkeeping.
     /// </summary>
-    private bool ResolveInteriorSide(Linedef linedef, bool front, bool splittingOnly)
+    private bool ResolveInteriorSide(Linedef linedef, bool front, bool splittingOnly, IReadOnlyList<Linedef> existingLinedefs)
     {
         if ((front ? linedef.Front : linedef.Back) != null) return false; // an earlier edge's own trace already covered this one
 
@@ -374,12 +378,12 @@ public sealed class DrawLoopCommand : ICommand
         var matching = FindMatchingSidedefInTrace(trace);
         if (matching == null && splittingOnly) return false;
 
-        CreateAndPopulateSector(trace, matching ?? FindOppositeSidedefInTrace(trace));
+        CreateAndPopulateSector(trace, matching ?? FindOppositeSidedefInTrace(trace), existingLinedefs);
         return true;
     }
 
     /// <summary>Returns whether an existing neighbor sector was actually joined here, for the caller's own sideless-cleanup bookkeeping.</summary>
-    private bool ResolveExteriorSide(Linedef linedef, bool front)
+    private bool ResolveExteriorSide(Linedef linedef, bool front, HashSet<Linedef> newLinedefSet)
     {
         if ((front ? linedef.Front : linedef.Back) != null) return false;
 
@@ -389,15 +393,24 @@ public sealed class DrawLoopCommand : ICommand
         var target = FindMatchingSidedefInTrace(trace);
         if (target == null) return false; // no neighbor to join onto - stays void, matching Phase 1's common case
 
-        // Every side in the trace, not just ones still void - an old
-        // sidedef in here already belongs to *some* sector (often
-        // target.Sector itself, but not always: a drawn line splitting
-        // an existing room needs that room's own untouched sidedefs
-        // redistributed too, which AttachOrRetargetSidedefTracked's own
-        // "already exists" branch handles by re-pointing rather than
-        // leaving it stale).
+        // UDB's own real Tools.JoinSector restriction - "we only want to
+        // modify our new lines when joining a sector (or it may break
+        // nearby self-referencing sectors)": unlike CreateAndPopulateSector's
+        // own real MakeSector (which legitimately claims every side in
+        // its own trace, old sidedefs included), a join never touches
+        // anything beyond this draw's own new linedefs. Skipping this
+        // filter used to actively corrupt already-correct topology: an
+        // island drawn earlier and fully enclosed by a *new* ring (e.g. a
+        // pillar, then a border sector drawn around it) has its own
+        // boundary rediscovered here as "another hole of the same outer
+        // sector" too - FindInnerLines has no notion of nesting depth, so
+        // it doesn't know the pillar is already correctly claimed by the
+        // border sector this same Do() just created moments ago - and
+        // retargeting it to the outer sector here would silently steal
+        // it straight back off of that border sector.
         foreach (var side in trace)
         {
+            if (!newLinedefSet.Contains(side.Linedef)) continue;
             AttachOrRetargetSidedefTracked(side.Linedef, side.Front, target.Sector);
         }
 
@@ -547,14 +560,49 @@ public sealed class DrawLoopCommand : ICommand
         newLinedefs.Add(CreateLinedefTracked(current, finalTarget));
     }
 
-    private void CreateAndPopulateSector(IReadOnlyList<LinedefSide> trace, Sidedef? source)
+    /// <param name="nearbyLines">
+    /// UDB's own real <c>MakeSector</c> "nearbylines" fallback - the
+    /// pre-draw snapshot of every existing linedef, consulted only when
+    /// <paramref name="source"/> is null (the trace touches nothing
+    /// existing at all, e.g. a brand-new closed loop drawn entirely
+    /// *inside* another sector's bounds without sharing any of its
+    /// edges/vertices - a real gap this fixes: such a sector used to
+    /// silently fall back to hardcoded defaults instead of inheriting the
+    /// sector it's nested in). Finds the nearest existing linedef to a
+    /// point just off this trace's own first entry and reads whichever
+    /// sector lies on the matching side of *that* line - exactly UDB's
+    /// own real proximity-based inheritance, not a point-in-polygon
+    /// "which sector contains this shape" containment test (UDB has no
+    /// such thing here either). Left null by <see cref="SplitOuterSectors"/>'s
+    /// own call, whose <paramref name="source"/> is always non-null.
+    /// </param>
+    private void CreateAndPopulateSector(IReadOnlyList<LinedefSide> trace, Sidedef? source, IReadOnlyList<Linedef>? nearbyLines = null)
     {
-        var floorHeight = source?.Sector.FloorHeight ?? DefaultFloorHeight;
-        var ceilingHeight = source?.Sector.CeilingHeight ?? DefaultCeilingHeight;
+        var sourceSector = source?.Sector;
+        Sector? nearestBasicSector = null;
+
+        if (sourceSector == null && nearbyLines != null && trace.Count > 0)
+        {
+            FindNearbySectorFallback(trace[0], nearbyLines, out sourceSector, out nearestBasicSector);
+        }
+
+        var floorHeight = sourceSector?.FloorHeight ?? nearestBasicSector?.FloorHeight ?? DefaultFloorHeight;
+        var ceilingHeight = sourceSector?.CeilingHeight ?? nearestBasicSector?.CeilingHeight ?? DefaultCeilingHeight;
         var newSector = map.CreateSector(floorHeight, ceilingHeight);
         undoActions.Add(() => map.RemoveSector(newSector));
 
-        if (source != null) CopySectorProperties(source.Sector, newSector);
+        if (sourceSector != null) CopySectorProperties(sourceSector, newSector);
+        else if (nearestBasicSector != null)
+        {
+            // UDB's own real "any side is better than no side" fallback:
+            // the nearest line's *opposite* side had a sector but its
+            // matching side didn't, so only basic texture/brightness
+            // settings are trustworthy here, not a full property/UDMF-
+            // field copy.
+            newSector.FloorTexture = nearestBasicSector.FloorTexture;
+            newSector.CeilingTexture = nearestBasicSector.CeilingTexture;
+            newSector.Brightness = nearestBasicSector.Brightness;
+        }
         else
         {
             newSector.FloorTexture = DefaultFloorTexture;
@@ -572,6 +620,27 @@ public sealed class DrawLoopCommand : ICommand
         {
             AttachOrRetargetSidedefTracked(side.Linedef, side.Front, newSector);
         }
+    }
+
+    private static void FindNearbySectorFallback(LinedefSide testSide, IReadOnlyList<Linedef> nearbyLines, out Sector? sourceSector, out Sector? nearestBasicSector)
+    {
+        sourceSector = null;
+        nearestBasicSector = null;
+
+        var testPoint = BoundaryTracer.SidePoint(testSide);
+        var nearest = GeometryStitcher.FindNearestLinedef(nearbyLines, testPoint);
+        if (nearest == null) return;
+
+        var sideOfLine = GeometryMath.SideOfLine(nearest.Start.Position, nearest.End.Position, testPoint);
+        var matching = sideOfLine < 0 ? nearest.Front : nearest.Back;
+        if (matching != null)
+        {
+            sourceSector = matching.Sector;
+            return;
+        }
+
+        var opposite = sideOfLine < 0 ? nearest.Back : nearest.Front;
+        if (opposite != null) nearestBasicSector = opposite.Sector;
     }
 
     /// <summary>

@@ -191,18 +191,24 @@ public class DrawLoopCommandTests
     /// <summary>
     /// A triangle bulging out from a *single* split point only ever
     /// touches the original box at that one vertex - it shares no actual
-    /// edge with it, so there is nothing for it to inherit properties
-    /// from or join onto (real UDB has this exact same limitation for a
-    /// point-only touch). This is the correct, expected outcome, not the
-    /// bug the user reported - see
-    /// <see cref="Do_LoopSharingAWholeExistingWallByBothEndpoints_ReusesItAsATwoSidedWall"/>
-    /// for the scenario that actually was broken (and is now fixed): two
-    /// consecutive drawn points landing on the SAME existing edge, which
-    /// should reuse that edge as a real, two-sided, property-inheriting
-    /// wall rather than duplicate it.
+    /// edge with it, so there is no sidedef anywhere in its own trace to
+    /// copy from directly. Confirmed directly against UDB's real
+    /// <c>Tools.MakeSector</c> source that this does *not* mean "use
+    /// defaults", though: its "nearbylines" fallback (always fed every
+    /// pre-draw-existing linedef, unconditionally - see
+    /// <see cref="DrawLoopCommand"/>'s own matching remarks) finds
+    /// whichever existing linedef is nearest to the new boundary and
+    /// inherits from the sector on its matching side regardless of
+    /// whether any actual edge is shared - here, the box's own bottom
+    /// wall. So this triangle *does* inherit the box's floor/ceiling
+    /// texture and brightness, exactly like
+    /// <see cref="Do_LoopEntirelyInsideAnotherSectorTouchingNothingOfIt_InheritsItsProperties"/>'s
+    /// fully-disconnected case - a single shared point is not a special
+    /// case in real UDB, just an even closer instance of "nearest
+    /// existing line".
     /// </summary>
     [Fact]
-    public void Do_LoopBulgingOutFromASplitPointOnAnExistingWall_TouchesAtAPointOnlyWithNoSharedWall()
+    public void Do_LoopBulgingOutFromASplitPointOnAnExistingWall_InheritsFromTheNearestWallByProximity()
     {
         var map = new MapData();
         var (originalSector, box) = map.CreateClosedSector(0, 128,
@@ -225,11 +231,134 @@ public class DrawLoopCommandTests
         command.Do();
 
         var newSector = map.Sectors.Single(s => s != originalSector);
-        Assert.Equal(DrawLoopCommand.DefaultFloorTexture, newSector.FloorTexture);
-        Assert.Equal(DrawLoopCommand.DefaultCeilingTexture, newSector.CeilingTexture);
-        Assert.Equal(DrawLoopCommand.DefaultBrightness, newSector.Brightness);
+        Assert.Equal(originalSector.FloorTexture, newSector.FloorTexture);
+        Assert.Equal(originalSector.CeilingTexture, newSector.CeilingTexture);
+        Assert.Equal(originalSector.Brightness, newSector.Brightness);
 
         Assert.DoesNotContain(map.Linedefs, l => l.Front != null && l.Back != null);
+    }
+
+    /// <summary>
+    /// The bug the user reported: a brand-new closed loop drawn entirely
+    /// *inside* another sector's own interior, sharing no vertex or edge
+    /// with its boundary at all, used to fall all the way through to
+    /// <see cref="DrawLoopCommand.DefaultFloorTexture"/>/etc. - the
+    /// direct-touch search naturally finds nothing (nothing is shared),
+    /// and there was no further fallback. Real UDB's own
+    /// <c>Tools.MakeSector</c> always has one more fallback past that:
+    /// the nearest *existing* linedef to the new boundary, by plain
+    /// proximity, regardless of whether it's actually touched - which
+    /// for a sector drawn inside another is necessarily one of that
+    /// sector's own walls.
+    /// </summary>
+    [Fact]
+    public void Do_LoopEntirelyInsideAnotherSectorTouchingNothingOfIt_InheritsItsProperties()
+    {
+        var map = new MapData();
+        var (originalSector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 200), new Vector2(200, 200), new Vector2(200, 0));
+        originalSector.FloorTexture = "MYFLOOR";
+        originalSector.CeilingTexture = "MYCEIL";
+        originalSector.Brightness = 111;
+
+        var innerSquare = new[]
+        {
+            new Vector2(50, 50), new Vector2(50, 100), new Vector2(100, 100), new Vector2(100, 50),
+        };
+        var command = StandaloneCommand(map, innerSquare);
+
+        command.Do();
+
+        var newSector = map.Sectors.Single(s => s != originalSector);
+        Assert.Equal(originalSector.FloorTexture, newSector.FloorTexture);
+        Assert.Equal(originalSector.CeilingTexture, newSector.CeilingTexture);
+        Assert.Equal(originalSector.FloorHeight, newSector.FloorHeight);
+        Assert.Equal(originalSector.CeilingHeight, newSector.CeilingHeight);
+        Assert.Equal(originalSector.Brightness, newSector.Brightness);
+    }
+
+    /// <summary>
+    /// The user's exact follow-up report: a pillar drawn (as its own,
+    /// separate draw session) inside a room, then a second, bigger
+    /// standalone loop drawn *around* that pillar (also fully inside the
+    /// room, sharing no edge with either) to form a border/ring sector
+    /// between the two. Before this fix, the border's own exterior-side
+    /// resolution (joining onto the room) re-discovered the pillar's
+    /// boundary as "just another hole of the room" too - hole discovery
+    /// has no notion of nesting depth, so it can't tell that the pillar
+    /// is already correctly nested *inside* the border, not directly
+    /// inside the room - and stole the pillar's already-correct sidedef
+    /// straight back off of the border sector that had just claimed it
+    /// moments earlier, leaving the border with no hole for the pillar at
+    /// all (its floor mesh overlapping the pillar's own footprint) and
+    /// the pillar's own exterior wrongly wired straight to the room
+    /// (skipping the border entirely) - exactly the broken 3D-mode hover
+    /// highlighting the user described.
+    /// </summary>
+    [Fact]
+    public void Do_LoopDrawnAroundAnAlreadyExistingNestedSector_CorrectlyInsertsItselfBetweenThemBoth()
+    {
+        var map = new MapData();
+        var (room, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 400), new Vector2(400, 400), new Vector2(400, 0));
+
+        var pillarPoints = new[] { new Vector2(150, 150), new Vector2(150, 250), new Vector2(250, 250), new Vector2(250, 150) };
+        StandaloneCommand(map, pillarPoints).Do();
+        var pillar = map.Sectors.Single(s => s != room);
+
+        var borderPoints = new[] { new Vector2(100, 100), new Vector2(100, 300), new Vector2(300, 300), new Vector2(300, 100) };
+        StandaloneCommand(map, borderPoints).Do();
+        var border = map.Sectors.Single(s => s != room && s != pillar);
+
+        // The pillar's own walls now face the border on their exterior
+        // side, not the room directly - the room no longer touches the
+        // pillar at all.
+        Assert.All(pillar.Sidedefs, sd => Assert.Same(border, PartnerSector(sd)));
+
+        // The border sector genuinely has a hole cut for the pillar (its
+        // own 4 outer walls plus the pillar's 4 inner-boundary sides),
+        // not just its own outer 4 walls with the pillar's footprint left
+        // unaccounted for.
+        Assert.Equal(8, border.Sidedefs.Count);
+
+        // The room, in turn, only ever touches the border's own outer
+        // boundary - the pillar was never (and is still not) a direct
+        // neighbor of the room.
+        Assert.All(map.Linedefs.Where(l => l.Front?.Sector == room || l.Back?.Sector == room),
+            l => Assert.DoesNotContain(pillarPoints, p => l.Start.Position == p || l.End.Position == p));
+    }
+
+    private static Sector? PartnerSector(Sidedef sidedef)
+    {
+        var other = sidedef.IsFront ? sidedef.Linedef.Back : sidedef.Linedef.Front;
+        return other?.Sector;
+    }
+
+    [Fact]
+    public void Undo_LoopDrawnAroundAnAlreadyExistingNestedSector_RestoresThePillarDirectlyToTheRoom()
+    {
+        var map = new MapData();
+        var (room, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 400), new Vector2(400, 400), new Vector2(400, 0));
+
+        var pillarPoints = new[] { new Vector2(150, 150), new Vector2(150, 250), new Vector2(250, 250), new Vector2(250, 150) };
+        StandaloneCommand(map, pillarPoints).Do();
+        var pillar = map.Sectors.Single(s => s != room);
+
+        var borderPoints = new[] { new Vector2(100, 100), new Vector2(100, 300), new Vector2(300, 300), new Vector2(300, 100) };
+        var borderCommand = StandaloneCommand(map, borderPoints);
+        borderCommand.Do();
+
+        borderCommand.Undo();
+
+        Assert.Equal(2, map.Sectors.Count);
+        Assert.Contains(room, map.Sectors);
+        Assert.Contains(pillar, map.Sectors);
+        Assert.All(pillar.Sidedefs, sd => Assert.Same(room, PartnerSector(sd)));
+        // The room's own 4 walls, plus the pillar's own 4 back-sidedefs -
+        // exactly its state right after the pillar's own (separate,
+        // unaffected) draw command finished, before border ever existed.
+        Assert.Equal(8, room.Sidedefs.Count);
     }
 
     /// <summary>
