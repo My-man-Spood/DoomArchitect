@@ -5,11 +5,10 @@ namespace DoomArchitect.Core.Undo;
 
 /// <summary>
 /// Standalone counterpart to the split step <see cref="DrawLoopCommand"/>
-/// performs internally as part of a larger drawn loop - UDB's own real
-/// Vertices-mode right-click-on-a-linedef action (<c>VerticesMode.OnEditBegin</c>'s
-/// "nearest linedef within range" branch): inserts a new vertex mid-line
-/// with no drawing session attached at all, just <see cref="MapData.SplitLinedef"/>
-/// plus its own undo.
+/// performs internally as part of a larger drawn loop - Vertices mode's
+/// right-click-on-a-linedef action: inserts a new vertex mid-line with
+/// no drawing session attached at all, just
+/// <see cref="MapData.SplitLinedef"/> plus its own undo.
 /// </summary>
 public sealed class SplitLinedefCommand : ICommand
 {

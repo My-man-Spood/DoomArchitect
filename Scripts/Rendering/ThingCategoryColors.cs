@@ -4,23 +4,12 @@ namespace DoomArchitect.Rendering;
 
 /// <summary>
 /// Resolves a <c>ThingTypeInfo.ColorIndex</c> (the real <c>color</c> `.cfg`
-/// field, 0-19) into an actual color for tinting the 2D Thing marker icon -
-/// UDB's own real shipped-default thing-color palette, not this project's
-/// own invention (an earlier version of this file used its own original
-/// colors; switched to UDB's real ones instead - more familiar to anyone
-/// coming from UDB, and there was no real reason to diverge here). Verified
-/// directly against UDB's own source: <c>Source/Core/Map/Thing.cs</c>
-/// resolves a thing's tint as
-/// <c>General.Colors.Colors[ti.Color + ColorCollection.THING_COLORS_OFFSET]</c>
-/// (falling back to index 0 - <c>THINGCOLOR00</c> - when
-/// <see cref="ThingTypeInfo.ColorIndex"/> is out of range, matching this
-/// class's own <see cref="Get"/> fallback), and
-/// <c>Source/Core/Rendering/ColorCollection.cs</c> assigns each
-/// <c>THINGCOLOR00</c>-<c>THINGCOLOR19</c> constant its real shipped-default
-/// <see cref="System.Drawing.Color"/> (a user's own live UDB installation
-/// can further customize these via its own settings, but the values below
-/// are UDB's own real *defaults*, the same ones a fresh UDB install
-/// actually ships).
+/// field, 0-19) into an actual color for tinting the 2D Thing marker icon.
+/// The palette below matches UDB's shipped-default <c>THINGCOLOR00</c>-
+/// <c>THINGCOLOR19</c> colors (<c>Source/Core/Rendering/ColorCollection.cs</c>);
+/// an out-of-range <see cref="ThingTypeInfo.ColorIndex"/> falls back to
+/// index 0, matching <c>Source/Core/Map/Thing.cs</c>'s own fallback and
+/// this class's own <see cref="Get"/>.
 /// </summary>
 public static class ThingCategoryColors
 {

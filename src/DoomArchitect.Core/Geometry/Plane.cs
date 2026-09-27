@@ -6,11 +6,10 @@ namespace DoomArchitect.Core.Geometry;
 /// Ray-vs-plane intersection on top of the BCL's own <see cref="Plane"/>
 /// (already exactly the general <c>Normal</c>/<c>D</c> representation
 /// needed here - a point <c>p</c> lies on the plane exactly when
-/// <c>Plane.DotCoordinate(plane, p) == 0</c>). Ported from UDB's own
-/// <c>Source/Core/Geometry/Plane.cs</c>, which is itself already fully
-/// general (never assumes a horizontal plane) - <see cref="Horizontal"/>
-/// is just this codebase's only current way to build one, since
-/// <see cref="Map.Sector"/> has no slope data yet. Writing the actual
+/// <c>Plane.DotCoordinate(plane, p) == 0</c>). Fully general (never assumes
+/// a horizontal plane) - <see cref="Horizontal"/> is just this codebase's
+/// only current way to build one, since <see cref="Map.Sector"/> has no
+/// slope data yet. Writing the actual
 /// ray-intersection math generally, rather than hardcoding "intersect
 /// Z = height", means floor/ceiling hit-testing (<see cref="MapRaycaster"/>)
 /// won't need touching at all once slopes exist - only how a sector's
@@ -27,8 +26,7 @@ public static class PlaneMath
     /// runs exactly parallel to the plane (no intersection at any t).
     /// Doesn't check <c>t &gt; 0</c> itself - a negative t (the plane is
     /// behind the ray's origin) is still a mathematically valid answer;
-    /// matches UDB's own <c>Plane.GetIntersection</c>, which leaves that
-    /// check to the caller.
+    /// that check is left to the caller.
     /// </summary>
     public static bool GetIntersection(this Plane plane, Vector3 origin, Vector3 direction, out double t)
     {

@@ -11,63 +11,54 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Linedef properties, ported from UDB's real <c>LinedefEditFormUDMF</c> -
-/// the largest of the three main property dialogs (see <c>TODO.md</c>),
-/// almost entirely because of its dynamic argument-editing UI. The tab
-/// strip mirrors the real dialog's 5 tabs (Properties/Front/Back/Comment/
-/// Custom) - Properties and Front/Back are live, Comment/Custom are
+/// Linedef properties - the largest of the three main property dialogs
+/// (see <c>TODO.md</c>), almost entirely because of its dynamic
+/// argument-editing UI. The tab strip has 5 tabs (Properties/Front/Back/
+/// Comment/Custom) - Properties and Front/Back are live, Comment/Custom are
 /// <see cref="SectorEditDialog"/>'s own established "placeholder tab,
 /// shape recognizable, not yet built" pattern.
 ///
 /// **The dynamic argument system** now lives in the shared
 /// <see cref="ActionArgumentsEditor"/> control (extracted from what was
 /// originally this class's own inline copy, once the Thing dialog needed
-/// the exact same behavior - see that class's own remarks for the real
-/// UDB verification and reasoning behind its manual enum/number toggle).
+/// the exact same behavior - see that class's own remarks for the manual
+/// enum/number toggle it implements).
 ///
 /// Action/arguments/Flags/Activation/Tag are all deliberately OK-only (no
 /// visual effect to preview), matching this project's established
 /// "gameplay-only fields aren't live-applied" rule. Flags and Activation
-/// are two separate real UDMF field groups (verified against UDB's own
-/// dialog, which keeps them apart even though both are just named UDMF
-/// booleans under the hood) - both rebuilt per game configuration the
-/// exact same way <see cref="SectorEditDialog.RebuildFlagsCheckboxes"/>
-/// already does for Sector's own Flags group, just parameterized over
-/// which container/key set/touched-set to use so the same method serves
-/// both groups here.
+/// are two separate UDMF field groups, kept apart even though both are
+/// just named UDMF booleans under the hood - both rebuilt per game
+/// configuration the exact same way
+/// <see cref="SectorEditDialog.RebuildFlagsCheckboxes"/> already does for
+/// Sector's own Flags group, just parameterized over which container/key
+/// set/touched-set to use so the same method serves both groups here.
 ///
-/// **Front/Back tabs** mirror UDB's real per-side layout: a "General"
-/// group for the whole-sidedef fields (the already-modeled, already-
-/// rendered <see cref="Sidedef.OffsetX"/>/<see cref="Sidedef.OffsetY"/> -
-/// real-time, like Sector's own height/texture fields - plus the shared,
-/// non-per-part <c>light</c>/<c>lightabsolute</c> pair, OK-only) and three
+/// **Front/Back tabs** each have a "General" group for the whole-sidedef
+/// fields (the already-modeled, already-rendered
+/// <see cref="Sidedef.OffsetX"/>/<see cref="Sidedef.OffsetY"/> - real-time,
+/// like Sector's own height/texture fields - plus the shared, non-per-part
+/// <c>light</c>/<c>lightabsolute</c> pair, OK-only) and three
 /// per-texture-part groups (Upper/Middle/Lower), each with a real-time
 /// <see cref="TexturePreviewEdit"/> (reusing <see cref="TextureBrowserDialog"/>
 /// in wall mode, exactly like <see cref="SectorEditDialog"/>'s own flat-mode
 /// usage of the same shared control) plus OK-only per-part offset/scale/
-/// light-override fields -
-/// <see cref="PartDefs"/> is the single source of truth for the real,
-/// genuinely distinct UDMF field-name suffixes (<c>_top</c>/<c>_mid</c>/
-/// <c>_bottom</c>) backing those three groups, verified directly against
-/// UDB's own <c>UniversalStreamReader</c>/<c>Writer</c> and
-/// <c>LinedefEditFormUDMF.cs</c> (all 18 per-part fields are genuinely
-/// separate storage, not UI aliases of a shared field). A side with no
-/// sidedef at all (a one-sided line's Back side) shows its whole tab's
-/// fields disabled - matching UDB's own real <c>backgroup.Enabled =
-/// (fl.Back != null)</c> - decided from the *first* selected linedef only
-/// (also matching UDB's real <c>ShowLinedefProps</c>, which seeds every
-/// field that way for a multi-selection); whatever is actually displayed
-/// and written, though, is computed across every selected linedef that
-/// does have that side (shared-or-blank, this project's own established
-/// convention elsewhere) rather than UDB's own literal "first line only"
-/// value-seeding - a deliberate, flagged divergence from UDB for
-/// consistency with how every other multi-select field in this project's
-/// dialogs already behaves. <see cref="OnConfirmed"/> still writes
-/// per-linedef, individually skipping any linedef that turns out not to
-/// have that side at all (matching UDB's own real per-linedef Apply
-/// guard), so a mixed one-sided/two-sided selection can never corrupt a
-/// one-sided line even though the tab itself was enabled from the first
-/// line's shape.
+/// light-override fields - <see cref="PartDefs"/> is the single source of
+/// truth for the genuinely distinct UDMF field-name suffixes
+/// (<c>_top</c>/<c>_mid</c>/<c>_bottom</c>) backing those three groups (all
+/// 18 per-part fields are genuinely separate storage, not UI aliases of a
+/// shared field). A side with no sidedef at all (a one-sided line's Back
+/// side) shows its whole tab's fields disabled, decided from the *first*
+/// selected linedef only; whatever is actually displayed and written,
+/// though, is computed across every selected linedef that does have that
+/// side (shared-or-blank, this project's own established convention
+/// elsewhere) rather than seeding purely from the first selected line - a
+/// deliberate divergence for consistency with how every other multi-select
+/// field in this project's dialogs already behaves. <see cref="OnConfirmed"/>
+/// still writes per-linedef, individually skipping any linedef that turns
+/// out not to have that side at all, so a mixed one-sided/two-sided
+/// selection can never corrupt a one-sided line even though the tab itself
+/// was enabled from the first line's shape.
 /// </summary>
 public partial class LinedefEditDialog : AcceptDialog
 {
@@ -90,12 +81,11 @@ public partial class LinedefEditDialog : AcceptDialog
 	/// <summary>
 	/// The single source of truth for the 3 texture parts: the scene's own
 	/// node-name suffix for each part's <see cref="GroupBox"/> ("Upper"/
-	/// "Middle"/"Lower", matching UDB's own real group titles), the node-
-	/// name prefix its child controls actually use ("Upper"/"Mid"/"Bottom" -
-	/// kept exactly as authored in the scene, not renamed to match the box
-	/// title), the real UDMF field-name suffix (<c>top</c>/<c>mid</c>/
-	/// <c>bottom</c>), and the corresponding <see cref="Sidedef"/> texture
-	/// accessor.
+	/// "Middle"/"Lower"), the node-name prefix its child controls actually
+	/// use ("Upper"/"Mid"/"Bottom" - kept exactly as authored in the scene,
+	/// not renamed to match the box title), the UDMF field-name suffix
+	/// (<c>top</c>/<c>mid</c>/<c>bottom</c>), and the corresponding
+	/// <see cref="Sidedef"/> texture accessor.
 	/// </summary>
 	private static readonly (string BoxSuffix, string FieldPrefix, string UdmfSuffix, Func<Sidedef, string> Get, Action<Sidedef, string> Set)[] PartDefs =
 	{
@@ -293,11 +283,10 @@ public partial class LinedefEditDialog : AcceptDialog
 
 	/// <summary>
 	/// Whether the whole tab is enabled is decided from the *first* selected
-	/// linedef only (matching UDB's real <c>backgroup.Enabled = (fl.Back !=
-	/// null)</c>); the values actually shown, though, are shared-or-blank
+	/// linedef only; the values actually shown, though, are shared-or-blank
 	/// across every selected linedef that has that side at all - see this
 	/// class's own remarks for why that's a deliberate divergence from
-	/// UDB's literal first-line-only value seeding.
+	/// seeding purely off the first selected line.
 	/// </summary>
 	private void SetupSideDisplay(SideControls controls, Func<Snapshot, SideSnapshot> getSnapshot, Func<Linedef, Sidedef> getSide)
 	{
@@ -337,7 +326,7 @@ public partial class LinedefEditDialog : AcceptDialog
 		}
 	}
 
-	/// <summary>Disables (and dims) the whole tab's field set outright rather than merely hiding it - matching UDB's real <c>Enabled = false</c> treatment for a one-sided line's Back side.</summary>
+	/// <summary>Disables (and dims) the whole tab's field set outright rather than merely hiding it, for a one-sided line's Back side.</summary>
 	private static void SetSideEnabled(SideControls controls, bool enabled)
 	{
 		controls.TabRoot.Modulate = enabled ? Colors.White : new Color(1, 1, 1, 0.5f);
@@ -400,9 +389,9 @@ public partial class LinedefEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// Wall-textures mode (real UDB's own <c>TextureSelectorControl</c>),
-	/// plus the current game configuration's own real <c>mixtexturesflats</c>
-	/// setting (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) - see
+	/// Wall-textures mode, plus the current game configuration's own real
+	/// <c>mixtexturesflats</c> setting
+	/// (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) - see
 	/// <see cref="SectorEditDialog.BrowseTexture"/>'s matching remarks.
 	/// </summary>
 	private void BrowseSideTexture(Func<Linedef, Sidedef> getSide, Func<Snapshot, SideSnapshot> getSnapshot, PartControls part, int partIndex)
@@ -538,7 +527,7 @@ public partial class LinedefEditDialog : AcceptDialog
 		if (commands.Count > 0) _undoStack.Execute(new CommandGroup(commands));
 	}
 
-	/// <summary>Skips outright when this particular linedef doesn't actually have this side - matching UDB's own real per-linedef Apply guard, so a mixed one-sided/two-sided selection can never corrupt a one-sided line even though the tab itself was enabled from the first selected linedef's own shape.</summary>
+	/// <summary>Skips outright when this particular linedef doesn't actually have this side, so a mixed one-sided/two-sided selection can never corrupt a one-sided line even though the tab itself was enabled from the first selected linedef's own shape.</summary>
 	private void AddSideCommands(List<ICommand> commands, Sidedef side, SideSnapshot snapshot, SideControls controls)
 	{
 		if (side == null || snapshot == null) return;

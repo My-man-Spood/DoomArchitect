@@ -4,13 +4,12 @@ using MapVector2 = System.Numerics.Vector2;
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
-/// Reads UDMF text into a <see cref="MapData"/>. A close port of UDB's
-/// own <c>UniversalStreamReader</c> (UniversalStreamReader.cs:135-497):
-/// same field defaults, same read order (vertices, then sectors, then
-/// linedefs - which resolve sidedefs on demand, by indexing directly into
-/// the raw parsed <c>sidedef</c> blocks, never pre-building sidedef
-/// objects nothing references), and the same "log a warning and drop"
-/// recovery for malformed references rather than aborting the whole load.
+/// Reads UDMF text into a <see cref="MapData"/>, matching UDB's own field
+/// defaults and read order: vertices, then sectors, then linedefs, which
+/// resolve sidedefs on demand by indexing directly into the raw parsed
+/// <c>sidedef</c> blocks rather than pre-building sidedef objects nothing
+/// references. Malformed references are logged as a warning and dropped
+/// rather than aborting the whole load.
 /// </summary>
 public static class UdmfReader
 {

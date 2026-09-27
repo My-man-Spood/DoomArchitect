@@ -4,15 +4,13 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
-/// Writes a <see cref="UdmfDocument"/> back to UDMF text. A close port of
-/// UDB's own <c>UniversalStreamWriter</c> (UniversalStreamWriter.cs:115-328):
-/// same block order (namespace, unknown blocks, vertices, linedefs,
-/// sidedefs, sectors, things) and the same per-block field-omission rules,
-/// which are inconsistent by design across block types - sector always
-/// writes its five core fields, sidedef omits offsets-when-zero and
-/// textures-when-"-", linedef always writes <c>sidefront</c>/<c>sideback</c>
-/// (as -1 when absent), thing omits <c>height</c> only when exactly 0
-/// (`UniversalStreamWriter.WriteThings`, lines 338-347).
+/// Writes a <see cref="UdmfDocument"/> back to UDMF text, in the same block
+/// order UDB uses (namespace, unknown blocks, vertices, linedefs, sidedefs,
+/// sectors, things) with the same per-block field-omission rules, which are
+/// inconsistent by design across block types - sector always writes its
+/// five core fields, sidedef omits offsets-when-zero and textures-when-"-",
+/// linedef always writes <c>sidefront</c>/<c>sideback</c> (as -1 when
+/// absent), thing omits <c>height</c> only when exactly 0.
 /// </summary>
 public static class UdmfWriter
 {

@@ -117,11 +117,9 @@ public sealed class WadFile : IResourceContainer
 
     /// <summary>
     /// Maps a <see cref="ResourceNamespace"/> onto the real WAD marker pair
-    /// that bounds it (verified against UDB's own game-configuration data,
-    /// e.g. <c>Doom_misc.cfg</c>/<c>ZDoom_misc.cfg</c>) and delegates to
-    /// <see cref="FindLumpsBetweenMarkers"/>. <see cref="ResourceNamespace.Graphics"/>
-    /// has no WAD equivalent at all - it's a PK3-only convention - so it
-    /// always returns empty here.
+    /// that bounds it and delegates to <see cref="FindLumpsBetweenMarkers"/>.
+    /// <see cref="ResourceNamespace.Graphics"/> has no WAD equivalent at all
+    /// - it's a PK3-only convention - so it always returns empty here.
     /// </summary>
     public IReadOnlyList<WadLump> FindNamespaceLumps(ResourceNamespace ns) => ns switch
     {

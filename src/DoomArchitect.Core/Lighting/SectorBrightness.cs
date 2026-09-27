@@ -4,24 +4,21 @@ namespace DoomArchitect.Core.Lighting;
 
 /// <summary>
 /// Converts a sector's raw light level (0-255) into a rendered brightness
-/// value - a close port of UDB's own <c>Renderer.CalculateBrightness</c>
-/// (<c>Source/Core/Rendering/Renderer.cs</c>), including its two real
-/// quirks:
+/// value, including two real quirks:
 ///
 /// - The "Doom light levels" curve: below 192, brightness drops off
 ///   faster than linear (<c>level' = 192 - (192-level)*1.5</c>), emulating
 ///   the banding of vanilla Doom's 32-entry COLORMAP lookup table rather
 ///   than a literal linear dimmer. Every vanilla game config has this on
-///   by default (UDB's own <c>doomlightlevels</c> setting) - hardcoded on
-///   here too, since there's no game-configuration system yet to make it
-///   selectable (see TODO.md).
+///   by default - hardcoded on here too, since there's no
+///   game-configuration system yet to make it selectable (see TODO.md).
 /// - "Fake contrast": a wall's own light level gets nudged +-16 purely
 ///   based on whether it runs exactly north-south or east-west on the map
 ///   - a vanilla Doom engine trick for depth perception, nothing to do
 ///   with any actual light source or direction. A diagonal wall gets no
 ///   adjustment at all, and this is skipped entirely once the sector's
-///   own light level is already 253 or higher (UDB's own threshold).
-///   Floors and ceilings never get this - only walls do.
+///   own light level is already 253 or higher. Floors and ceilings never
+///   get this - only walls do.
 /// </summary>
 public static class SectorBrightness
 {
@@ -49,15 +46,15 @@ public static class SectorBrightness
     /// direction vector along the map plane. Which end is "start" vs
     /// "end" doesn't matter: reversing a vector never changes whether its
     /// X or Y component is exactly zero, and both of a linedef's sides
-    /// get the exact same shade direction in UDB regardless of which one
-    /// is "front".
+    /// get the exact same shade direction regardless of which one is
+    /// "front".
     ///
-    /// UDB determines "runs north-south" vs "runs east-west" via an exact
-    /// switch on the wall's angle in degrees (0/90/180/270). This checks
-    /// the direction vector's components for exact zero instead, which is
-    /// mathematically the same condition (a purely horizontal or vertical
-    /// line has one axis-delta of exactly zero) reached a different way -
-    /// flagged here as a same-behavior restructuring, not a UDB deviation.
+    /// "Runs north-south" vs "runs east-west" is determined here by
+    /// checking the direction vector's components for exact zero, rather
+    /// than switching on the wall's angle in degrees - mathematically the
+    /// same condition (a purely horizontal or vertical line has one
+    /// axis-delta of exactly zero) reached a different way, not a
+    /// behavior change.
     /// </summary>
     public static int CalculateForWall(int lightLevel, Vector2 wallDirection)
     {

@@ -2,11 +2,9 @@ namespace DoomArchitect.Core.Map;
 
 /// <summary>
 /// A map element's bag of format-recognized fields that aren't modeled as
-/// typed properties - UDB's own naming and shape (a <c>Dictionary</c>
-/// subclass), kept deliberately close so porting UDB's dialog logic later
-/// needs less translation. UDB's <c>Owner</c>/<c>BeforeFieldsChange()</c>
-/// (its automatic undo-snapshot hook) are not ported - see
-/// <see cref="UniValue"/>'s doc comment for why - and its mixed-value
+/// typed properties. The automatic undo-snapshot hook
+/// (<c>Owner</c>/<c>BeforeFieldsChange()</c>) isn't ported - see
+/// <see cref="UniValue"/>'s doc comment for why - and mixed-value
 /// comparison helpers (<c>AllFieldsMatch</c>/<c>CustomFieldsMatch</c>/
 /// <c>UniValuesMatch</c>/<c>ValuesMatch</c>) are deferred to whenever a
 /// multi-select-editing dialog actually needs them.

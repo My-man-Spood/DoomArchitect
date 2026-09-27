@@ -2,14 +2,11 @@ namespace DoomArchitect.Core.Configuration;
 
 /// <summary>
 /// Reads/writes an ordered list of strings as a <c>resources { resource0
-/// = "..."; resource1 = "..."; }</c> block - the same numbered-key idiom
-/// UDB's own <c>Configuration</c>-backed code uses for ordered lists
-/// (<c>taglabel1</c>, <c>document0</c>, etc., confirmed in
-/// <c>Source/Core/Map/MapOptions.cs</c>), needed because the underlying
-/// storage is a plain dictionary with no guaranteed enumeration order on
-/// either side of this parser. Shared by <see cref="AppSettings"/> and
-/// <see cref="MapSettings"/>, the two things that persist an ordered
-/// resource list.
+/// = "..."; resource1 = "..."; }</c> block - a numbered-key idiom needed
+/// because the underlying storage is a plain dictionary with no guaranteed
+/// enumeration order on either side of this parser. Shared by
+/// <see cref="AppSettings"/> and <see cref="MapSettings"/>, the two things
+/// that persist an ordered resource list.
 /// </summary>
 internal static class OrderedResourceList
 {

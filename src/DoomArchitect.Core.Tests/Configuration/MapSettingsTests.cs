@@ -23,9 +23,9 @@ public class MapSettingsTests
     [Fact]
     public void WithMapSettings_GameConfigIsSharedAcrossMapsInTheSameFile()
     {
-        // Matches UDB's own real .dbs shape exactly: "gameconfig" is one
-        // top-level field for the whole file, not per map - only
-        // "resources" is nested per map header name.
+        // The .dbs format's "gameconfig" is one top-level field for the
+        // whole file, not per map - only "resources" is nested per map
+        // header name.
         var settings = MapSettings.Empty()
             .WithMapSettings("MAP01", GameConfigurationKind.Doom, new[] { "/a.wad" })
             .WithMapSettings("MAP02", GameConfigurationKind.Doom2, new[] { "/b.wad" });

@@ -2,10 +2,9 @@ namespace DoomArchitect.Core.Undo;
 
 /// <summary>
 /// A plain two-stack undo/redo history. <see cref="MaxHistory"/> matches
-/// UDB's own <c>UndoManager.MAX_UNDO_LEVELS</c> - same cap, on an entirely
-/// different (and far smaller) underlying mechanism; see the type-level
-/// remarks on why this isn't a port of UDB's actual binary
-/// snapshot/diffing system.
+/// UDB's <c>UndoManager.MAX_UNDO_LEVELS</c> - same cap, on an entirely
+/// different (and far smaller) underlying mechanism: this isn't a port
+/// of UDB's binary snapshot/diffing system.
 /// </summary>
 public sealed class UndoStack
 {

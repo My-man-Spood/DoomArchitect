@@ -9,8 +9,7 @@ namespace DoomArchitect.Core.Configuration;
 /// <see cref="CfgLoader"/>'s merge already combined that into one
 /// <c>thingtypes</c> block before this class ever sees it. Each numbered
 /// entry inherits any field it doesn't set itself from its category's own
-/// scalar defaults - matching UDB's real <c>thingtypes</c> inheritance
-/// rule.
+/// scalar defaults.
 /// </summary>
 public static class GameConfigurationLoader
 {
@@ -81,8 +80,8 @@ public static class GameConfigurationLoader
     /// <summary>
     /// The fixed 5 <c>arg0</c>-<c>arg4</c> slots - a slot with no matching
     /// sub-block in the <c>.cfg</c> entry is <see cref="ArgumentInfo.Used"/>
-    /// <c>false</c> with a generic placeholder title, matching UDB's real
-    /// always-5-boxes-some-disabled layout rather than a variable-length list.
+    /// <c>false</c> with a generic placeholder title (always 5 boxes, some
+    /// disabled) rather than a variable-length list.
     /// </summary>
     private static IReadOnlyList<ArgumentInfo> LoadArguments(CfgBlock entry, Dictionary<string, List<ArgumentEnumOption>> enums)
     {
@@ -158,7 +157,7 @@ public static class GameConfigurationLoader
         return result;
     }
 
-    /// <summary>A plain space-separated scalar setting at the document root (<c>damagetypes = "Fire Slime ...";</c>), not a block - matches how UDB's own real cfg stores this list.</summary>
+    /// <summary>A plain space-separated scalar setting at the document root (<c>damagetypes = "Fire Slime ...";</c>), not a block.</summary>
     private static List<string> LoadDamageTypes(CfgBlock document)
     {
         var value = document.Find("damagetypes")?.AsString();

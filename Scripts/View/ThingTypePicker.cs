@@ -6,29 +6,24 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Embedded thing-type picker, ported from UDB's real
-/// <c>ThingBrowserControl</c> - unlike the Sector Special/Linedef Action
-/// pickers (both a separate popup "Browse..." dialog), UDB's own real
-/// control lives directly inside the Properties tab's own " Thing " group,
-/// confirmed directly in <c>ThingEditFormUDMF.Designer.cs</c> (no popup
-/// form involved at all). A filterable category/subcategory
-/// <see cref="Tree"/> (the same grouping shape already built for
+/// Embedded thing-type picker - unlike the Sector Special/Linedef Action
+/// pickers (both a separate popup "Browse..." dialog), this one lives
+/// directly inside the Properties tab's own " Thing " group, with no popup
+/// form involved. A filterable category/subcategory <see cref="Tree"/>
+/// (the same grouping shape already built for
 /// <see cref="LinedefActionBrowserDialog"/>, just embedded rather than in
 /// a dialog), a <c>typeid</c> numeric field two-way-bound to the tree
 /// selection, and a live sprite preview panel for whichever type is
-/// currently selected - matching UDB's own real layout. Each tree leaf
-/// also gets a small <see cref="SpriteIconCache"/> thumbnail - UDB's own
-/// real row only shows a small colored category icon, upgraded here to an
-/// actual sprite icon since sprite previews are in scope for this pass
-/// (a deliberate, flagged enhancement, not a UDB behavior).
+/// currently selected. Each tree leaf also gets a small
+/// <see cref="SpriteIconCache"/> thumbnail - a deliberate enhancement over
+/// a plain colored category icon, since sprite previews are in scope for
+/// this pass.
 /// </summary>
 public partial class ThingTypePicker : VBoxContainer
 {
 	/// <summary>
-	/// UDB's own real tree row icon is a small, fixed-size colored category
-	/// icon (not a full sprite) - this project's own real sprite icons
-	/// (see this class's own remarks) can be arbitrarily large (a boss
-	/// monster's own sprite is easily 100+ px), so the row icon is
+	/// Sprite icons (see this class's own remarks) can be arbitrarily large
+	/// (a boss monster's own sprite is easily 100+ px), so the row icon is
 	/// explicitly capped to a small fixed size via
 	/// <see cref="TreeItem.SetIconMaxWidth"/> rather than left to render at
 	/// its native decoded resolution - an uncapped icon here was blowing up
@@ -38,16 +33,13 @@ public partial class ThingTypePicker : VBoxContainer
 	private const int TreeIconMaxSize = 16;
 
 	/// <summary>
-	/// Real UDB category keys/titles (verified against <c>Doom_things.cfg</c>'s/
+	/// Category keys/titles (from <c>Doom_things.cfg</c>'s/
 	/// <c>ZDoom_things.cfg</c>'s/<c>GZDoom_things.cfg</c>'s/<c>Boom_things.cfg</c>'s
-	/// own real top-level block names/<c>title</c> fields), covering every
+	/// own top-level block names/<c>title</c> fields), covering every
 	/// category this project's own bundled thing-type data actually
-	/// populates (vanilla Doom/Doom2 plus the real ZDoom/GZDoom/Boom
+	/// populates (vanilla Doom/Doom2 plus the ZDoom/GZDoom/Boom
 	/// additions - see <c>GZDoomThings.cfg</c>/<c>ZDoomThings.cfg</c>/
-	/// <c>BoomThings.cfg</c>) - plain taxonomy labels, the same kind of
-	/// safe, objective reuse as a UDMF field name (see
-	/// <see cref="LinedefActionBrowserDialog.CategoryOrder"/>'s own
-	/// identical reasoning). A category key missing from this list would
+	/// <c>BoomThings.cfg</c>). A category key missing from this list would
 	/// be silently invisible in the tree (see <see cref="RefreshList"/>'s
 	/// own <c>byCategory[key]</c> lookup) even though its entries loaded
 	/// fine into <see cref="Core.Configuration.IGameConfiguration.GetThingTypes"/> -

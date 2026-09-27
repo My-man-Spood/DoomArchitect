@@ -11,65 +11,52 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Thing properties, ported from UDB's real <c>ThingEditFormUDMF</c> - the
-/// last of the three main property dialogs (Sector and Linedef are both
-/// already done). The tab strip mirrors the real dialog's 4 tabs
+/// Thing properties - the last of the three main property dialogs (Sector
+/// and Linedef are both already done). The tab strip has 4 tabs
 /// (Properties/"Action / Tag / Misc."/Comment/Custom) - Comment/Custom are
 /// this project's own established "placeholder tab, shape recognizable,
 /// not yet built" pattern.
 ///
 /// **The Properties tab's " Thing " group is an embedded live picker**
 /// (<see cref="ThingTypePicker"/>), not a popup "Browse..." dialog like
-/// Sector Special/Linedef Action use - confirmed directly against
-/// <c>ThingEditFormUDMF.Designer.cs</c>, which has no popup form involved
-/// at all (a deliberate scope call: UDB's own real shape here, not the
-/// simpler popup this project's other two pickers use). " Flags " is a
-/// flat checkbox list (no skill/class/gamemode sub-grouping - UDB's own
-/// real dialog doesn't group them either), rebuilt per game configuration
+/// Sector Special/Linedef Action use. " Flags " is a flat checkbox list
+/// (no skill/class/gamemode sub-grouping), rebuilt per game configuration
 /// exactly like <see cref="SectorEditDialog.RebuildFlagsCheckboxes"/>
 /// already does. " Position " (X/Y/Z) and Type/Angle are real-time
 /// (already rendered - matching Sector/Linedef's own real-time-vs-OK-only
 /// split rule); Pitch/Roll are OK-only (this project's mesh builder
 /// doesn't apply either to a thing's sprite billboard yet, no visual
 /// effect to preview). " Rotation "'s three numeric fields each pair with
-/// their own real <see cref="AngleDialControl"/> compass dial (a genuine
-/// port of UDB's real <c>AngleControlEx</c>, not a decorative stand-in) -
-/// UDB's own real "Random" checkbox per axis is reproduced too: checking
-/// it disables that axis's own field+dial for the rest of this dialog
-/// session and assigns a fresh independent random 0-359 value per thing
-/// only once, at <see cref="OnConfirmed"/> - matching UDB's own real
-/// one-shot-at-Apply-time behavior exactly (confirmed directly against
-/// <c>ThingEditFormUDMF.cs</c>'s own <c>cbrandomangle</c>/etc. handlers -
-/// it is not a persistent per-thing flag).
+/// their own real <see cref="AngleDialControl"/> compass dial - a
+/// "Random" checkbox per axis is reproduced too: checking it disables
+/// that axis's own field+dial for the rest of this dialog session and
+/// assigns a fresh independent random 0-359 value per thing only once, at
+/// <see cref="OnConfirmed"/> - it is not a persistent per-thing flag.
 ///
-/// UDB's real "Absolute Height" checkbox (a pure display-mode toggle
-/// between "Z relative to the containing sector's floor" and "Z as an
-/// absolute world height," never itself a stored field) is deliberately
-/// not built - it needs a point-in-sector lookup this project's Core has
-/// no public helper for yet, and <see cref="Thing.Height"/> is already
-/// always floor-relative (see that property's own doc comment), so the
-/// field still works correctly without it - a flagged v1 simplification,
-/// not a missing capability.
+/// An "Absolute Height" checkbox (a pure display-mode toggle between "Z
+/// relative to the containing sector's floor" and "Z as an absolute world
+/// height," never itself a stored field) is deliberately not built - it
+/// needs a point-in-sector lookup this project's Core has no public
+/// helper for yet, and <see cref="Thing.Height"/> is already always
+/// floor-relative (see that property's own doc comment), so the field
+/// still works correctly without it - a flagged v1 simplification, not a
+/// missing capability.
 ///
 /// **"Action / Tag / Misc." tab**: " Rendering " (Scale X/Y, Alpha + a
 /// Reset button, and Render Style) and " Behaviour " (Gravity/Score/
-/// Health/Conversation ID/Float Bob Phase) are both real, UDMF-only OK-
-/// only fields (verified directly against <c>ThingEditFormUDMF.cs</c>'s
-/// own real field names/defaults) - UDB's own real dynamic-light Color
-/// picker and config-driven Render Style dropdown (<c>General.Map.Config.ThingRenderStyles</c>)
-/// are deliberately not built: this project has no color-picker control
-/// or render-style game-configuration schema yet, and doesn't render
-/// dynamic lights at all - Render Style is a plain free-text field
+/// Health/Conversation ID/Float Bob Phase) are both UDMF-only OK-only
+/// fields - a dynamic-light Color picker and config-driven Render Style
+/// dropdown are deliberately not built: this project has no color-picker
+/// control or render-style game-configuration schema yet, and doesn't
+/// render dynamic lights at all - Render Style is a plain free-text field
 /// instead, the same kind of flagged v1 simplification
 /// <see cref="SectorEditDialog"/>'s own Damage Type/Sound Sequence fields
 /// already are. " Action " reuses the exact same shared
 /// <see cref="ActionArgumentsEditor"/> <see cref="LinedefEditDialog"/>
-/// uses - confirmed directly in UDB's own source that a Thing's own
-/// <c>special</c>/<c>arg0-4</c> resolve against the identical
-/// <see cref="ActionInfo"/> table a Linedef's action number does.
-/// " Identification " reuses <see cref="MapTagsEditor"/> via its own
-/// <see cref="MapTagsEditor.SetThings"/> overload - the third confirmed
-/// real shared consumer of that control.
+/// uses - a Thing's own <c>special</c>/<c>arg0-4</c> resolve against the
+/// identical <see cref="ActionInfo"/> table a Linedef's action number
+/// does. " Identification " reuses <see cref="MapTagsEditor"/> via its
+/// own <see cref="MapTagsEditor.SetThings"/> overload.
 /// </summary>
 public partial class ThingEditDialog : AcceptDialog
 {
@@ -266,7 +253,7 @@ public partial class ThingEditDialog : AcceptDialog
 		RebuildCheckboxes(flagKeys);
 	}
 
-	/// <summary>UDB's own real "Random" checkbox is never a stored field - checking it just disables that axis's own field+dial for the rest of this dialog session (a fresh independent value is assigned per thing once, at <see cref="OnConfirmed"/>).</summary>
+	/// <summary>The "Random" checkbox is never a stored field - checking it just disables that axis's own field+dial for the rest of this dialog session (a fresh independent value is assigned per thing once, at <see cref="OnConfirmed"/>).</summary>
 	private static void SetRandomAxisEnabled(StepperLineEdit edit, AngleDialControl dial, bool random)
 	{
 		edit.Editable = !random;
@@ -373,9 +360,8 @@ public partial class ThingEditDialog : AcceptDialog
 		}
 
 		// A resolvable value here is a genuine, intentional type choice -
-		// matches UDB's own real ThingEditFormUDMF, which updates
-		// General.Settings.DefaultThingType the same way on every apply,
-		// not just for a freshly inserted Thing.
+		// this updates the default thing type on every apply, not just
+		// for a freshly inserted Thing.
 		if (NumericFieldExpression.ResolveInteger(text, 0) is { } resolvedType) _onTypeChanged?.Invoke((int)resolvedType);
 
 		_onLiveChange?.Invoke();

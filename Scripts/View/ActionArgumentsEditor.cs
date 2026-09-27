@@ -9,15 +9,11 @@ using DoomArchitect.Core.Undo;
 using Godot;
 
 /// <summary>
-/// The action-number + 5-fixed-argument-slot editor UDB's real
-/// <c>ArgumentsControl</c> shares between its Linedef and Thing dialogs
-/// (verified directly: UDB's own control has parallel <c>SetValue(Linedef,...)</c>/
-/// <c>SetValue(Thing,...)</c> overloads funneling into the same internal
-/// logic, and a Thing's own arg metadata comes from the exact same
-/// <see cref="ActionInfo"/> table a Linedef's action number does) -
-/// extracted here from what was originally <c>LinedefEditDialog</c>'s own
-/// inline copy, once a second real consumer (the Thing dialog) needed the
-/// identical behavior. Operates directly on <see cref="UniFields"/> (never
+/// The action-number + 5-fixed-argument-slot editor shared between the
+/// Linedef and Thing dialogs - extracted here from what was originally
+/// <c>LinedefEditDialog</c>'s own inline copy, once a second real consumer
+/// (the Thing dialog) needed the identical behavior. Operates directly on
+/// <see cref="UniFields"/> (never
 /// a <see cref="Linedef"/>- or <see cref="Thing"/>-specific member), the
 /// same generalization shape <see cref="MapTagsEditor"/> already proved
 /// out for its own two real consumers.
@@ -27,8 +23,7 @@ using Godot;
 /// <see cref="StepperLineEdit"/> (plain numeric) and an
 /// <see cref="OptionButton"/> (enum dropdown) - see this class's own
 /// remarks inline at <see cref="ToggleArgView"/> for why a manual toggle
-/// exists at all (Godot has no equivalent to UDB's real editable-combo-box
-/// <c>ArgumentBox</c>). Action/arguments are always OK-only (no visual
+/// exists at all. Action/arguments are always OK-only (no visual
 /// effect to preview in either host dialog) - <see cref="BuildCommands"/>
 /// is the only place anything is ever actually written, called once from
 /// the host dialog's own OK handler.
@@ -203,18 +198,14 @@ public partial class ActionArgumentsEditor : VBoxContainer
 	/// <summary>
 	/// Manually flips one argument row between its numeric and enum view -
 	/// UDB's own real <c>ArgumentBox</c> is a single WinForms *editable*
-	/// combo box (<c>ComboBoxStyle.DropDown</c>), so typing any raw integer
-	/// always works even for an enum-backed argument (confirmed directly
-	/// in <c>ArgumentBox.cs</c>/<c>EnumOptionHandler.cs</c> - an
-	/// unrecognized typed value just becomes a synthesized one-off enum
-	/// entry showing that raw number). Godot has no equivalent editable-
-	/// combo control, so this reproduces the same end capability (type any
-	/// exact number, even for an enum-backed arg) via two separate
-	/// purpose-built controls and a manual switch between them instead of
-	/// one hybrid control - same real capability, different control shape
-	/// for this project's stack, flagged per this project's own "UDB is
-	/// the north star" convention rather than left silent. A no-op when
-	/// the argument has no enum options to toggle to at all
+	/// combo box, so typing any raw integer always works even for an
+	/// enum-backed argument (an unrecognized typed value just becomes a
+	/// synthesized one-off entry showing that raw number). Godot has no
+	/// equivalent editable-combo control, so this reproduces the same end
+	/// capability (type any exact number, even for an enum-backed arg) via
+	/// two separate purpose-built controls and a manual switch between
+	/// them instead of one hybrid control. A no-op when the argument has
+	/// no enum options to toggle to at all
 	/// (<see cref="ArgRow.LabelButton"/> is disabled in that case, so this
 	/// should never actually fire then, but the plain-numeric-only guard
 	/// stays here too as a direct safety net). Carries the value across
@@ -304,8 +295,7 @@ public partial class ActionArgumentsEditor : VBoxContainer
 	/// to all-generic-unused slots in that case too, no argument write is
 	/// attempted either - a mixed selection's own individual action
 	/// numbers (and whatever arguments belong to them) are simply left
-	/// alone, exactly matching UDB's real practice of only editing what
-	/// the dialog can actually make sense of.
+	/// alone.
 	/// </summary>
 	public IReadOnlyList<ICommand> BuildCommands()
 	{

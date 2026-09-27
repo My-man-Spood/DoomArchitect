@@ -13,16 +13,13 @@ using MapVector2 = System.Numerics.Vector2;
 /// is constructed with a <c>null</c> <c>onEdit</c> delegate here - both of
 /// its own real triggers (a right-click that releases without dragging,
 /// and this project's own added left-double-click convenience) correctly
-/// end up no-ops as a result. UDB's own real right-click *does* open a
-/// vertex properties dialog (<c>VerticesMode.OnEditEnd</c>'s
-/// <c>ShowEditVertices</c>), a genuine gap this project doesn't have yet
-/// (no <c>VertexEditDialog</c> exists at all - see TODO.md), not something
-/// intentionally skipped.
+/// end up no-ops as a result. UDB's right-click *does* open a vertex
+/// properties dialog there; this project has no <c>VertexEditDialog</c>
+/// yet (see TODO.md), not something intentionally skipped.
 ///
-/// Right-click gets one more layer ahead of the shared engine, matching
-/// UDB's own real three-way <c>VerticesMode.OnEditBegin</c> priority
-/// exactly: a highlighted vertex still drags/edits via the engine as
-/// normal; failing that, a nearby linedef splits immediately
+/// Right-click gets one more layer ahead of the shared engine: a
+/// highlighted vertex still drags/edits via the engine as normal; failing
+/// that, a nearby linedef splits immediately
 /// (<see cref="SplitLinedefCommand"/>) rather than falling through to
 /// empty space; only truly empty space starts Draw mode (the engine's own
 /// <c>onEmptyRightClick</c>).

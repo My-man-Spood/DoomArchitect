@@ -56,7 +56,7 @@ public class EarClipperTests
         // (hole start -> ... -> hole start again -> cut point again),
         // making one of those points a collinear "straight" vertex that
         // the pre-triangulation cleanup pass removes before clipping
-        // starts - same as UDB does.
+        // starts.
         Assert.Equal(polygon.Count - 3, triangles.Count);
         Assert.Equal(9600f, TotalArea(triangles), 3);
     }

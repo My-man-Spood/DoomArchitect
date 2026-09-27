@@ -3,8 +3,8 @@ using Godot;
 /// <summary>
 /// A reusable titled section box: a 1px border with a gap in its top edge
 /// where <see cref="Title"/> sits - the classic GroupBox/fieldset look
-/// UDB's own real dialogs use for grouping a handful of related property-
-/// dialog fields under one labeled border. Replaces this project's earlier
+/// used for grouping a handful of related property-dialog fields under one
+/// labeled border. Replaces this project's earlier
 /// "bold Label above plain content, no border at all" stand-in used across
 /// the Sector dialog's Properties tab (Flags/Heights/Sector damage/
 /// Effects/Identification) - a deliberate, flagged rendering

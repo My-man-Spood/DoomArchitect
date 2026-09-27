@@ -13,9 +13,7 @@ using Godot;
 /// raw paths without also having the parsed resource ready to use. The same
 /// widget is embedded in both <c>MapOptionsDialog</c> (a map's own
 /// resources) and <c>PreferencesDialog</c> (a game configuration's app-
-/// wide default resources) - mirrors UDB's own real <c>ResourceListEditor</c>
-/// control, which is reused for exactly the same two purposes (found
-/// while researching the multi-resource feature this builds on).
+/// wide default resources).
 /// </summary>
 public partial class ResourceListEditor : VBoxContainer
 {

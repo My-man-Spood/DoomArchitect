@@ -19,7 +19,7 @@ public enum TargetSurfaceKind
 /// sector itself for a floor/ceiling hit, <c>WallSegment.Value.Side.Sector</c>
 /// for a wall hit, and the Thing's own containing sector (possibly
 /// <c>null</c> - a Thing sitting outside every sector is a real, if
-/// degenerate, editing state UDB itself allows) for a Thing hit - so a
+/// degenerate, editing state) for a Thing hit - so a
 /// caller that only cares about "which sector" (e.g. a brightness-
 /// adjustment action) doesn't need to branch on <see cref="Kind"/> at all
 /// for the first three kinds, but must still null-check for a Thing.
@@ -31,13 +31,12 @@ public readonly record struct MapTarget(TargetSurfaceKind Kind, Sector? Sector, 
 /// <c>TargetHighlight</c> needs to draw a highlight box for) one Thing -
 /// resolved by the caller, since it needs game-configuration data
 /// (a type's real radius/height/hangs-from-ceiling) Core.Geometry has no
-/// access to. Matches UDB's own real <c>BaseVisualThing</c> pick-box setup
-/// exactly: an axis-aligned box, <see cref="Radius"/> out from the Thing's
-/// own X/Y position on every side, spanning <see cref="WorldZ"/> (the
-/// Thing's own resolved floor-standing/ceiling-hanging origin - the same
-/// value actually used to position its rendered billboard) up by
+/// access to. An axis-aligned box, <see cref="Radius"/> out from the
+/// Thing's own X/Y position on every side, spanning <see cref="WorldZ"/>
+/// (the Thing's own resolved floor-standing/ceiling-hanging origin - the
+/// same value actually used to position its rendered billboard) up by
 /// <see cref="Height"/> - deliberately not oriented to the camera the way
-/// the billboard itself is rendered; UDB's own pick box isn't either.
+/// the billboard itself is rendered.
 /// </summary>
 public readonly record struct ThingPickBounds(double Radius, double Height, double WorldZ, Sector? Sector);
 
@@ -56,10 +55,10 @@ public interface IMapTargetFinder
 }
 
 /// <summary>
-/// A close port of UDB's own visual-mode picking (<c>VisualMode.PickObject</c>),
-/// built on pure Core geometry rather than Godot physics - fully unit-
-/// testable without Godot running at all, matching this project's whole
-/// existing testing culture. A hand-rolled equivalent using real Godot
+/// Picks whichever map object a ray points at, built on pure Core geometry
+/// rather than Godot physics - fully unit-testable without Godot running
+/// at all, matching this project's whole existing testing culture. A
+/// hand-rolled equivalent using real Godot
 /// collision shapes and <c>PhysicsDirectSpaceState3D.IntersectRay</c> was
 /// considered instead: it would need meaningfully less custom math (a
 /// mature physics engine's own broad-phase acceleration instead of
@@ -154,12 +153,10 @@ public sealed class MapRaycaster : IMapTargetFinder
     }
 
     /// <summary>
-    /// Standard "slab method" ray-vs-axis-aligned-box intersection (the
-    /// same real algorithm UDB's own <c>BaseVisualThing.PickAccurate</c>
-    /// uses, ported directly rather than approximated with a bounding
-    /// sphere/cylinder) - deliberately axis-aligned, not oriented to the
-    /// camera the way the Thing's own rendered billboard is; that's UDB's
-    /// own real behavior too, not a simplification made here.
+    /// Standard "slab method" ray-vs-axis-aligned-box intersection, used
+    /// directly rather than approximated with a bounding sphere/cylinder -
+    /// deliberately axis-aligned, not oriented to the camera the way the
+    /// Thing's own rendered billboard is.
     /// </summary>
     private static void TryThing(Thing thing, ThingPickBounds bounds, Vector3 origin, Vector3 direction, ref MapTarget? best)
     {

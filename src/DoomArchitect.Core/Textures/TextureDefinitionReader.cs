@@ -5,8 +5,7 @@ namespace DoomArchitect.Core.Textures;
 /// <summary>
 /// Parses a TEXTURE1/TEXTURE2 lump into composite texture definitions.
 /// Ported from UDB's <c>WADReader.LoadTextureSet</c>, with two deliberate
-/// deviations from UDB's literal algorithm (both discussed and agreed
-/// with the user, see the texture pipeline plan):
+/// deviations from UDB's literal algorithm:
 ///
 /// - **Real per-entry offsets are honored.** UDB reads the offset table
 ///   but never actually seeks with it - it just assumes texture
@@ -26,8 +25,8 @@ namespace DoomArchitect.Core.Textures;
 ///   this implementation - so the fixed condition reduces to simply
 ///   requiring positive width, height, and patch count.
 ///
-/// Doom-format vs. Strife-format per-entry layout is auto-detected the
-/// same way UDB does: Strife's <c>maptexture_t</c> omits the 4-byte
+/// Doom-format vs. Strife-format per-entry layout is auto-detected via a
+/// signature trick: Strife's <c>maptexture_t</c> omits the 4-byte
 /// vanilla <c>columndirectory</c> field, so reading where its patch count
 /// would sit and finding <c>0</c> means "this was actually the first half
 /// of a Doom-format columndirectory" - skip the other half and read the
@@ -57,7 +56,7 @@ public static class TextureDefinitionReader
         // vanilla Doom (a historical id Software quirk) - TEXTURE2 isn't
         // subject to this. This drops whichever entry ended up first in
         // the *filtered* list (i.e. skips over any entries that failed
-        // validation above), matching UDB's own removal point exactly.
+        // validation above).
         if (isTexture1 && definitions.Count > 0) definitions.RemoveAt(0);
 
         return definitions;

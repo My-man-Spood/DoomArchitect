@@ -4,16 +4,13 @@ using MapVector2 = System.Numerics.Vector2;
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
-/// Reads the classic (vanilla Doom-format) binary map lumps - a close
-/// port of UDB's own <c>DoomMapSetIO</c>: same record layouts, same
-/// "warn and drop" recovery for malformed references (verified against
-/// the actual UDB source, not general Doom-format community knowledge -
-/// notably the sidedef texture field order is Upper, Lower, Middle, not
-/// the commonly-assumed Upper, Middle, Lower).
+/// Reads the classic (vanilla Doom-format) binary map lumps, with the same
+/// "warn and drop" recovery for malformed references as UDB's own reader.
+/// Notably, the sidedef texture field order is Upper, Lower, Middle - not
+/// the commonly-assumed Upper, Middle, Lower.
 ///
-/// Hexen/ZDoom-format maps are rejected rather than misparsed, using the
-/// same signal UDB itself relies on for format matching: a
-/// <c>BEHAVIOR</c> lump alongside the map. That format has different
+/// Hexen/ZDoom-format maps are rejected rather than misparsed, detected by
+/// a <c>BEHAVIOR</c> lump alongside the map. That format has different
 /// record layouts entirely (16-byte linedefs with 5 args instead of a
 /// tag, thing flags/specials laid out differently) and isn't ported here.
 ///
@@ -245,8 +242,7 @@ public static class ClassicMapReader
     }
 
     /// <summary>
-    /// Field order, confirmed against UDB's own read/write code rather
-    /// than assumed: offsetx, offsety, UPPER texture, LOWER texture,
+    /// Field order: offsetx, offsety, UPPER texture, LOWER texture,
     /// MIDDLE texture, sector - upper-then-lower-then-middle, not the
     /// upper-then-middle-then-lower order a casual guess would produce.
     /// </summary>

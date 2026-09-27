@@ -8,12 +8,12 @@ using MapVector2 = System.Numerics.Vector2;
 
 /// <summary>
 /// The left-click-select/marquee + right-click-drag input state machine
-/// every one of the 2D view's four edit modes follows identically - UDB's
-/// own real per-mode button split (pressing on an unselected element
-/// replaces the selection with just that one before dragging it, pressing
-/// on an already-selected element drags the entire current selection
-/// together; left-click only ever selects, right-click-drag is the only
-/// thing that moves geometry). Extracted here as one generic engine during
+/// every one of the 2D view's four edit modes follows identically -
+/// pressing on an unselected element replaces the selection with just
+/// that one before dragging it, pressing on an already-selected element
+/// drags the entire current selection together; left-click only ever
+/// selects, right-click-drag is the only thing that moves geometry.
+/// Extracted here as one generic engine during
 /// <see cref="MapOverlay"/>'s "growing god-object" cleanup, once reading
 /// all four of its original <c>Handle*Input</c> methods side by side
 /// confirmed they really were the identical skeleton with only the
@@ -43,21 +43,19 @@ using MapVector2 = System.Numerics.Vector2;
 /// <see cref="HandleInput"/> below - is a direct, unmodified port of what
 /// was independently duplicated four times before this extraction.
 ///
-/// <c>onEdit</c> fires from two genuinely different real UDB gestures,
-/// not just the one its name might suggest: a left-double-click (this
-/// project's own added convenience, not a real UDB gesture) and - UDB's
-/// own real one - a right-click that releases without ever turning into
-/// a drag (<c>OnEditEnd</c>, only ever reached when no drag started;
-/// "did the position actually change" already doubles as the drag-vs-
-/// click distinction this needs - even with snapping on, a small enough
-/// movement can legitimately still round back to the exact same grid
-/// point). Both invoke the identical delegate rather than two separate
-/// ones because every real caller's own <c>onEdit</c> implementation
-/// already ignores whichever single element triggered it and re-derives
-/// the *current* selection instead (matching UDB's own real "edit
-/// whatever's selected, not just what you clicked" dialog behavior) - so
-/// there's genuinely nothing gesture-specific for two separate delegates
-/// to carry.
+/// <c>onEdit</c> fires from two genuinely different gestures, not just
+/// the one its name might suggest: a left-double-click (this project's
+/// own added convenience) and a right-click that releases without ever
+/// turning into a drag (<c>OnEditEnd</c>, only ever reached when no drag
+/// started; "did the position actually change" already doubles as the
+/// drag-vs-click distinction this needs - even with snapping on, a small
+/// enough movement can legitimately still round back to the exact same
+/// grid point). Both invoke the identical delegate rather than two
+/// separate ones because every real caller's own <c>onEdit</c>
+/// implementation already ignores whichever single element triggered it
+/// and re-derives the *current* selection instead ("edit whatever's
+/// selected, not just what you clicked") - so there's genuinely nothing
+/// gesture-specific for two separate delegates to carry.
 /// </summary>
 public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 	where TSelectable : class
@@ -148,18 +146,17 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 					if (!_isSelected(target)) _selectOnly(target);
 					_dragStart = _getSelectedDraggables().ToDictionary(d => d, _getPosition);
 
-					// UDB's own real DragGeometryMode: the raw, *unsnapped*
-					// click position is the drag's own origin - the
-					// draggable actually nearest to it (not necessarily
-					// target itself; for Linedef/Sector mode this searches
-					// among every selected vertex) is the one whose own
-					// resulting position gets snapped directly to the grid
-					// each motion tick, with the offset that produces then
-					// applied uniformly to the rest of the selection -
-					// never "snap the cursor's own movement," which
-					// preserves whatever sub-grid offset existed between
-					// the click and the draggable's own position instead
-					// of eliminating it.
+					// The raw, *unsnapped* click position is the drag's own
+					// origin - the draggable actually nearest to it (not
+					// necessarily target itself; for Linedef/Sector mode
+					// this searches among every selected vertex) is the
+					// one whose own resulting position gets snapped
+					// directly to the grid each motion tick, with the
+					// offset that produces then applied uniformly to the
+					// rest of the selection - never "snap the cursor's own
+					// movement," which preserves whatever sub-grid offset
+					// existed between the click and the draggable's own
+					// position instead of eliminating it.
 					_dragOrigin = _camera.Unproject(press.Position);
 					_dragAnchor = _dragStart.Keys
 						.OrderBy(d => MapVector2.DistanceSquared(_getPosition(d), _dragOrigin))
@@ -168,11 +165,10 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 				}
 				else if (_onEmptyRightClick != null && !_marquee.IsSelecting)
 				{
-					// UDB's own real "AutoDrawOnEdit": right-clicking empty
-					// space (nothing under the cursor to select/edit) starts
-					// Draw mode instead, with the first point already placed
-					// right here - not while a marquee drag is in progress,
-					// matching UDB's own identical guard.
+					// Right-clicking empty space (nothing under the cursor to
+					// select/edit) starts Draw mode instead, with the first
+					// point already placed right here - not while a marquee
+					// drag is in progress.
 					_onEmptyRightClick(press.Position);
 				}
 
@@ -189,12 +185,11 @@ public sealed class ElementOverlayHandler<TSelectable, TDraggable>
 					}
 					else if (Hovered != null)
 					{
-						// UDB's own real behavior: a right-click that never
-						// turned into a drag opens the properties dialog
-						// (OnEditEnd, only ever reached when OnDragStart
-						// never fired) - see this class's own remarks on why
-						// this reuses the identical onEdit delegate rather
-						// than a separate one.
+						// A right-click that never turned into a drag opens the
+						// properties dialog (only ever reached when a drag never
+						// started) - see this class's own remarks on why this
+						// reuses the identical onEdit delegate rather than a
+						// separate one.
 						_onEdit?.Invoke(Hovered);
 					}
 

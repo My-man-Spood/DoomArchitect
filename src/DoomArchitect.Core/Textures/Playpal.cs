@@ -2,12 +2,11 @@ namespace DoomArchitect.Core.Textures;
 
 /// <summary>
 /// The 256-color palette used to turn indexed pixel data (patches, flats)
-/// into RGB. Matches UDB's own <c>Playpal</c> exactly: only ever reads the
-/// first of PLAYPAL's 14 palettes (the base game palette) and ignores the
-/// rest (berserk/pain-flash/radiation-suit variants, etc.) - an editor
-/// preview has no notion of those in-game effects. A missing PLAYPAL lump
-/// falls back to a flat gray (127,127,127) palette, matching UDB's own
-/// fallback exactly.
+/// into RGB. Only ever reads the first of PLAYPAL's 14 palettes (the base
+/// game palette) and ignores the rest (berserk/pain-flash/radiation-suit
+/// variants, etc.) - an editor preview has no notion of those in-game
+/// effects. A missing PLAYPAL lump falls back to a flat gray
+/// (127,127,127) palette.
 /// </summary>
 public sealed class Playpal
 {

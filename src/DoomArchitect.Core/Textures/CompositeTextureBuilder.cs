@@ -2,19 +2,17 @@ namespace DoomArchitect.Core.Textures;
 
 /// <summary>
 /// Composites a <see cref="CompositeTextureDefinition"/>'s patches into
-/// one final <see cref="PixelImage"/> - a verbatim port of UDB's
-/// <c>TextureImage.LocalLoadImage</c>/<c>DrawToPixelData</c>/
-/// <c>BitmapIsMasked</c> (<c>Source/Core/Data/TextureImage.cs</c>),
-/// including its vanilla negative-patch-offset rendering-bug emulation
-/// (see https://doomwiki.org/wiki/Vertical_offsets_are_ignored_in_texture_patches).
+/// one final <see cref="PixelImage"/>, including a vanilla
+/// negative-patch-offset rendering-bug emulation (see
+/// https://doomwiki.org/wiki/Vertical_offsets_are_ignored_in_texture_patches).
 ///
-/// UDB gates that emulation behind two game-configuration compatibility
-/// flags (<c>FixNegativePatchOffsets</c>/<c>FixMaskedPatchOffsets</c>)
-/// that both default to <c>false</c> (bug active) for vanilla game
-/// configs. There's no game-configuration system here yet to make them
-/// configurable, so both are hardcoded to their vanilla defaults - the
-/// conditions below are UDB's literal logic with those two flags already
-/// substituted in as constants.
+/// That emulation is normally gated behind two game-configuration
+/// compatibility flags (<c>FixNegativePatchOffsets</c>/
+/// <c>FixMaskedPatchOffsets</c>) that both default to <c>false</c> (bug
+/// active) for vanilla game configs. There's no game-configuration
+/// system here yet to make them configurable, so both are hardcoded to
+/// their vanilla defaults - the conditions below already have those two
+/// flags substituted in as constants.
 /// </summary>
 public static class CompositeTextureBuilder
 {
@@ -42,7 +40,7 @@ public static class CompositeTextureBuilder
 
         // "We can still display texture if at least one of the patches
         // was loaded" - only a total failure (every patch missing) fails
-        // the whole texture, matching UDB exactly.
+        // the whole texture.
         if (missing >= definition.Patches.Count)
         {
             warnings.Add($"Texture '{definition.Name}' could not be composited - every patch failed to resolve.");
@@ -78,16 +76,15 @@ public static class CompositeTextureBuilder
     /// (alpha exactly 0) anywhere - this is a whole-bitmap property, not
     /// per-column: even a column of a masked patch that's itself fully
     /// opaque still counts as masked once propagated to
-    /// <c>columnMasked</c> below, exactly as UDB's <c>BitmapIsMasked</c>
-    /// computes it.
+    /// <c>columnMasked</c> below.
     ///
-    /// UDB's actual check is <c>pixel.a &lt;= 0.5f</c> against a raw byte
+    /// The underlying check is <c>pixel.a &lt;= 0.5f</c> against a raw byte
     /// (0-255) alpha field - since C# widens byte to float for that
     /// comparison, the smallest nonzero byte (1) already exceeds 0.5, so
     /// the real threshold is "exactly 0" vs. "anything else," not a
     /// half-opacity test. This matters for PNG-sourced patches with
-    /// genuine partial alpha (e.g. 50%): UDB treats them as fully opaque
-    /// and unmasked, not half-transparent - ported here exactly, even
+    /// genuine partial alpha (e.g. 50%): they're treated as fully opaque
+    /// and unmasked, not half-transparent - preserved exactly, even
     /// though it reads like a bug for real partial-alpha art.
     /// </summary>
     private static bool IsMasked(PixelImage image)
@@ -118,8 +115,8 @@ public static class CompositeTextureBuilder
             // draw as if the negative vertical offset was taken into
             // account. Note this compares tx against the *patch's own*
             // width, not the destination texture's width - preserved
-            // exactly as UDB has it, even though it reads like an odd unit
-            // mix, since it's unclear whether that's intentional.
+            // as-is even though it reads like an odd unit mix, since
+            // it's unclear whether that's intentional.
             if (y < 0 && tx >= 0 && tx < patch.Width && columnHasMultiplePatches && !columnIsMasked)
             {
                 drawHeight = patch.Height + y;
@@ -129,9 +126,9 @@ public static class CompositeTextureBuilder
             {
                 var sourceIndex = (oy * patch.Width + ox) * 4;
                 var alpha = patch.Rgba[sourceIndex + 3];
-                // Matches UDB's effective "alpha != 0" test (see IsMasked's
-                // remarks) - any nonzero alpha counts as opaque and is
-                // drawn unconditionally, only alpha==0 is skipped.
+                // The effective "alpha != 0" test (see IsMasked's remarks)
+                // - any nonzero alpha counts as opaque and is drawn
+                // unconditionally, only alpha==0 is skipped.
                 if (alpha == 0) continue; // transparent source pixel - leave the destination untouched
 
                 var realY = y;

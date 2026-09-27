@@ -4,11 +4,9 @@ using System.Text;
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
-/// Parses UDMF text into a generic <see cref="UdmfBlock"/> tree. A close
-/// port of UDB's own <c>UniversalParser.InputStructure</c> - same grammar,
-/// same key charset, same number/keyword classification rules, same
-/// string escapes - reorganized into named methods around a small cursor
-/// instead of one ~500-line character-dispatch loop, for reviewability.
+/// Parses UDMF text into a generic <see cref="UdmfBlock"/> tree, organized
+/// into named methods around a small cursor instead of one big
+/// character-dispatch loop, for reviewability.
 /// One deliberate behavioral fix from UDB's own parser: a <c>\DDD</c>
 /// string escape here correctly advances past all 3 digits (UDB's own
 /// parser only advances 1, so the trailing 2 digits get reprocessed as
@@ -22,8 +20,7 @@ public static class UdmfTreeParser
     /// <summary>
     /// Parses UDMF text into a tree. <paramref name="warnings"/> collects
     /// non-fatal issues discovered during tokenizing - currently just a
-    /// dropped <c>nan</c> field value, matching UDB's own
-    /// "field is being dropped permanently" warning.
+    /// dropped <c>nan</c> field value.
     /// </summary>
     public static UdmfBlock Parse(string text, List<string> warnings)
     {
@@ -208,9 +205,7 @@ public static class UdmfTreeParser
     /// <summary>
     /// A `\DDD` escape: exactly 3 decimal digits (the first already
     /// consumed by the caller), interpreted as a decimal character code.
-    /// UDB's own parser only advances past 1 of the 2 remaining digits,
-    /// so they leak into the string as literal text - fixed here (see
-    /// type-level remarks).
+    /// See the type-level remarks for the UDB parser bug this fixes.
     /// </summary>
     private static char ReadNumericEscape(Cursor c, char firstDigit)
     {

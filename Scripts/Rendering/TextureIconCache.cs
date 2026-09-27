@@ -95,7 +95,7 @@ public sealed class TextureIconCache
     public ImageTexture GetFlatIcon(string name) => _flatIcons.GetValueOrDefault(name);
 
     /// <summary>
-    /// Resolves a texture-name field's icon honoring UDB's real
+    /// Resolves a texture-name field's icon honoring the
     /// <c>mixtexturesflats</c> game-configuration setting (see
     /// <see cref="DoomArchitect.Core.Configuration.IGameConfiguration.MixTexturesAndFlats"/>).
     /// <paramref name="preferFlat"/> is the field's own fixed native
@@ -105,10 +105,8 @@ public sealed class TextureIconCache
     /// this is exactly <see cref="GetFlatIcon"/>/<see cref="GetWallIcon"/>
     /// on the field's own namespace; when enabled, whichever namespace
     /// actually enumerates the name wins (<see cref="IsFlat"/>) regardless
-    /// of the field's own native one - mirroring UDB's own real load-time
-    /// cross-merge of its <c>flats</c>/<c>textures</c> dictionaries when
-    /// mixing is on, where a mixed lookup no longer cares which
-    /// dictionary a name originally came from.
+    /// of the field's own native one, so a mixed lookup no longer cares
+    /// which namespace a name originally came from.
     /// </summary>
     public ImageTexture GetIcon(string name, bool preferFlat, bool mixTexturesAndFlats)
     {

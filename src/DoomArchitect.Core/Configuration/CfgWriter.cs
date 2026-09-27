@@ -5,15 +5,14 @@ namespace DoomArchitect.Core.Configuration;
 
 /// <summary>
 /// The write half of the <c>.cfg</c> grammar <see cref="CfgParser"/>/
-/// <see cref="CfgLoader"/> already read faithfully - mirrors UDB's own
-/// real <c>Configuration.OutputStructure</c> formatting (read in full
-/// this session): <c>key = value;</c> for scalars, <c>key { ... }</c>
-/// recursively for nested blocks, tab-per-level indentation. One
-/// deliberate simplification: UDB distinguishes a single-precision
-/// <c>float</c> (written with a trailing <c>f</c>) from a <c>double</c>
-/// purely for its own round-trip formatting needs - nothing this project
-/// persists needs that distinction, so every <see cref="CfgValueKind.Double"/>
-/// here just writes a plain decimal number.
+/// <see cref="CfgLoader"/> already read: <c>key = value;</c> for scalars,
+/// <c>key { ... }</c> recursively for nested blocks, tab-per-level
+/// indentation. One deliberate simplification: the real format
+/// distinguishes a single-precision <c>float</c> (written with a trailing
+/// <c>f</c>) from a <c>double</c> purely for round-trip formatting needs -
+/// nothing this project persists needs that distinction, so every
+/// <see cref="CfgValueKind.Double"/> here just writes a plain decimal
+/// number.
 /// </summary>
 public static class CfgWriter
 {

@@ -57,7 +57,7 @@ public partial class ModeToolbar : HBoxContainer
 		if (pressed) Overlay.Mode = mode;
 	}
 
-	/// <summary>UDB's own real "continuous drawing" (Draw Lines options panel) - stays in Draw mode and starts a fresh polyline after each commit instead of returning to the previous mode. Session-only, like every other toolbar toggle here - this project has no settings-persistence layer yet.</summary>
+	/// <summary>"Continuous drawing" - stays in Draw mode and starts a fresh polyline after each commit instead of returning to the previous mode. Session-only, like every other toolbar toggle here - this project has no settings-persistence layer yet.</summary>
 	private void OnContinuousDrawToggled(bool pressed)
 	{
 		if (Overlay != null) Overlay.ContinuousDrawing = pressed;

@@ -3,9 +3,8 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// Ported from UDB's real <c>LinedefAngleSorter</c> - the same formula
-/// <see cref="SectorTracer"/>'s own already-tested <c>RelativeAngle</c>
-/// uses (that one operates on <see cref="Sidedef"/>, which always belongs
+/// The same formula <see cref="SectorTracer"/>'s own already-tested
+/// <c>RelativeAngle</c> uses (that one operates on <see cref="Sidedef"/>, which always belongs
 /// to an already-built <see cref="Sector"/>; this one operates on the
 /// more general <see cref="LinedefSide"/>, which doesn't require one -
 /// <see cref="BoundaryTracer"/> needs to walk linedefs regardless of

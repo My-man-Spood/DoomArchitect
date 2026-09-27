@@ -1235,13 +1235,11 @@ public class MapDataTests
     }
 
     /// <summary>
-    /// A direct, literal port of UDB's own real "compare front sectors"
-    /// branch (<c>Linedef.Join</c>) - a matching front sector on both
-    /// lines makes keep's *own* front get replaced by remove's *back*
-    /// side's data, not left alone. Surprising at a glance, but this is
-    /// exactly what the real source does (re-verified directly against
-    /// it, not guessed) - kept faithful rather than "corrected", per this
-    /// session's explicit 1:1-port mandate.
+    /// A literal port of UDB's own <c>Linedef.Join</c> "compare front
+    /// sectors" branch - a matching front sector on both lines makes
+    /// keep's *own* front get replaced by remove's *back* side's data,
+    /// not left alone. Surprising at a glance, but this is exactly what
+    /// the source does - kept faithful rather than "corrected".
     /// </summary>
     [Fact]
     public void JoinLinedefs_MatchingFrontSectors_ReplacesKeepsFrontWithRemovesBack()

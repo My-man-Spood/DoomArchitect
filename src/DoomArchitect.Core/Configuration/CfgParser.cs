@@ -4,37 +4,29 @@ using System.Text;
 namespace DoomArchitect.Core.Configuration;
 
 /// <summary>
-/// Parses UDB's real <c>.cfg</c> grammar into an ordered
-/// <see cref="CfgStatement"/> tree - confirmed against UDB's own
-/// <c>CodeImp.DoomBuilder.IO.Configuration</c>
-/// (<c>InputStructure</c>/<c>ParseAssignment</c>/<c>ParseString</c>/
-/// <c>ParseNumber</c>/<c>ParseKeyword</c>/<c>ParseFunction</c>), read
-/// directly rather than assumed. Reorganized around a small cursor instead
-/// of one large character-dispatch loop with mutable <c>ref</c> parameters,
-/// matching how <see cref="IO.UdmfTreeParser"/> was already reworked from
-/// UDB's own UDMF parser - but kept as its own independent parser rather
-/// than sharing a base with it (see this project's TODO.md architecture
-/// notes: UDB itself keeps <c>UniversalParser</c> and <c>Configuration</c>
-/// as two separate classes despite both being curly-brace/assignment
-/// grammars, and the two really do differ - see remarks below).
+/// Parses the <c>.cfg</c> grammar into an ordered <see cref="CfgStatement"/>
+/// tree. Reorganized around a small cursor instead of one large
+/// character-dispatch loop with mutable <c>ref</c> parameters, matching how
+/// <see cref="IO.UdmfTreeParser"/> was already reworked - but kept as its
+/// own independent parser rather than sharing a base with it (see this
+/// project's TODO.md architecture notes: the <c>.cfg</c> and UDMF grammars
+/// are both curly-brace/assignment grammars, but the two really do differ -
+/// see remarks below).
 ///
-/// Deliberate differences from UDMF's grammar, all confirmed in source,
-/// not guessed:
+/// Deliberate differences from UDMF's grammar:
 /// - A key is not restricted to a letter/digit/underscore charset - it's
 ///   "every character up to the next structural delimiter, trimmed",
 ///   which is what lets a bare integer (<c>3004 { ... }</c>) work as a
 ///   block key with no special-casing.
-/// - Keys are case-sensitive (UDB's own parser never lowercases them,
-///   unlike <see cref="IO.UdmfTreeParser"/>'s deliberate lowercasing).
+/// - Keys are case-sensitive, unlike <see cref="IO.UdmfTreeParser"/>'s
+///   deliberate lowercasing.
 /// - A key with no value at all (<c>somekey;</c>) or an explicit
 ///   <c>null</c> keyword are both valid and distinct from a missing key -
 ///   modeled as <see cref="CfgAssignStatement.Value"/> being null.
 /// - Hexadecimal literals (UDMF's <c>0x...</c>) are not supported at all -
-///   UDB's own <c>ParseNumber</c> has no such case, so a value starting
-///   with <c>0x</c> would fail to parse as a number there too.
+///   a value starting with <c>0x</c> fails to parse as a number.
 /// - A trailing <c>f</c> suffix (<c>1.5f</c>) marks a single-precision
-///   float, distinct from a plain double (<c>1.5</c>) in UDB's own model
-///   (needed there for round-trip write-formatting). This project only
+///   float, distinct from a plain double (<c>1.5</c>). This project only
 ///   ever reads <c>.cfg</c> data, never writes it back out, so both
 ///   collapse to <see cref="CfgValueKind.Double"/> here - a deliberate
 ///   simplification, not a parsing gap.
@@ -98,11 +90,10 @@ public static class CfgParser
                 }
 
                 case '\n':
-                    // Spaces aren't allowed in a real key, but a bare
-                    // newline while accumulating one is folded into a
-                    // space rather than rejected outright - it gets
-                    // trimmed away at the point the key is actually used,
-                    // exactly like UDB's own parser.
+                    // Spaces aren't allowed in a key, but a bare newline
+                    // while accumulating one is folded into a space rather
+                    // than rejected outright - it gets trimmed away at the
+                    // point the key is actually used.
                     key.Append(' ');
                     break;
 
@@ -118,10 +109,9 @@ public static class CfgParser
 
                 case '/':
                     // A lone '/' that isn't a comment opener is silently
-                    // discarded (not appended to the key) - matches UDB's
-                    // own real parser exactly, an obscure quirk that
-                    // doesn't matter for any legitimate key, but costs
-                    // nothing to mirror precisely.
+                    // discarded (not appended to the key) - an obscure
+                    // quirk that doesn't matter for any legitimate key,
+                    // but costs nothing to mirror.
                     break;
 
                 default:
@@ -319,11 +309,11 @@ public static class CfgParser
     }
 
     /// <summary>
-    /// <c>include(...)</c> is the only function call UDB's real grammar
-    /// recognizes - any other name is a parse error there too. Arguments
-    /// are comma-separated string/number/keyword values, same value
-    /// grammar as an assignment; this project only ever needs the string
-    /// form (a path, optionally a dotted sub-path).
+    /// <c>include(...)</c> is the only function call the <c>.cfg</c>
+    /// grammar recognizes - any other name is a parse error. Arguments are
+    /// comma-separated string/number/keyword values, same value grammar as
+    /// an assignment; this project only ever needs the string form (a
+    /// path, optionally a dotted sub-path).
     /// </summary>
     private static CfgIncludeStatement ParseFunctionCall(Cursor c, string functionName)
     {
@@ -362,8 +352,7 @@ public static class CfgParser
         // No trailing ';' is consumed here - control returns to the
         // enclosing scope's own loop, which harmlessly treats a following
         // ';' as a no-op (the accumulating key was already cleared before
-        // this call), exactly like UDB's own ParseFunction/InputStructure
-        // split does.
+        // this call).
         if (args.Count < 1) throw new CfgParseException("include() requires at least one argument.", c.Line);
         return new CfgIncludeStatement(args[0], args.Count > 1 ? args[1] : null);
     }

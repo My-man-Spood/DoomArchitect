@@ -2,22 +2,20 @@ namespace DoomArchitect.Core.Editing;
 
 /// <summary>
 /// Resolves one numeric property-dialog field's text against a given
-/// "original" value - a real GZDoom/UDB-authoring convention this
-/// project's own property dialogs port faithfully (verified against UDB's
-/// actual <c>NumericTextbox.GetResultFloat</c>, not guessed): blank text
-/// means "leave the original alone" (the multi-select "mixed values"
-/// sentinel - see <c>Sector</c> property dialogs), a plain number is an
-/// absolute replacement, and a doubled-sign or single <c>*</c>/<c>/</c>
-/// prefix means "relative to the original" - so editing several elements
-/// that started with different values at once can still raise/lower/scale
-/// each one by the same amount without collapsing them to one shared
-/// value. A single leading <c>+</c>/<c>-</c> is never a relative operator
-/// on its own (only doubled <c>++</c>/<c>--</c> are) - so a plain signed
-/// number like <c>-50</c> parses as the absolute value -50, with no
-/// ambiguity against negative heights. The triple-prefix <c>+++</c>/<c>---</c>
-/// "step per element" variant UDB also supports isn't ported - a niche
-/// batch-distribute feature, not the core "edit relative to each element's
-/// own value" behavior this exists for.
+/// "original" value: blank text means "leave the original alone" (the
+/// multi-select "mixed values" sentinel - see <c>Sector</c> property
+/// dialogs), a plain number is an absolute replacement, and a
+/// doubled-sign or single <c>*</c>/<c>/</c> prefix means "relative to the
+/// original" - so editing several elements that started with different
+/// values at once can still raise/lower/scale each one by the same amount
+/// without collapsing them to one shared value. A single leading
+/// <c>+</c>/<c>-</c> is never a relative operator on its own (only
+/// doubled <c>++</c>/<c>--</c> are) - so a plain signed number like
+/// <c>-50</c> parses as the absolute value -50, with no ambiguity against
+/// negative heights. The triple-prefix <c>+++</c>/<c>---</c> "step per
+/// element" variant isn't ported - a niche batch-distribute feature, not
+/// the core "edit relative to each element's own value" behavior this
+/// exists for.
 /// </summary>
 public static class NumericFieldExpression
 {
@@ -43,10 +41,9 @@ public static class NumericFieldExpression
     /// <summary>
     /// Whether <paramref name="text"/> is currently a relative expression
     /// (<c>++</c>/<c>--</c>/<c>*</c>/<c>/</c>-prefixed) rather than blank or
-    /// an absolute number - matches UDB's real <c>NumericTextbox.CheckIsRelative</c>,
-    /// used there (and here) to disable a field's spin-button nudging while
-    /// it holds a relative expression, since nudging one further has no
-    /// well-defined meaning.
+    /// an absolute number - used to disable a field's spin-button nudging
+    /// while it holds a relative expression, since nudging one further has
+    /// no well-defined meaning.
     /// </summary>
     public static bool IsRelativeExpression(string text)
     {

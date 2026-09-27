@@ -5,13 +5,12 @@ using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
-/// Edits DoomArchitect's global, app-wide settings - matches UDB's own
-/// real Preferences dialog UX of a category-grouped set of pages: "Game
-/// Configurations" (a list of configurations on one side, a single shared
-/// details area on the other that swaps to show whichever one is
-/// currently selected, rather than duplicating the same fields once per
-/// configuration) and "Keybinds" (<see cref="KeybindsEditor"/>, UDB's own
-/// real Controls page). Switching selection within the Game Configurations
+/// Edits DoomArchitect's global, app-wide settings as a category-grouped
+/// set of pages: "Game Configurations" (a list of configurations on one
+/// side, a single shared details area on the other that swaps to show
+/// whichever one is currently selected, rather than duplicating the same
+/// fields once per configuration) and "Keybinds" (<see cref="KeybindsEditor"/>).
+/// Switching selection within the Game Configurations
 /// tab captures whatever's currently in the details area into an in-memory
 /// working copy first (so it isn't lost), and only writes to disk - and
 /// live-applies any rebound keys - when the dialog is actually confirmed.

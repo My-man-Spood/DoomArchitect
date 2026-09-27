@@ -33,15 +33,12 @@ public readonly struct DrawPoint
 }
 
 /// <summary>
-/// Draw mode's real command: builds a closed loop and - per edge -
-/// either inherits an existing sector's properties into a brand-new one
-/// bordering it (UDB's real <c>MakeSector</c>) or joins directly onto an
-/// existing sector with no new sector at all (UDB's real <c>JoinSector</c>),
-/// instead of Phase 1's always-standalone sector.
+/// Draw mode's command: builds a closed loop and, per edge, either
+/// inherits an existing sector's properties into a brand-new sector
+/// bordering it, or joins directly onto an existing sector with no new
+/// sector at all - instead of Phase 1's always-standalone sector.
 ///
-/// <c>Do()</c> follows UDB's own real <c>Tools.DrawLines</c> architecture
-/// directly (re-derived from its source, not approximated): every
-/// consecutive pair of resolved points always creates a brand-new
+/// Every consecutive pair of resolved points always creates a brand-new
 /// <see cref="Linedef"/> - there is no look-ahead reuse-detection here at
 /// all (an earlier version of this command tried that, via a
 /// <c>CreateOrReuseEdge</c> that only ever covered the one specific case
@@ -49,23 +46,21 @@ public readonly struct DrawPoint
 /// else - drawing over an existing vertex, crossing an existing wall
 /// without landing exactly on a split point, etc.). Instead, every new
 /// edge is stitched against existing (and the loop's own other new)
-/// geometry by a genuinely general reconciliation pass, ported directly
-/// from UDB's own real stitching primitives
+/// geometry by a general reconciliation pass
 /// (<see cref="GeometryStitcher"/> - <c>JoinVertices</c> x2,
 /// <c>SplitLinesByVertices</c> x2 directions, <c>RemoveLoopedLinedefs</c>,
-/// <c>JoinOverlappingLines</c>, <c>FlipBackwardLinedefs</c>, plus
-/// <c>DrawLines</c>' own per-segment existing-line-crossing pre-pass),
-/// run in UDB's own real order. Only *after* that stitch pass does
-/// interior/exterior resolution run, using UDB's own real per-linedef
-/// geometry-driven interior determination
-/// (<see cref="BoundaryTracer.DetermineFrontInterior"/>) rather than a
-/// polygon-winding shortcut - necessary since the stitched result can be
-/// a genuinely more complex shape than the single simple loop the user
-/// physically drew.
+/// <c>JoinOverlappingLines</c>, <c>FlipBackwardLinedefs</c>, plus a
+/// per-segment existing-line-crossing pre-pass), run in that fixed
+/// order. Only *after* that stitch pass does interior/exterior
+/// resolution run, using per-linedef geometry-driven interior
+/// determination (<see cref="BoundaryTracer.DetermineFrontInterior"/>)
+/// rather than a polygon-winding shortcut - necessary since the stitched
+/// result can be a genuinely more complex shape than the single simple
+/// loop the user physically drew.
 ///
-/// One atomic command for the whole loop, matching UDB's own real "one
-/// undo step per draw session". Internally records a small undo action
-/// per individual mutation, in the exact order performed (by
+/// One atomic command for the whole loop - one undo step per draw
+/// session. Internally records a small undo action per individual
+/// mutation, in the exact order performed (by
 /// <see cref="DrawLoopCommand"/>'s own helpers and by
 /// <see cref="GeometryStitcher"/>'s, which append to the identical
 /// shared list), and reverses them in <see cref="Undo"/>. Rebuilt fresh
@@ -75,14 +70,13 @@ public readonly struct DrawPoint
 /// <see cref="BoundaryTracer.FindPotentialSectorAt"/> into a brand-new
 /// sector - a full property copy from whichever existing sector the
 /// trace finds first (matching side of the boundary first, then the
-/// opposite side - UDB's own real ambiguous-neighbor resolution order,
-/// not nearest/largest); failing that, UDB's own real nearest-existing-
-/// linedef fallback (a loop drawn entirely inside another sector,
-/// touching none of its edges, still inherits that sector); and only
-/// <see cref="DefaultFloorTexture"/>/etc. if even that finds nothing at
-/// all (a shape drawn entirely into the void). Every edge's *exterior* side
-/// either joins an existing neighbor sector directly (no new sector) or
-/// stays void, exactly matching UDB's own real interior/exterior split.
+/// opposite side - not nearest/largest); failing that, a
+/// nearest-existing-linedef fallback (a loop drawn entirely inside
+/// another sector, touching none of its edges, still inherits that
+/// sector); and only <see cref="DefaultFloorTexture"/>/etc. if even that
+/// finds nothing at all (a shape drawn entirely into the void). Every
+/// edge's *exterior* side either joins an existing neighbor sector
+/// directly (no new sector) or stays void.
 ///
 /// A resolved trace can cover more than just this loop's own edges (a
 /// shared wall, or an old sector's own untouched sidedefs when a drawn
@@ -93,14 +87,13 @@ public readonly struct DrawPoint
 /// One deliberate simplification versus UDB's real <c>JoinSector</c>: a
 /// freshly created sidedef that's *staying* one-sided always gets
 /// <see cref="DefaultWallTexture"/> rather than copying a neighboring
-/// sidedef's own specific texture name first (UDB's own real
-/// <c>TakeSidedefSettings</c> does try that before falling back to the
+/// sidedef's own specific texture name first (UDB's own
+/// <c>TakeSidedefSettings</c> tries that before falling back to the
 /// default) - flagged in TODO.md as a known gap, not silently dropped. A
 /// freshly created sidedef that's *becoming* two-sided (the opposite
-/// side already has a real sidedef) gets <c>"-"</c> instead, matching
-/// UDB's own real behavior exactly - a plain two-sided wall's middle
-/// texture has nothing to mean on either face once there's a real sector
-/// on both sides.
+/// side already has a real sidedef) gets <c>"-"</c> instead - a plain
+/// two-sided wall's middle texture has nothing to mean on either face
+/// once there's a real sector on both sides.
 /// </summary>
 public sealed class DrawLoopCommand : ICommand
 {
@@ -120,21 +113,20 @@ public sealed class DrawLoopCommand : ICommand
     /// <param name="points">The points drawn, in order.</param>
     /// <param name="closeLoop">
     /// Whether the last point wraps back around to the first, building a
-    /// closed ring (Phase 1/2's own original, still-default behavior) -
-    /// or an open polyline (UDB's own real, genuinely unclosed
-    /// <c>Tools.DrawLines</c> result), which builds one fewer segment and
-    /// never connects the last point back to the first at all. Decided by
-    /// the caller (<see cref="DoomArchitect"/>-side <c>DrawOverlayHandler</c>):
-    /// true for its own "clicked back near the first point" close
-    /// gesture, false for a plain commit elsewhere - a deliberate
-    /// simplification of UDB's own real detection (purely geometric,
-    /// <c>firstline.Start == lastline.End</c> after resolution/stitching,
-    /// with no gesture involved at all), flagged in TODO.md as a known
-    /// gap rather than silently diverging: this project's own Draw mode
-    /// never adds a literal duplicate closing point the way UDB's real
-    /// <c>DrawPointAt</c> does, so there is no vertex-identity signal to
-    /// detect closure from after the fact - only the gesture that
-    /// triggered the commit says which was intended.
+    /// closed ring (Phase 1/2's original, still-default behavior) - or an
+    /// open polyline, which builds one fewer segment and never connects
+    /// the last point back to the first at all. Decided by the caller
+    /// (<see cref="DoomArchitect"/>-side <c>DrawOverlayHandler</c>): true
+    /// for its own "clicked back near the first point" close gesture,
+    /// false for a plain commit elsewhere - a deliberate simplification
+    /// of UDB's own geometric detection (<c>firstline.Start ==
+    /// lastline.End</c> after resolution/stitching, with no gesture
+    /// involved at all), flagged in TODO.md as a known gap: this
+    /// project's Draw mode never adds a literal duplicate closing point
+    /// the way UDB's <c>DrawPointAt</c> does, so there is no
+    /// vertex-identity signal to detect closure from after the fact -
+    /// only the gesture that triggered the commit says which was
+    /// intended.
     /// </param>
     public DrawLoopCommand(MapData map, IReadOnlyList<DrawPoint> points, bool closeLoop = true)
     {
@@ -148,10 +140,9 @@ public sealed class DrawLoopCommand : ICommand
         undoActions.Clear();
 
         // Snapshots of the map's state *before* this session touches
-        // anything - UDB's own real "oldlines"/pre-draw vertex set, used
-        // as the "existing" side of every stitch check below so a
-        // freshly created segment never gets compared against its own
-        // later siblings here.
+        // anything, used as the "existing" side of every stitch check
+        // below so a freshly created segment never gets compared against
+        // its own later siblings here.
         var existingLinedefs = map.Linedefs.ToList();
         var existingVertices = map.Vertices.ToList();
 
@@ -170,28 +161,25 @@ public sealed class DrawLoopCommand : ICommand
             GeometryStitcher.SplitAgainstExistingLines(map, segment, existingLinedefs, newLinedefs, newVertices, undoActions);
         }
 
-        // UDB's own real "splitting only" check (Tools.DrawLines, only
-        // ever considered for a genuinely unclosed drawing - an already-
-        // closed loop skips this entirely, matching UDB exactly): true
-        // when any of this draw's own raw segments falls on the already-
-        // occupied side of an existing linedef, meaning the user is
-        // splitting an existing sector's interior rather than drawing a
-        // fresh shape - read by ResolveInteriorSide below to stop a
-        // genuinely-new sector from being conjured out of the void
-        // alongside that split. Computed against the pre-draw snapshot,
-        // before this draw's own new lines could shadow each other as
-        // each other's own "nearest".
+        // The "splitting only" check - only ever considered for a
+        // genuinely unclosed drawing (an already-closed loop skips this
+        // entirely): true when any of this draw's own raw segments falls
+        // on the already-occupied side of an existing linedef, meaning
+        // the user is splitting an existing sector's interior rather
+        // than drawing a fresh shape - read by ResolveInteriorSide below
+        // to stop a genuinely-new sector from being conjured out of the
+        // void alongside that split. Computed against the pre-draw
+        // snapshot, before this draw's own new lines could shadow each
+        // other as each other's own "nearest".
         var splittingOnly = !closeLoop && IsSplittingOnly(newLinedefs, existingLinedefs);
 
-        // UDB's own real gap-closing: a genuinely open draw whose own two
-        // loose ends both stitch onto existing geometry gets one more
-        // chance to close, by routing *through* that existing geometry
-        // (DrawGapCloser.FindClosingPath, UDB's own real
-        // Tools.FindClosestPath-based search) rather than staying open -
-        // never attempted at all while splittingOnly (matches UDB's own
-        // real "only ever considered inside the not-splitting-only
-        // branch"), and only possible with at least 2 points drawn (an
-        // open single-point "polyline" isn't a real thing to begin with).
+        // Gap-closing: a genuinely open draw whose own two loose ends
+        // both stitch onto existing geometry gets one more chance to
+        // close, by routing *through* that existing geometry
+        // (DrawGapCloser.FindClosingPath) rather than staying open -
+        // never attempted while splittingOnly, and only possible with at
+        // least 2 points drawn (an open single-point "polyline" isn't a
+        // real thing to begin with).
         if (!closeLoop && !splittingOnly && vertices.Count >= 2)
         {
             var closing = DrawGapCloser.FindClosingPath(
@@ -201,12 +189,11 @@ public sealed class DrawLoopCommand : ICommand
             if (closing != null) AppendClosingPath(closing.Value, vertices, newLinedefs, newVertices);
         }
 
-        // The real stitch pass (UDB's own real MapSet.StitchGeometry,
-        // CLASSIC mode - Tools.DrawLines' own default), in its own real
-        // order. SplitLinesByLines (new-vs-new crossing splitting) is
-        // deliberately not run here - confirmed directly against UDB's
-        // source to be a no-op in CLASSIC mode, not a gap on this
-        // project's side.
+        // The stitch pass, in a fixed order matching UDB's own
+        // MapSet.StitchGeometry (CLASSIC mode - Tools.DrawLines' own
+        // default). SplitLinesByLines (new-vs-new crossing splitting) is
+        // deliberately not run here - it's a no-op in UDB's CLASSIC mode,
+        // not a gap on this project's side.
         GeometryStitcher.JoinVerticesWithinSet(map, newVertices, GeometryStitcher.StitchDistance, undoActions);
         GeometryStitcher.JoinVerticesOntoExisting(map, existingVertices, newVertices, GeometryStitcher.StitchDistance, undoActions);
         GeometryStitcher.SplitLinesByVertices(map, newLinedefs, existingVertices, GeometryStitcher.StitchDistance, newLinedefs, undoActions);
@@ -214,13 +201,12 @@ public sealed class DrawLoopCommand : ICommand
         GeometryStitcher.RemoveLoopedLinedefs(map, newLinedefs, undoActions);
         GeometryStitcher.JoinOverlappingLines(map, newLinedefs, undoActions);
 
-        // UDB's own real per-linedef FrontInterior is computed once for
-        // every line in the fully-stitched result *before* either
-        // resolution pass runs, then only ever read (never recomputed)
-        // by both passes - resolving interior first would otherwise
-        // populate real sidedefs that could change what a later
-        // DetermineFrontInterior call finds, corrupting the exterior
-        // pass's own results.
+        // FrontInterior is computed once for every line in the
+        // fully-stitched result *before* either resolution pass runs,
+        // then only ever read (never recomputed) by both passes -
+        // resolving interior first would otherwise populate real
+        // sidedefs that could change what a later DetermineFrontInterior
+        // call finds, corrupting the exterior pass's own results.
         var frontInterior = newLinedefs.ToDictionary(l => l, l => BoundaryTracer.DetermineFrontInterior(map, l));
 
         // Interior first, always - an edge's exterior-side trace can
@@ -235,13 +221,13 @@ public sealed class DrawLoopCommand : ICommand
 
         GeometryStitcher.FlipBackwardLinedefs(newLinedefs, undoActions);
 
-        // UDB's own real cleanup: a fully-unstitched open draw (nothing
-        // in it ever resolved to a real sector anywhere) leaves its raw
-        // sideless linedefs in the map rather than deleting them - a
-        // deliberate raw-line drawing (into the void, touching nothing),
-        // not a failed sector attempt. Only once *something* in this
-        // draw did get a real sector (sidesCreated) are the leftover
-        // sideless segments from that same draw actually cleaned up.
+        // A fully-unstitched open draw (nothing in it ever resolved to a
+        // real sector anywhere) leaves its raw sideless linedefs in the
+        // map rather than deleting them - a deliberate raw-line drawing
+        // (into the void, touching nothing), not a failed sector
+        // attempt. Only once *something* in this draw did get a real
+        // sector (sidesCreated) are the leftover sideless segments from
+        // that same draw actually cleaned up.
         if (sidesCreated)
         {
             for (var i = newLinedefs.Count - 1; i >= 0; i--)
@@ -251,10 +237,8 @@ public sealed class DrawLoopCommand : ICommand
             }
         }
 
-        // UDB's own real SplitOuterSectors post-pass, run last (matching
-        // UDB's own real invocation from DrawGeometryMode.OnAccept, after
-        // Tools.DrawLines itself has fully finished) - see this method's
-        // own remarks.
+        // SplitOuterSectors post-pass, run last, after the draw itself
+        // has fully finished - see this method's own remarks.
         SplitOuterSectors(newLinedefs);
     }
 
@@ -359,7 +343,7 @@ public sealed class DrawLoopCommand : ICommand
     }
 
     /// <summary>
-    /// UDB's own real "splitting only" gate: while <paramref name="splittingOnly"/>
+    /// The "splitting only" gate: while <paramref name="splittingOnly"/>
     /// is set, a trace that borders nothing existing at all
     /// (<see cref="FindMatchingSidedefInTrace"/> finds nothing - a truly
     /// new sector out of the void) is skipped rather than created, so an
@@ -393,21 +377,20 @@ public sealed class DrawLoopCommand : ICommand
         var target = FindMatchingSidedefInTrace(trace);
         if (target == null) return false; // no neighbor to join onto - stays void, matching Phase 1's common case
 
-        // UDB's own real Tools.JoinSector restriction - "we only want to
-        // modify our new lines when joining a sector (or it may break
-        // nearby self-referencing sectors)": unlike CreateAndPopulateSector's
-        // own real MakeSector (which legitimately claims every side in
-        // its own trace, old sidedefs included), a join never touches
-        // anything beyond this draw's own new linedefs. Skipping this
-        // filter used to actively corrupt already-correct topology: an
-        // island drawn earlier and fully enclosed by a *new* ring (e.g. a
-        // pillar, then a border sector drawn around it) has its own
-        // boundary rediscovered here as "another hole of the same outer
-        // sector" too - FindInnerLines has no notion of nesting depth, so
-        // it doesn't know the pillar is already correctly claimed by the
-        // border sector this same Do() just created moments ago - and
-        // retargeting it to the outer sector here would silently steal
-        // it straight back off of that border sector.
+        // UDB's real Tools.JoinSector only ever touches this draw's own
+        // new linedefs when joining onto an existing sector - unlike
+        // MakeSector (CreateAndPopulateSector), which legitimately
+        // claims every side in its own trace, old sidedefs included.
+        // Skipping this restriction here used to actively corrupt
+        // already-correct topology: an island drawn earlier and fully
+        // enclosed by a *new* ring (e.g. a pillar, then a border sector
+        // drawn around it) has its own boundary rediscovered here as
+        // "another hole of the same outer sector" too - FindInnerLines
+        // has no notion of nesting depth, so it doesn't know the pillar
+        // is already correctly claimed by the border sector this same
+        // Do() just created moments ago - and retargeting it to the
+        // outer sector here would silently steal it straight back off of
+        // that border sector.
         foreach (var side in trace)
         {
             if (!newLinedefSet.Contains(side.Linedef)) continue;
@@ -417,7 +400,7 @@ public sealed class DrawLoopCommand : ICommand
         return true;
     }
 
-    /// <summary>UDB's own real Tools.DrawLines "splitting only" check - see this class's own remarks on <see cref="splittingOnly"/>'s use in <see cref="Do"/>.</summary>
+    /// <summary>The "splitting only" check - see this class's own remarks on <see cref="splittingOnly"/>'s use in <see cref="Do"/>.</summary>
     private static bool IsSplittingOnly(IReadOnlyList<Linedef> newLinedefs, IReadOnlyList<Linedef> existingLinedefs)
     {
         foreach (var linedef in newLinedefs)
@@ -441,25 +424,22 @@ public sealed class DrawLoopCommand : ICommand
     }
 
     /// <summary>
-    /// UDB's own real <c>Tools.SplitOuterSectors</c> post-pass (invoked
-    /// from <c>DrawGeometryMode.OnAccept</c> *after* <c>Tools.DrawLines</c>
-    /// itself completes, gated by its own real <c>SplitJoinedSectors</c>
+    /// A post-pass, run last (after the draw's own lines are fully
+    /// stitched), gated in UDB by its own <c>SplitJoinedSectors</c>
     /// setting - always run here, since this project has no settings
-    /// system to gate it behind yet): when this draw's own touched
+    /// system to gate it behind yet: when this draw's own touched
     /// sidedefs belong to a sector whose own polygon has become genuinely
     /// disconnected into multiple separate islands
     /// (<see cref="PolygonNesting.BuildTree"/> reporting more than one
-    /// top-level root - UDB's own real <c>Sector.Triangles.IslandVertices.Count
-    /// &gt; 1</c>), re-traces a fresh boundary from each touched side and
-    /// carves out whichever piece traces to a strict subset of the
+    /// top-level root), re-traces a fresh boundary from each touched side
+    /// and carves out whichever piece traces to a strict subset of the
     /// sector's own sides, as long as at least one of the sides *left
     /// behind* was also drawn by this same operation (otherwise there's
-    /// nothing this draw actually split - leave it alone). At most one new
-    /// sector is carved per candidate sector per call, matching UDB's own
-    /// real behavior exactly (it also only ever splits once per group,
-    /// even if a sector ended up with 3+ disconnected islands).
+    /// nothing this draw actually split - leave it alone). At most one
+    /// new sector is carved per candidate sector per call, even if a
+    /// sector ended up with 3+ disconnected islands.
     ///
-    /// Two deliberate simplifications versus UDB's own real
+    /// Two deliberate simplifications versus UDB's own
     /// <c>MakeSector</c>/<c>SectorWasInvalid</c> machinery, flagged rather
     /// than guessed (their own exact source wasn't available to verify
     /// byte-for-byte): the newly carved sector copies its properties
@@ -470,8 +450,8 @@ public sealed class DrawLoopCommand : ICommand
     /// trace-based property search; and a split that leaves the
     /// *original* sector with fewer than 3 sides of its own (genuinely
     /// degenerate) isn't specially disposed of here - narrower than UDB's
-    /// own real <c>SectorWasInvalid</c> cleanup, a real gap flagged in
-    /// TODO.md rather than silently dropped.
+    /// own <c>SectorWasInvalid</c> cleanup, a real gap flagged in TODO.md
+    /// rather than silently dropped.
     /// </summary>
     private void SplitOuterSectors(IReadOnlyList<Linedef> drawnLinedefs)
     {
@@ -532,16 +512,16 @@ public sealed class DrawLoopCommand : ICommand
 
     /// <summary>
     /// Turns a found <see cref="DrawGapCloser.Result"/> into real map
-    /// geometry - UDB's own real loop building one new vertex+linedef per
-    /// waypoint along the path (skipping the path's own first entry,
-    /// already represented by whichever drawn endpoint the path starts
-    /// from), then one final edge closing directly onto the drawn
-    /// polyline's *other* end. These synthetic vertices sit exactly on
-    /// the existing linedefs/vertices the path traced along, so the
-    /// ordinary stitch pass that runs right after this (still ahead in
-    /// <see cref="Do"/>) is what actually merges them into that existing
-    /// geometry - this method only ever adds new, not-yet-stitched raw
-    /// edges, the same as the drawn polyline's own segments.
+    /// geometry: one new vertex+linedef per waypoint along the path
+    /// (skipping the path's own first entry, already represented by
+    /// whichever drawn endpoint the path starts from), then one final
+    /// edge closing directly onto the drawn polyline's *other* end.
+    /// These synthetic vertices sit exactly on the existing
+    /// linedefs/vertices the path traced along, so the ordinary stitch
+    /// pass that runs right after this (still ahead in <see cref="Do"/>)
+    /// is what actually merges them into that existing geometry - this
+    /// method only ever adds new, not-yet-stitched raw edges, the same
+    /// as the drawn polyline's own segments.
     /// </summary>
     private void AppendClosingPath(DrawGapCloser.Result closing, List<Vertex> vertices, List<Linedef> newLinedefs, List<Vertex> newVertices)
     {
@@ -561,8 +541,8 @@ public sealed class DrawLoopCommand : ICommand
     }
 
     /// <param name="nearbyLines">
-    /// UDB's own real <c>MakeSector</c> "nearbylines" fallback - the
-    /// pre-draw snapshot of every existing linedef, consulted only when
+    /// UDB's <c>MakeSector</c> "nearbylines" fallback - the pre-draw
+    /// snapshot of every existing linedef, consulted only when
     /// <paramref name="source"/> is null (the trace touches nothing
     /// existing at all, e.g. a brand-new closed loop drawn entirely
     /// *inside* another sector's bounds without sharing any of its
@@ -570,11 +550,11 @@ public sealed class DrawLoopCommand : ICommand
     /// silently fall back to hardcoded defaults instead of inheriting the
     /// sector it's nested in). Finds the nearest existing linedef to a
     /// point just off this trace's own first entry and reads whichever
-    /// sector lies on the matching side of *that* line - exactly UDB's
-    /// own real proximity-based inheritance, not a point-in-polygon
-    /// "which sector contains this shape" containment test (UDB has no
-    /// such thing here either). Left null by <see cref="SplitOuterSectors"/>'s
-    /// own call, whose <paramref name="source"/> is always non-null.
+    /// sector lies on the matching side of *that* line - proximity-based
+    /// inheritance, not a point-in-polygon "which sector contains this
+    /// shape" containment test (UDB has no such thing here either). Left
+    /// null by <see cref="SplitOuterSectors"/>'s own call, whose
+    /// <paramref name="source"/> is always non-null.
     /// </param>
     private void CreateAndPopulateSector(IReadOnlyList<LinedefSide> trace, Sidedef? source, IReadOnlyList<Linedef>? nearbyLines = null)
     {
@@ -594,11 +574,10 @@ public sealed class DrawLoopCommand : ICommand
         if (sourceSector != null) CopySectorProperties(sourceSector, newSector);
         else if (nearestBasicSector != null)
         {
-            // UDB's own real "any side is better than no side" fallback:
-            // the nearest line's *opposite* side had a sector but its
-            // matching side didn't, so only basic texture/brightness
-            // settings are trustworthy here, not a full property/UDMF-
-            // field copy.
+            // "Any side is better than no side" fallback: the nearest
+            // line's *opposite* side had a sector but its matching side
+            // didn't, so only basic texture/brightness settings are
+            // trustworthy here, not a full property/UDMF-field copy.
             newSector.FloorTexture = nearestBasicSector.FloorTexture;
             newSector.CeilingTexture = nearestBasicSector.CeilingTexture;
             newSector.Brightness = nearestBasicSector.Brightness;
@@ -644,11 +623,11 @@ public sealed class DrawLoopCommand : ICommand
     }
 
     /// <summary>
-    /// UDB's own real ambiguous-neighbor rule: first match walking the
-    /// trace in order - the *matching* side of each entry (the side that
-    /// entry's own <see cref="LinedefSide.Front"/> represents) first;
+    /// The ambiguous-neighbor rule: first match walking the trace in
+    /// order - the *matching* side of each entry (the side that entry's
+    /// own <see cref="LinedefSide.Front"/> represents) first;
     /// <see cref="FindOppositeSidedefInTrace"/> checks the other side of
-    /// each entry instead, interior's own real fallback second pass when
+    /// each entry instead, as interior's own fallback second pass when
     /// nothing matching is found anywhere in the boundary.
     /// </summary>
     private static Sidedef? FindMatchingSidedefInTrace(IReadOnlyList<LinedefSide> trace)

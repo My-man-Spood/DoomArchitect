@@ -5,25 +5,20 @@ using DoomArchitect.Core.Configuration;
 using Godot;
 
 /// <summary>
-/// Browse and pick a sector special by number and description, ported
-/// from UDB's real <c>EffectBrowserForm</c> - a flat, live-filtered list
-/// (verified against source: real sector specials carry no category at
-/// all, unlike linedef actions, so there's nothing to group by - no tree
-/// needed the way <see cref="TextureBrowserDialog"/>'s per-resource
-/// grouping needed one). Single-click selects; double-click (or Enter, via
+/// Browse and pick a sector special by number and description - a flat,
+/// live-filtered list (sector specials carry no category, unlike linedef
+/// actions, so there's nothing to group by - no tree needed the way
+/// <see cref="TextureBrowserDialog"/>'s per-resource grouping needed one).
+/// Single-click selects; double-click (or Enter, via
 /// <see cref="Tree.ItemActivated"/>) confirms and closes exactly like OK -
 /// the same interaction model <see cref="TextureBrowserDialog"/> already
 /// established for this project's browse dialogs.
 ///
-/// UDB's own on-screen field label is "Special:" even though its internal
-/// code calls this concept "Effect" throughout (<c>EffectBrowserForm</c>,
-/// window title "Edit Effect") - this project has only ever used
-/// "Special" in user-facing text, so the column headers here say
-/// "Special"/"Description" rather than reusing UDB's internal wording.
-/// UDB's own real "Generalized Effects" tab is deliberately not built -
-/// it only exists behind a <c>generalizedsectors</c> config flag neither
-/// bundled Doom/Doom2 config enables (confirmed: only 2 of UDB's 51
-/// shipped configs turn it on at all).
+/// This project has only ever used "Special" in user-facing text, so the
+/// column headers here say "Special"/"Description". A "Generalized
+/// Effects" tab is deliberately not built - it only exists behind a
+/// <c>generalizedsectors</c> config flag neither bundled Doom/Doom2 config
+/// enables.
 /// </summary>
 public partial class SectorSpecialBrowserDialog : AcceptDialog
 {

@@ -113,7 +113,7 @@ public class DoomPictureReaderTests
     }
 
     /// <summary>
-    /// Mirrors UDB's real <c>Validate()</c> gate, which normally runs
+    /// Mirrors the <c>Validate()</c> gate, which normally runs
     /// *before* this reader is ever invoked at all (see this class's own
     /// remarks) - a lump that isn't really patch-format data, but reaches
     /// this reader as a fallback anyway, must be rejected outright rather

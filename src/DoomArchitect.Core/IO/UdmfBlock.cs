@@ -3,8 +3,7 @@ namespace DoomArchitect.Core.IO;
 /// <summary>
 /// A parsed UDMF block (<c>name { ... }</c>) or, with an empty
 /// <see cref="Name"/>, the document root itself - the root is just a
-/// block whose contents happen to sit outside any braces, matching how
-/// UDB's own parser treats both uniformly.
+/// block whose contents happen to sit outside any braces.
 /// </summary>
 public sealed class UdmfBlock
 {
@@ -22,9 +21,9 @@ public sealed class UdmfBlock
     public IReadOnlyList<UdmfBlock> Blocks { get; }
 
     /// <summary>
-    /// The value of <paramref name="key"/>, or null if absent. Matches
-    /// UDB's own field lookup: a duplicate key is not an error - the
-    /// <em>last</em> matching assignment silently wins.
+    /// The value of <paramref name="key"/>, or null if absent. A duplicate
+    /// key is not an error - the <em>last</em> matching assignment silently
+    /// wins, matching UDB's own field lookup.
     /// </summary>
     public UdmfValue? Find(string key)
     {

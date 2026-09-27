@@ -2,8 +2,8 @@ using Godot;
 
 /// <summary>
 /// Grid controls mirroring the keybinds: <c>G</c> (snap toggle) and
-/// <c>[</c>/<c>]</c> (grid size), plus the tag-indicator toggle (<c>I</c>,
-/// UDB's own real default) - not strictly a "grid" control, but a general
+/// <c>[</c>/<c>]</c> (grid size), plus the tag-indicator toggle (<c>I</c>) -
+/// not strictly a "grid" control, but a general
 /// 2D-view display option with nowhere more specific to live yet; a whole
 /// new toolbar panel for this one button would be more machinery than the
 /// feature needs. Same separation-of-concerns reasoning as

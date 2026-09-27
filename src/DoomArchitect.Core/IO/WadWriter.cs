@@ -4,17 +4,15 @@ namespace DoomArchitect.Core.IO;
 
 /// <summary>
 /// Writes the classic WAD container format - the mirror image of
-/// <see cref="WadFile.Read(Stream)"/>, matching its own already-verified
-/// format understanding exactly (same field order/sizes, 8-byte
+/// <see cref="WadFile.Read(Stream)"/> (same field order/sizes, 8-byte
 /// fixed-width uppercase names). Always writes a "PWAD" (this project
 /// only ever authors user-created content, never an IWAD). A full,
-/// from-scratch rebuild every time - never an in-place patch of an
-/// existing file - matching UDB's own real <c>MapManager.SaveMap</c>,
-/// which deliberately rebuilds the whole target WAD rather than editing
-/// one in place (its own source cites a real bug, GitHub issue #531, as
-/// the reason). Returns the finished bytes rather than writing to disk
-/// itself - the caller (a save feature) owns backup/overwrite policy for
-/// the actual file on disk.
+/// from-scratch rebuild every time, never an in-place patch of an
+/// existing file - matching UDB's own <c>MapManager.SaveMap</c>, which
+/// deliberately avoids editing a WAD in place because of a real bug
+/// (GitHub issue #531) that in-place editing used to trigger. Returns the
+/// finished bytes rather than writing to disk itself - the caller (a save
+/// feature) owns backup/overwrite policy for the actual file on disk.
 /// </summary>
 public static class WadWriter
 {

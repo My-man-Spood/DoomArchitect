@@ -19,8 +19,8 @@ namespace DoomArchitect.Rendering;
 /// the one canonical frame each
 /// <see cref="Core.Configuration.ThingTypeInfo.SpriteName"/> already
 /// names), and the 2D map view's own live, rotation-aware Thing rendering
-/// (via <see cref="GetOrDecodeRotationFrame"/>, UDB's real per-angle
-/// sprite-frame selection - see <see cref="TextureSet.ResolveSpriteRotations"/>).
+/// (via <see cref="GetOrDecodeRotationFrame"/>'s per-angle sprite-frame
+/// selection - see <see cref="TextureSet.ResolveSpriteRotations"/>).
 ///
 /// Deliberately seeded from a caller-supplied name list
 /// (<see cref="SeedAll"/>'s <c>spriteNames</c>), not "every sprite lump in

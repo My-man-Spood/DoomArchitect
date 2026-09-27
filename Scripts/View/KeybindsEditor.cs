@@ -6,12 +6,10 @@ using DoomArchitect.Input;
 using Godot;
 
 /// <summary>
-/// UDB's own real Controls preferences UX, ported directly: a category-
-/// grouped list, select an action to see its description and current
-/// binding, capture a replacement via a dedicated "listening" state, and a
-/// <b>non-blocking</b> conflict warning (lists any other action already
-/// using the same combo, never refuses the rebind - see
-/// <c>PreferencesForm.UpdateKeyUsedActions</c>'s own real behavior).
+/// A category-grouped list: select an action to see its description and
+/// current binding, capture a replacement via a dedicated "listening"
+/// state, and a <b>non-blocking</b> conflict warning that lists any other
+/// action already using the same combo without refusing the rebind.
 /// Works entirely against an in-memory working copy
 /// (<see cref="Load"/>/<see cref="GetOverrides"/>) - <see cref="PreferencesDialog"/>
 /// owns actually saving it, matching its own existing load-fresh/working-
@@ -160,11 +158,11 @@ public partial class KeybindsEditor : HSplitContainer
 
     /// <summary>
     /// The actual key-capture - deliberately <c>_UnhandledKeyInput</c>
-    /// rather than reading a raw <c>KeyDown</c> off a focused control
-    /// (UDB's own real WinForms equivalent): lets a genuinely unrelated
-    /// GUI shortcut/focused-field keystroke reach its own handler first,
-    /// same reasoning Godot's own docs give for preferring "unhandled"
-    /// input for shortcut-style capture over intercepting every raw event.
+    /// rather than reading a raw <c>KeyDown</c> off a focused control: lets
+    /// a genuinely unrelated GUI shortcut/focused-field keystroke reach its
+    /// own handler first, same reasoning Godot's own docs give for
+    /// preferring "unhandled" input for shortcut-style capture over
+    /// intercepting every raw event.
     /// </summary>
     public override void _UnhandledKeyInput(InputEvent @event)
     {

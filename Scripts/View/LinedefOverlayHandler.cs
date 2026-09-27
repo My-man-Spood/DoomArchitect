@@ -24,16 +24,12 @@ public sealed class LinedefOverlayHandler
 	private static readonly Color TwoSidedColor = new(0.55f, 0.55f, 0.6f);
 
 	/// <summary>
-	/// UDB's own real default linedef-action tint - not a user preference
-	/// this project is choosing to skip, a genuine, always-on UDB
-	/// behavior: <c>ConfigurationInfo</c>'s own real load path seeds
-	/// exactly one hardcoded "Linedef Colors" preset whenever a user has
-	/// never customized their own (the overwhelmingly common case) -
-	/// <c>Action == -1</c> ("any non-zero action", UDB's own real
-	/// sentinel) → <c>System.Drawing.Color.PaleGreen</c>
-	/// (<c>(152, 251, 152)</c>). Selection still wins over it, matching
-	/// <c>Renderer2D.DetermineLinedefColor</c>'s own real priority
-	/// (<c>if(l.Selected) return Selection;</c> runs first).
+	/// Default linedef-action tint - not a user preference, a hardcoded
+	/// default this project always applies for any linedef with a
+	/// non-zero action (UDB's own default "Linedef Colors" preset uses
+	/// <c>System.Drawing.Color.PaleGreen</c>, <c>(152, 251, 152)</c>, and
+	/// that's what this reproduces). Selection still wins over it - it's
+	/// only applied when the linedef isn't selected.
 	/// </summary>
 	private static readonly Color ActionTintColor = new(0.596f, 0.984f, 0.596f);
 
@@ -63,9 +59,7 @@ public sealed class LinedefOverlayHandler
 	/// The linedef currently under the cursor - only actually updates
 	/// while Linedefs mode is active (<c>HandleInput</c>, which is what
 	/// refreshes it, is only ever called while this handler owns input at
-	/// all), matching UDB's own real per-mode <c>Highlight()</c>: its own
-	/// tag-arrow feature is likewise only live while the matching classic
-	/// mode is engaged, not a mode-agnostic global hover.
+	/// all) - not a mode-agnostic global hover.
 	/// </summary>
 	public Linedef Hovered => _input.Hovered;
 

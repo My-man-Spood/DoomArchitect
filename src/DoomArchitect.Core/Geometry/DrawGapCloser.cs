@@ -4,37 +4,33 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// UDB's own real gap-closing search inside <c>Tools.DrawLines</c>: when a
-/// drawn polyline is genuinely open (its own first and last points don't
-/// coincide) but both ends themselves stitch onto existing geometry, UDB
-/// tries to find a route *through* that existing geometry connecting the
-/// two loose ends back together, so the draw can still close into a real
-/// sector rather than staying open. Deliberately its own file, distinct
-/// from <see cref="BoundaryTracer"/> (whose own <see cref="BoundaryTracer.Walk"/>/
+/// Gap-closing search for Draw Lines mode: when a drawn polyline is
+/// genuinely open (its own first and last points don't coincide) but both
+/// ends themselves stitch onto existing geometry, this looks for a route
+/// *through* that existing geometry connecting the two loose ends back
+/// together, so the draw can still close into a real sector rather than
+/// staying open. Deliberately its own file, distinct from
+/// <see cref="BoundaryTracer"/> (whose own <see cref="BoundaryTracer.Walk"/>/
 /// <see cref="BoundaryTracer.FindClosestPath"/> this reuses as its actual
 /// pathfinding primitive) and from <c>DrawLoopCommand</c> (which owns
 /// turning a found path into real map mutations - this class only ever
 /// searches, it never touches <see cref="MapData"/> at all).
 ///
-/// This project keeps the original drawn <c>DrawPoint</c>'s own
-/// <c>ExistingVertex</c>/<c>SplitLinedef</c> reference all the way through
-/// to here, unlike UDB's own real <c>Tools.DrawLines</c> (a pure-geometry
-/// function working only from already-resolved vertex positions, which has
-/// to *re-discover* what a drawn endpoint stitches onto via a fresh
-/// <c>MapSet.NearestLinedefRange</c>/<c>NearestVertexSquareRange</c>
-/// distance search) - so this port uses that already-known reference
-/// directly instead of re-deriving it, simpler and immune to a dense-area
+/// Keeps the original drawn <c>DrawPoint</c>'s own <c>ExistingVertex</c>/
+/// <c>SplitLinedef</c> reference all the way through to here, rather than
+/// re-discovering what a drawn endpoint stitches onto via a fresh nearest-
+/// linedef/vertex distance search - simpler, and immune to a dense-area
 /// distance search finding a different line/vertex than the one the user
 /// actually clicked.
 /// </summary>
 public static class DrawGapCloser
 {
     /// <summary>
-    /// A found closing path, plus which end it actually starts from -
-    /// UDB's own real <c>pathforward</c> (whether <c>shortestpath[0]</c>
-    /// belongs to the *start* end's own candidates, not the end's) - the
-    /// caller needs this to know which of the drawn polyline's own two
-    /// ends the very first synthetic waypoint should connect onto.
+    /// A found closing path, plus which end it actually starts from
+    /// (whether the path's first entry belongs to the *start* end's own
+    /// candidates, not the end's) - the caller needs this to know which of
+    /// the drawn polyline's own two ends the very first synthetic waypoint
+    /// should connect onto.
     /// </summary>
     public readonly record struct Result(IReadOnlyList<LinedefSide> Path, bool Forward);
 
@@ -52,15 +48,14 @@ public static class DrawGapCloser
         var endPoints = CandidatesAtEndpoint(lastLine, endLinedef, endVertex);
         if (startPoints.Count == 0 || endPoints.Count == 0) return null;
 
-        // UDB's own real fast paths for the common "closing back onto the
-        // very thing you started from" case - skips the general search
-        // entirely when both ends already stitch onto the exact same
-        // line, or onto a line and one of that same line's own vertices.
-        // Which direction the resulting single-entry path actually runs
-        // (see this method's own final "Forward" determination below)
-        // isn't assumed here even for these fast paths - matching UDB's
-        // own real behavior of always re-checking pathforward against
-        // startpoints afterward, not just for the general search result.
+        // Fast paths for the common "closing back onto the very thing you
+        // started from" case - skips the general search entirely when both
+        // ends already stitch onto the exact same line, or onto a line and
+        // one of that same line's own vertices. Which direction the
+        // resulting single-entry path actually runs (see this method's own
+        // final "Forward" determination below) isn't assumed here even for
+        // these fast paths - it's always re-checked against startpoints
+        // afterward, not just for the general search result.
         IReadOnlyList<LinedefSide>? shortest;
 
         if (startLinedef != null && startLinedef == endLinedef)
@@ -104,12 +99,10 @@ public static class DrawGapCloser
     /// landed on one, or (if it snapped onto a vertex instead) both sides
     /// of whichever of that vertex's own linedefs best continues the
     /// drawn line's own direction there, picked separately from each of
-    /// that drawn line's own two possible facings (UDB's own real
-    /// two-pass <c>LinedefAngleSorter</c> search, reusing this project's
-    /// own already-tested <see cref="LinedefAngleSorter.SortByRelativeAngleDescending"/>
-    /// rather than re-deriving UDB's own separate comparator's exact
-    /// tie-break a second time - same "tightest turn" intent either way).
-    /// Empty if the drawn point stitched onto nothing at all.
+    /// that drawn line's own two possible facings via a two-pass
+    /// <see cref="LinedefAngleSorter.SortByRelativeAngleDescending"/>
+    /// search - the "tightest turn" wins either way. Empty if the drawn
+    /// point stitched onto nothing at all.
     /// </summary>
     private static List<LinedefSide> CandidatesAtEndpoint(Linedef drawnLine, Linedef? stitchLinedef, Vertex? stitchVertex)
     {

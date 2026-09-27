@@ -144,8 +144,7 @@ public sealed class TextureCache
         {
             AlbedoTexture = texture,
             // Doom art is deliberately low-res and chunky - nearest-neighbor
-            // preserves that look instead of Godot's default smoothing. A
-            // rendering choice, not a UDB behavior.
+            // preserves that look instead of Godot's default smoothing.
             TextureFilter = BaseMaterial3D.TextureFilterEnum.Nearest,
             // Sector/wall brightness is baked as a per-vertex color (see
             // SectorMeshBuilder/WallMeshBuilder) rather than driven by a

@@ -3,18 +3,13 @@ namespace DoomArchitect.Core.Configuration;
 /// <summary>
 /// A thing type entry as loaded from a <c>thingtypes</c> category/number
 /// block - <see cref="SpriteName"/> is a full sprite lump name (e.g.
-/// <c>"POSSA1"</c>, matching real UDB <c>.cfg</c> data), not just a 4-
-/// character prefix, so rendering can look it up directly with no
-/// rotation-frame guessing. <see cref="ShowsDirection"/> and
-/// <see cref="ColorIndex"/> mirror two more real UDB <c>.cfg</c> fields
-/// (<c>arrow</c>/<c>color</c>) this project hadn't modeled until now -
-/// <see cref="ColorIndex"/> is the real <c>.cfg</c> <c>color</c> field
-/// value (0-19), resolved against <c>Rendering.ThingCategoryColors</c> in
-/// the App layer (Core stays rendering-agnostic) - that palette is UDB's
-/// own real shipped-default thing-color palette
-/// (<c>ColorCollection.THINGCOLOR00</c>-<c>19</c>), not a DoomArchitect
-/// invention, since there's no reason to diverge from something this
-/// familiar to a UDB user.
+/// <c>"POSSA1"</c>), not just a 4-character prefix, so rendering can look
+/// it up directly with no rotation-frame guessing. <see cref="ShowsDirection"/>
+/// and <see cref="ColorIndex"/> mirror the <c>.cfg</c> <c>arrow</c>/
+/// <c>color</c> fields - <see cref="ColorIndex"/> is the <c>.cfg</c>
+/// <c>color</c> field value (0-19), resolved against
+/// <c>Rendering.ThingCategoryColors</c> in the App layer (Core stays
+/// rendering-agnostic).
 /// <see cref="Category"/> is the raw <c>.cfg</c> category block key (e.g.
 /// <c>"monsters"</c>) - the embedded thing-type picker's own grouping key,
 /// same "plain taxonomy label" role <c>ActionInfo.Category</c> already
@@ -26,10 +21,10 @@ public sealed record ThingTypeInfo(
 
 /// <summary>
 /// One argument slot (of the fixed 5, <c>arg0</c>-<c>arg4</c>) an action
-/// may or may not actually use - <see cref="Used"/> mirrors UDB's real
-/// "does this argN block even exist for this action" check (an unused
-/// slot gets a generic disabled placeholder in the UI rather than being
-/// removed, matching UDB's real always-5-boxes layout).
+/// may or may not actually use - <see cref="Used"/> is false when no
+/// matching argN sub-block exists for this action (an unused slot gets a
+/// generic disabled placeholder in the UI rather than being removed -
+/// always 5 boxes, some disabled).
 /// <see cref="EnumOptions"/> is null for a plain numeric argument, or the
 /// value/label pairs to show as a dropdown instead when the action's
 /// <c>.cfg</c> entry names a shared enum list.
@@ -40,12 +35,10 @@ public sealed record ArgumentInfo(string Title, bool Used, IReadOnlyList<Argumen
 public sealed record ArgumentEnumOption(long Value, string Title);
 
 /// <summary>
-/// A Hexen-style action special and its own real arg0-arg4 metadata -
-/// genuinely shared data, not Linedef-specific (named plainly "Action",
-/// not "LinedefAction", once confirmed a Thing's own <c>special</c>/
-/// <c>arg0-4</c> fields resolve their argument metadata from this exact
-/// same table in real UDB - see <c>ArgumentsControl</c>'s own parallel
-/// <c>SetValue(Linedef,...)</c>/<c>SetValue(Thing,...)</c> overloads).
+/// A Hexen-style action special and its own arg0-arg4 metadata - shared
+/// data, not Linedef-specific: a Thing's own <c>special</c>/<c>arg0-4</c>
+/// fields resolve their argument metadata from this same table too, which
+/// is why it's named plainly "Action" rather than "LinedefAction".
 /// </summary>
 public sealed record ActionInfo(int Number, string Title, string Category, IReadOnlyList<ArgumentInfo> Args);
 
@@ -75,12 +68,12 @@ public interface IGameConfiguration
 
     ActionInfo? GetAction(int special);
 
-    /// <summary>Every known action special, sorted by number - shared by the Linedef and Thing dialogs' own "browse actions" data source (a Thing's own <c>special</c>/<c>arg0-4</c> resolve against this same table in real UDB), mirroring <see cref="GetSectorSpecials"/>.</summary>
+    /// <summary>Every known action special, sorted by number - shared by the Linedef and Thing dialogs' own "browse actions" data source, mirroring <see cref="GetSectorSpecials"/>.</summary>
     IReadOnlyList<ActionInfo> GetActions();
 
     SectorSpecialInfo? GetSectorSpecial(int type);
 
-    /// <summary>Every known sector special, sorted by number - matches UDB's real <c>SortedSectorEffects</c> ordering; the "browse specials" dialog's own data source.</summary>
+    /// <summary>Every known sector special, sorted by number - the "browse specials" dialog's own data source.</summary>
     IReadOnlyList<SectorSpecialInfo> GetSectorSpecials();
 
     /// <summary>Every real per-sector UDMF boolean field this configuration defines - empty for a non-UDMF-namespace configuration (vanilla Doom/Doom2 have no such concept at all).</summary>
@@ -89,26 +82,24 @@ public interface IGameConfiguration
     /// <summary>Every real per-linedef UDMF boolean flag this configuration defines - same "empty for non-UDMF configs" rule as <see cref="GetSectorFlags"/>. Reuses <see cref="SectorFlagInfo"/>'s identical Key/Title shape rather than a new record.</summary>
     IReadOnlyList<SectorFlagInfo> GetLinedefFlags();
 
-    /// <summary>Every real per-linedef UDMF activation-trigger field (e.g. <c>playercross</c>, <c>monsteruse</c>) - a distinct group from <see cref="GetLinedefFlags"/> in UDB's own real dialog, even though both are just named UDMF booleans under the hood.</summary>
+    /// <summary>Every real per-linedef UDMF activation-trigger field (e.g. <c>playercross</c>, <c>monsteruse</c>) - a distinct group from <see cref="GetLinedefFlags"/> in the UI, even though both are just named UDMF booleans under the hood.</summary>
     IReadOnlyList<SectorFlagInfo> GetLinedefActivations();
 
     /// <summary>Every real per-thing UDMF boolean flag this configuration defines - same "empty for non-UDMF configs" rule as <see cref="GetSectorFlags"/>. Reuses <see cref="SectorFlagInfo"/>'s identical Key/Title shape rather than a new record (third consumer now).</summary>
     IReadOnlyList<SectorFlagInfo> GetThingFlags();
 
-    /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones the way UDB's real damage-type combo does.</summary>
+    /// <summary>Known sector damage-type strings (e.g. <c>"Fire"</c>, <c>"Poison"</c>) - a fixed base list only; this project has no DECORATE parser to also discover map-defined ones.</summary>
     IReadOnlyList<string> GetDamageTypes();
 
     /// <summary>
-    /// UDB's real <c>mixtexturesflats</c> <c>.cfg</c> setting, verified
-    /// directly against its source: when true, a Sector's Floor/Ceiling
-    /// texture picker (real UDB's <c>FlatSelectorControl</c>) and a
-    /// Linedef's wall-texture picker (<c>TextureSelectorControl</c>) each
-    /// also offer the *other* namespace's names, since the engine's own
-    /// texture manager doesn't actually distinguish them for either field
-    /// - true for the ZDoom/GZDoom-family configs (inherited from
-    /// <c>ZDoom_common.cfg</c>), false for vanilla Doom (matching
+    /// The <c>mixtexturesflats</c> <c>.cfg</c> setting: when true, a
+    /// Sector's Floor/Ceiling texture picker and a Linedef's wall-texture
+    /// picker each also offer the *other* namespace's names, since the
+    /// engine's own texture manager doesn't actually distinguish them for
+    /// either field - true for the ZDoom/GZDoom-family configs (inherited
+    /// from <c>ZDoom_common.cfg</c>), false for vanilla Doom (matching
     /// <c>Doom_common.cfg</c>'s own explicit <c>false</c>, also this
-    /// setting's real default when a <c>.cfg</c> doesn't set it at all).
+    /// setting's default when a <c>.cfg</c> doesn't set it at all).
     /// </summary>
     bool MixTexturesAndFlats { get; }
 }

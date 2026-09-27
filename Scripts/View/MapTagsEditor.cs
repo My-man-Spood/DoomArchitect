@@ -6,39 +6,33 @@ using DoomArchitect.Core.Undo;
 using Godot;
 
 /// <summary>
-/// Ports UDB's real <c>TagsSelector</c> control (verified against
-/// <c>Source/Core/Controls/TagsSelector.cs</c> and its real usage in
-/// <c>SectorEditFormUDMF.cs</c>, not guessed from icons) - a primary
-/// "Tag N:" row (editable field + spinner + New/Unused/Clear) plus a
-/// "Tags:" row of read-only clickable chips (one per extra tag) with
-/// Clear All/Add/Remove buttons. Shared between the Sector and Linedef
-/// dialogs (via <see cref="SetSectors"/>/<see cref="SetLinedefs"/>)
-/// exactly like UDB's own real control is - the predicted "generalize
-/// this once the Linedef dialog exists" moment from when this was still
-/// Sector-only. Internally it only ever touches each element's
+/// A primary "Tag N:" row (editable field + spinner + New/Unused/Clear)
+/// plus a "Tags:" row of read-only clickable chips (one per extra tag)
+/// with Clear All/Add/Remove buttons. Shared between the Sector and
+/// Linedef dialogs (via <see cref="SetSectors"/>/<see cref="SetLinedefs"/>).
+/// Internally it only ever touches each element's
 /// <see cref="UniFields"/> bag (never a <see cref="Sector"/>- or
 /// <see cref="Linedef"/>-specific member), so generalizing needed no new
 /// Core-level shared interface - just two thin public entry points
 /// feeding the same <c>UniFields</c>-driven model.
 ///
-/// Multi-selection model matches UDB's real one exactly (its own
-/// <c>List&lt;List&lt;int&gt;&gt;</c>/<c>SetValues</c>/<c>ApplyTo</c>): one tag
-/// list per selected element, edited by *slot index* in lockstep - typing
-/// a value, New, Unused, or Clear writes into that same slot for every
-/// selected element's own list simultaneously. A slot's displayed value is
-/// the first element's own value at that index, unless another selected
-/// element disagrees there (including an element whose own list doesn't
-/// reach that index) - then it shows mixed. Slot count is always the
-/// first element's own tag count, matching UDB's real display logic.
+/// Multi-selection model: one tag list per selected element, edited by
+/// *slot index* in lockstep - typing a value, New, Unused, or Clear
+/// writes into that same slot for every selected element's own list
+/// simultaneously. A slot's displayed value is the first element's own
+/// value at that index, unless another selected element disagrees there
+/// (including an element whose own list doesn't reach that index) - then
+/// it shows mixed. Slot count is always the first element's own tag
+/// count.
 ///
-/// UDB's real `&gt;=`/`&lt;=` (per-selection-position ascending/descending
-/// range) and `++`/`--` (per-selection-position offset) tag-distribution
-/// grammars are deliberately not ported - a distinct "assign each element
-/// a different value based on its position in the collection" feature,
-/// the same category <see cref="NumericFieldExpression"/>'s own
-/// `+++`/`---` variant was already declined for the same reason. Typing
-/// anything other than a blank field or a plain absolute integer here is
-/// simply a no-op.
+/// A `&gt;=`/`&lt;=` (per-selection-position ascending/descending range)
+/// and `++`/`--` (per-selection-position offset) tag-distribution grammar
+/// is deliberately not supported - a distinct "assign each element a
+/// different value based on its position in the collection" feature, the
+/// same category <see cref="NumericFieldExpression"/>'s own `+++`/`---`
+/// variant was already declined for the same reason. Typing anything
+/// other than a blank field or a plain absolute integer here is simply a
+/// no-op.
 ///
 /// Never live-applied to the selected elements (no visual effect to
 /// preview, matching Special/Gravity's existing precedent) - all real
@@ -93,7 +87,7 @@ public partial class MapTagsEditor : VBoxContainer
 	public void SetLinedefs(IReadOnlyList<Linedef> linedefs, MapData map) =>
 		SetElements(linedefs.Select(l => l.Fields).ToList(), map, map.GetUsedLinedefTags);
 
-	/// <summary>Third real consumer, confirmed directly against UDB's own <c>TagsSelector</c> usage in <c>ThingEditFormUDMF.cs</c> - a Thing's own <c>id</c>/<c>moreids</c> fields are the exact same UDMF tag mechanism Sector/Linedef already share.</summary>
+	/// <summary>A Thing's own <c>id</c>/<c>moreids</c> fields are the exact same UDMF tag mechanism Sector/Linedef already share.</summary>
 	public void SetThings(IReadOnlyList<Thing> things, MapData map) =>
 		SetElements(things.Select(t => t.Fields).ToList(), map, map.GetUsedThingTags);
 
@@ -113,7 +107,7 @@ public partial class MapTagsEditor : VBoxContainer
 		RefreshActiveSlotDisplay();
 	}
 
-	/// <summary>Always the first selected element's own tag count - matches UDB's real display logic exactly (see this class's own remarks).</summary>
+	/// <summary>Always the first selected element's own tag count (see this class's own remarks).</summary>
 	private int SlotCount => _workingTags.Count > 0 ? _workingTags[0].Count : 0;
 
 	/// <summary>Null means "the selected elements disagree here" (mixed) - shown as blank in the active-slot field and "???" on that slot's chip.</summary>
@@ -128,7 +122,7 @@ public partial class MapTagsEditor : VBoxContainer
 		return reference;
 	}
 
-	/// <summary>Writes <paramref name="value"/> into every selected element's own list at <paramref name="slot"/>, padding any element whose list doesn't yet reach that far - real UDB assumes equal-length lists, this project's elements aren't guaranteed to start with matching tag counts.</summary>
+	/// <summary>Writes <paramref name="value"/> into every selected element's own list at <paramref name="slot"/>, padding any element whose list doesn't yet reach that far - this project's elements aren't guaranteed to start with matching tag counts.</summary>
 	private void SetSlotValue(int slot, long value)
 	{
 		foreach (var list in _workingTags)
@@ -148,7 +142,7 @@ public partial class MapTagsEditor : VBoxContainer
 		if (long.TryParse(trimmed, out var value)) SetSlotValue(_activeSlot, value);
 	}
 
-	/// <summary>Unused-among-this-element's-own-current-tags (not map-wide) - matches UDB's real <c>GetNewTag(existingTags)</c> call for Add; delegates to a map-wide New instead when the list is still just the default single `0` slot, also matching UDB's real shortcut.</summary>
+	/// <summary>Unused-among-this-element's-own-current-tags (not map-wide) for Add; delegates to a map-wide New instead when the list is still just the default single `0` slot.</summary>
 	private void AddTag()
 	{
 		if (SlotCount == 1 && _workingTags[0][0] == 0)

@@ -15,9 +15,8 @@ public readonly record struct SpatialQueryResult(IReadOnlyCollection<Sector> Sec
 /// Spatially indexes a map's sectors/linedefs. Deliberately an interface,
 /// not a concrete class, so the initial implementation
 /// (<see cref="UniformGridSpatialIndex"/>) can be swapped later for a more
-/// sophisticated structure (e.g. a quadtree closer to UDB's own
-/// <c>VisualBlockMap</c>) without changing anything else, if profiling on
-/// real content ever shows it's needed.
+/// sophisticated structure (e.g. a quadtree) without changing anything
+/// else, if profiling on real content ever shows it's needed.
 /// </summary>
 public interface IMapSpatialIndex
 {

@@ -6,8 +6,7 @@ namespace DoomArchitect.Core.IO;
 /// <summary>
 /// Value-formatting rules shared by <see cref="UdmfTreeWriter"/> (unknown
 /// blocks) and <see cref="UdmfWriter"/> (known blocks' own fields and each
-/// element's <c>CustomFields</c>), ported from UDB's
-/// <c>UniversalParser.OutputStructure</c> (UniversalParser.cs:661-739).
+/// element's <c>CustomFields</c>).
 /// </summary>
 internal static class UdmfFormatting
 {
@@ -21,7 +20,7 @@ internal static class UdmfFormatting
         _ => throw new ArgumentException($"Unsupported UDMF value type: {value.GetType()}", nameof(value)),
     };
 
-    /// <summary>UDB's own double format: 1 mandatory + up to 14 optional decimals, invariant.</summary>
+    /// <summary>Matches UDB's double format: 1 mandatory + up to 14 optional decimals, invariant - needed for byte-compatible output.</summary>
     public static string FormatDouble(double value) => value.ToString("0.0##############", CultureInfo.InvariantCulture);
 
     public static string FormatString(string value) => $"\"{EscapeString(value)}\"";

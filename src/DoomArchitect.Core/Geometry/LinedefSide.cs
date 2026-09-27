@@ -3,11 +3,11 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// One directed side of a linedef - a linedef plus which side, matching
-/// UDB's own real type of the same name. <see cref="Front"/> true means
-/// this side is walked Start-to-End; false means End-to-Start - either
-/// way, matching <see cref="SectorTracer"/>'s own documented convention,
-/// whatever this side ends up bordering is on the walker's right.
+/// One directed side of a linedef - a linedef plus which side.
+/// <see cref="Front"/> true means this side is walked Start-to-End; false
+/// means End-to-Start - either way, matching <see cref="SectorTracer"/>'s
+/// own documented convention, whatever this side ends up bordering is on
+/// the walker's right.
 ///
 /// Deliberately not tied to an actual <see cref="Sidedef"/> the way
 /// <see cref="SectorTracer"/>'s own tracing is - <see cref="BoundaryTracer"/>

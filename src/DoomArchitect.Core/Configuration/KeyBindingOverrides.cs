@@ -7,8 +7,7 @@ namespace DoomArchitect.Core.Configuration;
 /// <see cref="AppSettings"/> - one child block per action whose binding
 /// has actually been changed from <see cref="KeyBindingRegistry"/>'s own
 /// compiled-in default (an action with no block here just uses that
-/// default), matching UDB's own real "the user's own settings file only
-/// ever needs to store what differs" shape.
+/// default): the settings file only ever needs to store what differs.
 /// </summary>
 internal static class KeyBindingOverrides
 {

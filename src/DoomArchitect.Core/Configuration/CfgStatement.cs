@@ -15,8 +15,8 @@ public abstract class CfgStatement
 
 /// <summary>
 /// <c>key = value;</c>, or the bare/null forms <c>key;</c> and
-/// <c>key = null;</c> (both valid per UDB's own grammar - <see cref="Value"/>
-/// is null for either).
+/// <c>key = null;</c> (both valid - <see cref="Value"/> is null for
+/// either).
 /// </summary>
 public sealed class CfgAssignStatement : CfgStatement
 {
@@ -52,7 +52,7 @@ public sealed class CfgBlockStatement : CfgStatement
 
 /// <summary>
 /// <c>include("path");</c> or <c>include("path", "sub.path");</c> - the
-/// only function call UDB's real grammar recognizes. Resolved by
+/// only function call the <c>.cfg</c> grammar recognizes. Resolved by
 /// <see cref="CfgLoader"/>, not by the parser itself (resolving needs a
 /// file source and a cache the pure parser doesn't have).
 /// </summary>

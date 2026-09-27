@@ -25,9 +25,8 @@ using Godot;
 ///
 /// A WAD with only one map skips straight to the Map Options prompt; one
 /// with several (like a real IWAD) first pops a small map picker. The Map
-/// Options prompt itself always appears regardless of map count -
-/// matching UDB's own real combined dialog rather than silently auto-
-/// picking - pre-filled from this WAD's own remembered <c>.dbs</c>
+/// Options prompt itself always appears regardless of map count, rather
+/// than silently auto-picking - pre-filled from this WAD's own remembered <c>.dbs</c>
 /// settings if present, else from the game configuration's app-wide
 /// default resources, but always requiring confirmation. Confirming saves
 /// both back, so opening the same map again remembers its resources, and
@@ -231,8 +230,8 @@ public partial class OpenMapMenu : PanelContainer
 	}
 
 	/// <summary>
-	/// Starts the New Map flow: prompts for a map-slot name first (per this
-	/// project's own scope choice - UDB itself silently defaults to
+	/// Starts the New Map flow: prompts for a map-slot name first (this
+	/// project's own scope choice, rather than silently defaulting to
 	/// "MAP01"), then reuses the same Map Options (game config + resources)
 	/// dialog Open Map already shows, with no backing WAD/file at all - a
 	/// brand-new map exists only in memory until the first Save.
@@ -277,7 +276,7 @@ public partial class OpenMapMenu : PanelContainer
 	/// Loads a specific WAD/map immediately, skipping every interactive
 	/// dialog (file picker, map picker, and the Map Options confirmation) -
 	/// backs the dev-only <c>--file</c>/<c>--map</c> command-line args (see
-	/// <see cref="CommandLineOptions"/>), not a real UDB-parity feature.
+	/// <see cref="CommandLineOptions"/>).
 	/// Pre-fills the Map Options dialog exactly as <see cref="ShowMapOptionsDialog"/>
 	/// would, then confirms it immediately as if the user had clicked OK -
 	/// still reads/writes the same <c>.dbs</c>/app-settings persistence, so
@@ -396,8 +395,7 @@ public partial class OpenMapMenu : PanelContainer
 
 	/// <summary>
 	/// Saves the current map - reuses <see cref="_currentWadPath"/> if this
-	/// map has one already, otherwise redirects to <see cref="SaveMapAs"/>,
-	/// matching UDB's own real Save/SaveAs split exactly.
+	/// map has one already, otherwise redirects to <see cref="SaveMapAs"/>.
 	/// </summary>
 	public void SaveMap()
 	{
@@ -428,20 +426,16 @@ public partial class OpenMapMenu : PanelContainer
 	}
 
 	/// <summary>
-	/// Matches UDB's own real "Save As" semantics exactly, verified
-	/// directly against its source (<c>MapManager.SaveMap</c>,
-	/// <c>SavePurpose.AsNewFile</c>): the rebuilt destination's non-map
-	/// lumps (PNAMES/TEXTURE1-2, patches, flats, anything else bundled in
-	/// the PWAD) always come from the *source* - the file the currently-
-	/// open map is already associated with (<see cref="_currentWad"/>) -
-	/// via a real <c>File.Copy(filepathname, newfilepathname, true)</c> in
-	/// UDB's own code before it ever touches the target. Whatever already
-	/// sits at the chosen destination path is irrelevant and gets fully
-	/// discarded (after this project's own single-<c>.bak</c> backup, a
-	/// simpler stand-in for UDB's real 3-level rotation) - never read,
-	/// never merged into. Contrast with <see cref="SaveMapInto"/>, UDB's
-	/// distinct, separate action for the opposite behavior (appending into
-	/// another WAD's own other maps/resources).
+	/// "Save As" semantics: the rebuilt destination's non-map lumps
+	/// (PNAMES/TEXTURE1-2, patches, flats, anything else bundled in the
+	/// PWAD) always come from the *source* - the file the currently-open
+	/// map is already associated with (<see cref="_currentWad"/>).
+	/// Whatever already sits at the chosen destination path is irrelevant
+	/// and gets fully discarded (after this project's own single-<c>.bak</c>
+	/// backup, a simpler stand-in for a full backup-rotation scheme) -
+	/// never read, never merged into. Contrast with <see cref="SaveMapInto"/>,
+	/// the distinct, separate action for the opposite behavior (appending
+	/// into another WAD's own other maps/resources).
 	/// </summary>
 	private void OnSaveFileSelected(string path)
 	{
@@ -464,21 +458,18 @@ public partial class OpenMapMenu : PanelContainer
 
 	/// <summary>
 	/// Saves the current map into a (usually different, possibly brand-new)
-	/// WAD without touching that WAD's own other maps/resources - UDB's own
-	/// real "Save Map Into" (<c>SavePurpose.IntoFile</c>), the mirror image
-	/// of <see cref="SaveMapAs"/>: here the rebuilt destination's non-map
-	/// lumps come from the *target* file's own pre-existing content (if
-	/// any), preserved and merged into rather than discarded - so saving
-	/// into a WAD that already has other maps (or its own shared
-	/// PNAMES/TEXTURE1-2/patches/flats) leaves all of that alone, only
-	/// touching this map's own lump group. Verified directly against UDB's
-	/// source: like <see cref="SaveMapAs"/>, this still switches the
-	/// currently-open map's own file association to the target afterward
-	/// (not left pointing at the original source file) - UDB's real
-	/// <c>filepathname</c> reassignment in <c>MapManager.SaveMap</c> isn't
-	/// conditioned on <c>SavePurpose.IntoFile</c> at all, only on
-	/// <c>Testing</c>/<c>Autosave</c>, so this matches that exactly rather
-	/// than guessing a "nicer" behavior UDB doesn't actually have.
+	/// WAD without touching that WAD's own other maps/resources - the
+	/// mirror image of <see cref="SaveMapAs"/>: here the rebuilt
+	/// destination's non-map lumps come from the *target* file's own
+	/// pre-existing content (if any), preserved and merged into rather
+	/// than discarded - so saving into a WAD that already has other maps
+	/// (or its own shared PNAMES/TEXTURE1-2/patches/flats) leaves all of
+	/// that alone, only touching this map's own lump group. Like
+	/// <see cref="SaveMapAs"/>, this still switches the currently-open
+	/// map's own file association to the target afterward (not left
+	/// pointing at the original source file) - deliberately, not an
+	/// oversight, so a subsequent plain Save writes back to the same place
+	/// this "Into" save just wrote.
 	/// </summary>
 	public void SaveMapInto()
 	{
@@ -492,12 +483,11 @@ public partial class OpenMapMenu : PanelContainer
 	}
 
 	/// <summary>
-	/// Warns only on a real same-map-name collision within the target,
-	/// matching UDB's own real prompt exactly ("Target file already
-	/// contains map "X" - Do you want to replace it?") - a target with no
-	/// maps at all, or with other differently-named maps, is always safe
-	/// to append into silently, no prompt at all (matches UDB's own real
-	/// <c>FindAndRemoveMap</c> short-circuit).
+	/// Warns only on a real same-map-name collision within the target
+	/// ("Target file already contains map "X" - Do you want to replace
+	/// it?") - a target with no maps at all, or with other
+	/// differently-named maps, is always safe to append into silently, no
+	/// prompt at all.
 	/// </summary>
 	private void OnSaveIntoFileSelected(string path)
 	{
@@ -547,10 +537,10 @@ public partial class OpenMapMenu : PanelContainer
 	/// UDMF text for the current map, splices it into
 	/// <paramref name="originalLumps"/> (or starts a fresh file if null),
 	/// backs up any file it's about to overwrite, then writes the result -
-	/// only ever a full-rebuild of the target WAD, matching
-	/// <see cref="MapFileSaver"/>/<see cref="WadWriter"/>'s own real
-	/// approach (mirroring UDB's own, cited in their own source as a fix
-	/// for GitHub issue #531).
+	/// only ever a full-rebuild of the target WAD (see
+	/// <see cref="MapFileSaver"/>/<see cref="WadWriter"/>), deliberately
+	/// not an in-place lump patch, to avoid the kind of subtle WAD
+	/// corruption a partial patch can introduce.
 	/// </summary>
 	private void WriteMapToFile(string path, IReadOnlyList<WadLump> originalLumps)
 	{

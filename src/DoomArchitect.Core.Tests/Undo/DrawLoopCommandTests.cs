@@ -204,8 +204,7 @@ public class DrawLoopCommandTests
     /// texture and brightness, exactly like
     /// <see cref="Do_LoopEntirelyInsideAnotherSectorTouchingNothingOfIt_InheritsItsProperties"/>'s
     /// fully-disconnected case - a single shared point is not a special
-    /// case in real UDB, just an even closer instance of "nearest
-    /// existing line".
+    /// case, just an even closer instance of "nearest existing line".
     /// </summary>
     [Fact]
     public void Do_LoopBulgingOutFromASplitPointOnAnExistingWall_InheritsFromTheNearestWallByProximity()
@@ -244,7 +243,7 @@ public class DrawLoopCommandTests
     /// with its boundary at all, used to fall all the way through to
     /// <see cref="DrawLoopCommand.DefaultFloorTexture"/>/etc. - the
     /// direct-touch search naturally finds nothing (nothing is shared),
-    /// and there was no further fallback. Real UDB's own
+    /// and there was no further fallback. UDB's own
     /// <c>Tools.MakeSector</c> always has one more fallback past that:
     /// the nearest *existing* linedef to the new boundary, by plain
     /// proximity, regardless of whether it's actually touched - which
@@ -402,10 +401,10 @@ public class DrawLoopCommandTests
         // via JoinOverlappingLines.
         Assert.Equal(linedefCountBefore + 3, map.Linedefs.Count);
 
-        // Whichever single linedef now connects A and D - UDB's own real
+        // Whichever single linedef now connects A and D -
         // JoinOverlappingLines/Linedef.Join merges the newly drawn
         // coincident edge and the original bottomWall into one survivor
-        // (the newly drawn one, per UDB's own real "the line being
+        // (the newly drawn one, per Linedef.Join's "the line being
         // iterated survives" semantics - not necessarily bottomWall's
         // own original object identity, which this test deliberately
         // doesn't assume anymore).
@@ -424,10 +423,9 @@ public class DrawLoopCommandTests
         Assert.Equal(111, newSector.Brightness);
 
         // Now genuinely two-sided - neither face's middle texture means
-        // anything anymore, matching UDB's own real cleanup: the
-        // pre-existing front's own old solid texture must be cleared,
-        // not just the freshly created back side left with a leftover
-        // default one.
+        // anything anymore: the pre-existing front's own old solid
+        // texture must be cleared, not just the freshly created back
+        // side left with a leftover default one.
         Assert.Equal("-", sharedWall.Front!.MiddleTexture);
         Assert.Equal("-", sharedWall.Back!.MiddleTexture);
     }
@@ -548,13 +546,13 @@ public class DrawLoopCommandTests
     }
 
     /// <summary>
-    /// The user's own real complaint that motivated the draw-then-stitch
-    /// rewrite: a drawn edge that genuinely *crosses* an existing wall in
-    /// its middle - not landing on a vertex, not snapped via
+    /// The complaint that motivated the draw-then-stitch rewrite: a drawn
+    /// edge that genuinely *crosses* an existing wall in its middle - not
+    /// landing on a vertex, not snapped via
     /// <see cref="DrawPoint.OnLinedef"/>, just two plain
     /// <see cref="DrawPoint.AtNewPosition"/> points whose straight line
-    /// between them happens to cross the wall. UDB's own real per-segment
-    /// crossing pre-pass (<see cref="GeometryStitcher.SplitAgainstExistingLines"/>)
+    /// between them happens to cross the wall. The per-segment crossing
+    /// pre-pass (<see cref="GeometryStitcher.SplitAgainstExistingLines"/>)
     /// is what has to catch this with zero help from the UI layer's own
     /// click-to-vertex/linedef snapping.
     /// </summary>
@@ -704,16 +702,15 @@ public class DrawLoopCommandTests
     }
 
     /// <summary>
-    /// Phase 3: a genuinely open (non-closed) polyline - UDB's own real
-    /// <c>Tools.DrawLines</c> supports drawing a raw, unclosed line with
-    /// no sector-fill attempt at all, unlike Phase 1/2's own
-    /// always-wraps-to-the-first-point behavior. A single 2-point segment
-    /// touching nothing existing at all never resolves any side on either
-    /// interior/exterior trace (a dangling line is a dead end both ways),
-    /// so <c>sidesCreated</c> stays false and UDB's own real cleanup rule
-    /// (only remove sideless leftovers once *something* in the draw did
-    /// get a real sector) correctly leaves it in the map rather than
-    /// deleting it.
+    /// Phase 3: a genuinely open (non-closed) polyline - <c>Tools.DrawLines</c>
+    /// supports drawing a raw, unclosed line with no sector-fill attempt
+    /// at all, unlike Phase 1/2's own always-wraps-to-the-first-point
+    /// behavior. A single 2-point segment touching nothing existing at
+    /// all never resolves any side on either interior/exterior trace (a
+    /// dangling line is a dead end both ways), so <c>sidesCreated</c>
+    /// stays false and the cleanup rule (only remove sideless leftovers
+    /// once *something* in the draw did get a real sector) correctly
+    /// leaves it in the map rather than deleting it.
     /// </summary>
     [Fact]
     public void Do_OpenTwoPointPolylineTouchingNothing_LeavesARawSidelessLinedefInTheMap()
@@ -754,9 +751,9 @@ public class DrawLoopCommandTests
 
     /// <summary>
     /// An open polyline whose two ends both stitch onto the same existing
-    /// sector's own walls splits it in two - the common real "divide this
-    /// room with one new wall" operation, and the case UDB's own real
-    /// "splitting only" check exists for in the first place (this segment's
+    /// sector's own walls splits it in two - the common "divide this
+    /// room with one new wall" operation, and the case the "splitting only"
+    /// check exists for in the first place (this segment's
     /// own center point lands inside the original sector's already-
     /// occupied interior). Both halves border the original sector's own
     /// untouched walls on their own exterior trace, so this doesn't
@@ -876,8 +873,7 @@ public class DrawLoopCommandTests
     /// still spanning the untouched second island plus this split's own
     /// exterior remnant - is deliberately left alone, since none of the
     /// second island's own sides were themselves drawn by this operation
-    /// (matching UDB's own real "only split what this draw actually
-    /// touched" rule).
+    /// (matching the "only split what this draw actually touched" rule).
     /// </summary>
     [Fact]
     public void Do_DiagonalSplitInsideOnlyOneIslandOfAPreExistingMultiIslandSector_LeavesTheUntouchedIslandAlone()

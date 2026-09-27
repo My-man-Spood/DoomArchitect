@@ -77,9 +77,9 @@ public class GameConfigurationLoaderTests
     [Fact]
     public void Doom_EvilEye_DoesNotHang()
     {
-        // Corrected against UDB's real data: despite the name, vanilla's
-        // Evil Eye/Floating skull rock are not ceiling-relative - an
-        // earlier, uncorrected guess had this backwards.
+        // Despite the name, vanilla's Evil Eye/Floating skull rock are
+        // not ceiling-relative - an earlier, uncorrected guess had this
+        // backwards.
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
         var evilEye = doom.GetThingType(41);
@@ -97,7 +97,7 @@ public class GameConfigurationLoaderTests
 
         Assert.NotNull(formerHuman);
         Assert.True(formerHuman!.ShowsDirection);
-        Assert.Equal(12, formerHuman.ColorIndex); // UDB's real THINGCOLOR12 (Tomato) - the monsters category's own real color
+        Assert.Equal(12, formerHuman.ColorIndex); // THINGCOLOR12 (Tomato) - the monsters category's own color
     }
 
     [Fact]
@@ -109,14 +109,13 @@ public class GameConfigurationLoaderTests
 
         Assert.NotNull(stimpack);
         Assert.False(stimpack!.ShowsDirection);
-        Assert.Equal(1, stimpack.ColorIndex); // UDB's real THINGCOLOR01 (RoyalBlue) - the health category's own real color
+        Assert.Equal(1, stimpack.ColorIndex); // THINGCOLOR01 (RoyalBlue) - the health category's own color
     }
 
     [Fact]
     public void Doom_TeleportLanding_IsItsOwnCategoryAndShowsDirection()
     {
-        // Matches UDB's real category split, cross-checked directly: a
-        // teleport landing gets its own "teleports" category, not
+        // A teleport landing gets its own "teleports" category, not
         // "players" - an earlier version of this file had it wrong. It
         // shows direction since the player actually faces that way on
         // arrival.
@@ -132,11 +131,11 @@ public class GameConfigurationLoaderTests
     [Fact]
     public void Doom_SoulSphere_IsAPowerupNotHealth()
     {
-        // Matches UDB's real category split: soul sphere/invulnerability/
-        // berserk/partial invisibility/radiation suit/computer area map/
-        // light amp visor are "powerups", distinct from "health" (stimpack/
-        // medikit/health+armor bonus/green+blue armor) - an earlier version
-        // of this file lumped them all into "health".
+        // Soul sphere/invulnerability/berserk/partial invisibility/
+        // radiation suit/computer area map/light amp visor are "powerups",
+        // distinct from "health" (stimpack/medikit/health+armor bonus/
+        // green+blue armor) - an earlier version of this file lumped them
+        // all into "health".
         var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
 
         var soulSphere = doom.GetThingType(2013);
@@ -265,10 +264,10 @@ public class GameConfigurationLoaderTests
     }
 
     /// <summary>
-    /// Matches UDB's own real <c>Doom_common.cfg</c>, which sets
-    /// <c>mixtexturesflats = false;</c> explicitly - also this setting's
-    /// real default when a <c>.cfg</c> doesn't set it at all, so Doom2
-    /// (which doesn't set it either) gets the same false value the same way.
+    /// <c>Doom_common.cfg</c> sets <c>mixtexturesflats = false;</c>
+    /// explicitly - also this setting's default when a <c>.cfg</c> doesn't
+    /// set it at all, so Doom2 (which doesn't set it either) gets the same
+    /// false value the same way.
     /// </summary>
     [Theory]
     [InlineData(GameConfigurationKind.Doom)]
@@ -280,7 +279,7 @@ public class GameConfigurationLoaderTests
         Assert.False(configuration.MixTexturesAndFlats);
     }
 
-    /// <summary>Matches UDB's real <c>ZDoom_common.cfg</c> (which every GZDoom-family config includes), where <c>mixtexturesflats = true;</c>.</summary>
+    /// <summary><c>ZDoom_common.cfg</c> (which every GZDoom-family config includes) sets <c>mixtexturesflats = true;</c>.</summary>
     [Fact]
     public void GZDoomDoom2UDMF_MixTexturesAndFlats_IsTrue()
     {

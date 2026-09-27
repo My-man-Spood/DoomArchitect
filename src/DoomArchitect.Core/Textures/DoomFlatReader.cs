@@ -3,12 +3,12 @@ namespace DoomArchitect.Core.Textures;
 /// <summary>
 /// Decodes a flat (floor/ceiling texture): a raw indexed byte array with
 /// no header at all. Size is inferred from the lump length rather than
-/// fixed at 64x64, matching UDB's own <c>DoomFlatReader</c> exactly - a
-/// perfect-square length is used as-is (covering 32x32, 64x64, 128x128,
-/// etc.), otherwise a length over 4096 bytes is forced to 64x64 and only
-/// the first 4096 bytes are read, silently ignoring the rest. This is a
-/// real UDB quirk for malformed/odd-sized flats, reproduced as-is rather
-/// than "fixed" - it's Core map-format logic, not App-layer rendering.
+/// fixed at 64x64: a perfect-square length is used as-is (covering
+/// 32x32, 64x64, 128x128, etc.), otherwise a length over 4096 bytes is
+/// forced to 64x64 and only the first 4096 bytes are read, silently
+/// ignoring the rest. This is a real quirk for malformed/odd-sized
+/// flats, reproduced as-is rather than "fixed" - it's Core map-format
+/// logic, not App-layer rendering.
 /// </summary>
 public static class DoomFlatReader
 {

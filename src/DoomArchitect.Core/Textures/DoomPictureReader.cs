@@ -4,8 +4,8 @@ namespace DoomArchitect.Core.Textures;
 /// Decodes the classic Doom "picture" format (<c>patch_t</c>): a small
 /// header followed by one column-of-posts per pixel column, each post
 /// RLE-encoding a run of opaque pixels with fully transparent gaps between
-/// posts. Ported from UDB's own <c>DoomPictureReader</c>, including two
-/// verbatim quirks:
+/// posts. Carries over two verbatim quirks from the classic format's
+/// original decoding logic:
 ///
 /// - Tall-patch topdelta accumulation: a post's topdelta is treated as
 ///   relative to the previous one (accumulated) whenever it's strictly
@@ -18,9 +18,9 @@ namespace DoomArchitect.Core.Textures;
 /// - A column whose computed pixel offset overflows the pixel buffer
 ///   aborts decoding the *entire* patch, not just that column.
 ///
-/// Also ports UDB's separate <c>Validate</c> gate (normally run *before*
-/// <c>ReadAsPixelData</c> even starts, to help UDB's own format-guessing
-/// dispatch pick the right reader) as an inline check here instead: every
+/// Also ports a separate <c>Validate</c> gate (normally run *before*
+/// <c>ReadAsPixelData</c> even starts, to help a format-guessing dispatch
+/// pick the right reader) as an inline check here instead: every
 /// column offset must genuinely point somewhere inside this lump's own
 /// data, strictly past its own 8-byte header plus column-offset table
 /// (<c>8 + width * 4</c>). Skipping this (an earlier gap in this port)

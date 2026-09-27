@@ -10,10 +10,12 @@ namespace DoomArchitect.Core.Geometry;
 /// including it doesn't change the result, and skipping the outer/hole
 /// distinction keeps this simple). Used as this project's own sector
 /// "anchor point" for screen-space overlays (tag labels, tag-arrow
-/// endpoints) - UDB's own real label-point algorithm (a precomputed
-/// pole-of-inaccessibility per sector) isn't ported here; this is exactly
-/// UDB's own real fallback for when it lacks one
-/// (<c>s.BBox.X + s.BBox.Width / 2, ...</c>), not an arbitrary shortcut.
+/// endpoints). UDB itself computes a proper pole-of-inaccessibility per
+/// sector and only falls back to bbox-center
+/// (<c>s.BBox.X + s.BBox.Width / 2, ...</c>) when it lacks one; this
+/// project always uses that fallback formula rather than the full
+/// algorithm - not an arbitrary shortcut, since it's the same formula UDB
+/// itself falls back to.
 /// </summary>
 public readonly record struct SectorBounds(Vector2 Min, Vector2 Max)
 {

@@ -15,8 +15,8 @@ namespace DoomArchitect.Rendering;
 /// </summary>
 public static class ThingMeshBuilder
 {
-    // Matches UDB's own generic "unknown thing" fallback dimensions
-    // exactly (ThingTypeInfo's parameterless-index constructor).
+    // Generic "unknown thing" fallback dimensions, matching UDB's
+    // (ThingTypeInfo's parameterless-index constructor).
     public const float FallbackRadius = 10f;
     public const float FallbackHeight = 20f;
 
@@ -66,11 +66,10 @@ public static class ThingMeshBuilder
 
     /// <summary>
     /// <c>BillboardMode = FixedY</c> rotates the quad to face the camera
-    /// around the vertical axis only - matches UDB's own default Thing
-    /// billboard behavior (full billboarding is reserved for actors whose
-    /// type info sets a "force full billboard" flag, which needs real
-    /// per-type data this codebase doesn't have yet). Using Godot's own
-    /// built-in billboard mode rather than hand-rolling UDB's per-frame
+    /// around the vertical axis only. Full billboarding is reserved for
+    /// actors whose type info sets a "force full billboard" flag, which
+    /// needs per-type data this codebase doesn't have yet. Uses Godot's
+    /// own built-in billboard mode rather than hand-rolling a per-frame
     /// camera-relative rotation matrix - a native feature built for
     /// exactly this classic-sprite-in-3D-world case.
     /// </summary>

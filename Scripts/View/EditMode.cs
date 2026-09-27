@@ -1,4 +1,4 @@
-/// <summary>Which map element the 2D view is editing - matches UDB's own mode split (Vertices / Linedefs / Sectors / Things / Draw Lines).</summary>
+/// <summary>Which map element the 2D view is editing.</summary>
 public enum EditMode
 {
 	Vertices,

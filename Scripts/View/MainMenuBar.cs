@@ -206,8 +206,7 @@ public partial class MainMenuBar : MenuBar
 
 	/// <summary>
 	/// Runs <paramref name="action"/> immediately if the undo stack has no
-	/// unsaved changes; otherwise asks first - matches UDB's own real
-	/// <c>AskSaveMap</c> guard on New Map/Open Map. <see cref="MapOverlay.UndoStack"/>
+	/// unsaved changes; otherwise asks first. <see cref="MapOverlay.UndoStack"/>
 	/// is null before the very first map ever loads, which reads as "not
 	/// dirty" (nothing to lose yet).
 	/// </summary>
@@ -238,13 +237,10 @@ public partial class MainMenuBar : MenuBar
 	}
 
 	/// <summary>
-	/// "Select Inside"/"Select Touching" - real UDB terminology (its own
-	/// toolbar button is literally labeled "Select Touching", with the
-	/// off state referred to as "select inside" in its own tooltip/status
-	/// text), moved here into a Preferences submenu instead of UDB's real
-	/// per-mode toolbar button placement since this project's menu bar is
-	/// where settings-like toggles already live. Session-only, matching
-	/// UDB's own real behavior - see <see cref="MapOverlay.MarqueeSelectTouching"/>.
+	/// "Select Inside"/"Select Touching" - moved here into a Preferences
+	/// submenu instead of a per-mode toolbar button, since this project's
+	/// menu bar is where settings-like toggles already live. Session-only -
+	/// see <see cref="MapOverlay.MarqueeSelectTouching"/>.
 	/// Godot doesn't auto-enforce mutual exclusion between radio-checkable
 	/// items, even adjacent ones, so both checkmarks are set explicitly on
 	/// every press.

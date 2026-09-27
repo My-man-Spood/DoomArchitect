@@ -4,10 +4,9 @@ namespace DoomArchitect.Core.IO;
 
 /// <summary>
 /// Writes generic UDMF blocks back to text - used for re-emitting
-/// preserved <see cref="UdmfDocument.UnknownBlocks"/> verbatim. A close
-/// port of UDB's own <c>UniversalParser.OutputStructure</c>
-/// (UniversalParser.cs:661-739): tab-per-level indentation, a blank line
-/// before each nested block.
+/// preserved <see cref="UdmfDocument.UnknownBlocks"/> verbatim, matching
+/// UDB's own formatting: tab-per-level indentation, a blank line before
+/// each nested block.
 /// </summary>
 internal static class UdmfTreeWriter
 {

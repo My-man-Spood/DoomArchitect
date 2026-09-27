@@ -12,8 +12,7 @@ public enum ImageFormatKind
 }
 
 /// <summary>
-/// Detects PNG/JPEG/PCX/TGA by signature, mirroring UDB's own
-/// <c>ImageDataFormat</c> dispatch order: every lump is signature-sniffed
+/// Detects PNG/JPEG/PCX/TGA by signature: every lump is signature-sniffed
 /// for a modern format *before* ever attempting classic Doom picture/flat
 /// parsing - this applies uniformly to standalone lookups and to patches
 /// used inside a composited TEXTURE1/2 texture. Doesn't distinguish
@@ -25,9 +24,9 @@ public static class ImageFormatSniffer
 {
     private static readonly byte[] PngSignature = { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A };
 
-    // Exact 4-byte match ported from UDB's ImageDataFormat.PCX_SIGNATURE:
-    // manufacturer=10 (ZSoft), version=5 (PC Paintbrush v3.0+), encoding=1
-    // (RLE), bitsPerComponent=8. UDB checks nothing beyond these 4 bytes.
+    // PCX signature bytes: manufacturer=10 (ZSoft), version=5 (PC
+    // Paintbrush v3.0+), encoding=1 (RLE), bitsPerComponent=8. Only
+    // these 4 bytes are checked - no further validation.
     private static readonly byte[] PcxSignature = { 10, 5, 1, 8 };
 
     public static ImageFormatKind Detect(byte[] data)
@@ -50,16 +49,15 @@ public static class ImageFormatSniffer
         return true;
     }
 
-    // TGA has no magic number, so this is a heuristic - ported verbatim
-    // from UDB's own ImageDataFormat.CheckTgaSignature. Color-map-type and
+    // TGA has no magic number, so this is a heuristic. Color-map-type and
     // image-type alone are weak discriminators: a real Doom patch_t header
     // (width/height/offsets followed by an Int32 column-pointer table) can
     // easily land in the same byte ranges purely by chance, misclassifying
-    // legitimate vanilla patches as TGA. UDB avoids this by also range-
-    // checking width/height and the bits-per-pixel field - all three checks
-    // are needed together, matching UDB exactly rather than the two-field
-    // subset that first shipped here (caught in review: that subset had a
-    // real false-positive rate against genuine Doom picture data).
+    // legitimate vanilla patches as TGA. Also range-checking width/height
+    // and the bits-per-pixel field avoids this - all three checks are
+    // needed together, rather than the two-field subset that first
+    // shipped here (caught in review: that subset had a real
+    // false-positive rate against genuine Doom picture data).
     private static bool IsTga(byte[] data)
     {
         if (data.Length < 18) return false;

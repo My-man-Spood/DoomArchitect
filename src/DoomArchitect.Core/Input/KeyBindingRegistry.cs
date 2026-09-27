@@ -1,19 +1,14 @@
 namespace DoomArchitect.Core.Input;
 
 /// <summary>
-/// Every rebindable action in the app - the closest equivalent this
-/// project has to UDB's own real <c>Actions.cfg</c> (a flat namespace of
-/// named actions with a compiled-in default binding), expressed as plain
-/// C# data instead of a parsed file: this project has no plugin-assembly
-/// architecture motivating UDB's own file-per-assembly split, so a single
-/// static list is the simpler faithful equivalent for the same content.
+/// Every rebindable action in the app - a flat namespace of named actions
+/// with a compiled-in default binding, expressed as plain C# data instead
+/// of a parsed file.
 ///
 /// A physical key legitimately defaults the same for two actions that are
 /// never simultaneously active (<c>mode_draw</c> and <c>camera_forward</c>
 /// both default to <c>W</c> - one only ever matters in 2D, the other only
-/// while the 3D fly camera is current) - UDB itself has the identical real
-/// precedent (<c>classicselect</c>/<c>visualselect</c> both default to
-/// left-click).
+/// while the 3D fly camera is current).
 ///
 /// Every modifier role - "is Shift held to invert grid snap", "is Ctrl
 /// held to nudge by the grid size" - is its own action here, not a

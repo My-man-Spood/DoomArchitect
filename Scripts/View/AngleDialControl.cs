@@ -2,33 +2,23 @@ using System;
 using Godot;
 
 /// <summary>
-/// Reusable rotating compass dial, ported directly from UDB's real
-/// <c>AngleControlEx</c> (verified against its own <c>OnPaint</c>/mouse-
-/// handler logic, not guessed): a circle with tick marks every 45 degrees
-/// and a needle pointing at the current <see cref="Angle"/>. Left-click or
-/// drag snaps to the nearest 45 degrees; right-click or drag is free
-/// rotation - UDB's own real split (its <c>MouseDown</c>/<c>MouseMove</c>
-/// handlers only round to the nearest 45 when the left button is the one
-/// held). Angle 0 points east and increases counter-clockwise, matching
-/// Doom's own real angle convention and UDB's own real <c>DegreesToXY</c>
-/// (standard trig X/Y with Y negated for screen space, reproduced here
-/// verbatim - Godot's own Y-down screen space needs the identical
+/// Reusable rotating compass dial: a circle with tick marks every 45
+/// degrees and a needle pointing at the current <see cref="Angle"/>.
+/// Left-click or drag snaps to the nearest 45 degrees; right-click or drag
+/// is free rotation. Angle 0 points east and increases counter-clockwise,
+/// matching Doom's own angle convention (standard trig X/Y with Y negated
+/// for screen space - Godot's own Y-down screen space needs the identical
 /// negation).
 ///
 /// A null <see cref="Angle"/> (this project's own "blank/mixed-across-
-/// selection" convention, the same role UDB's own real <c>NO_ANGLE</c>
-/// sentinel plays) simply omits the needle - the dial itself still draws
-/// normally.
+/// selection" convention) simply omits the needle - the dial itself still
+/// draws normally.
 ///
-/// This control has no built-in "AngleOffset" concept - UDB's own real one
-/// exists on <c>AngleControlEx</c> but is never actually set away from its
-/// zero default anywhere in <c>ThingEditFormUDMF</c>; Pitch/Roll's own
-/// "0 points up" look instead comes from that dialog's own code manually
-/// adding/subtracting 90 when talking to the control (confirmed directly
-/// in its own <c>pitch_WhenTextChanged</c>/<c>pitchControl_AngleChanged</c>
-/// pair) - so the same +/-90 adjustment belongs in whichever host dialog
-/// wants it, mirroring UDB's own real split of responsibility rather than
-/// baking an unused feature into this control.
+/// This control has no built-in "AngleOffset" concept - Pitch/Roll's own
+/// "0 points up" look instead comes from the host dialog's own code
+/// manually adding/subtracting 90 when talking to the control, so the
+/// same +/-90 adjustment belongs in whichever host dialog wants it rather
+/// than baking an unused feature into this control.
 /// </summary>
 public partial class AngleDialControl : Control
 {

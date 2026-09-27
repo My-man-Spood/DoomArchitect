@@ -21,10 +21,10 @@ public sealed class MapOverlayCamera
 
 	// Was 2000 - too tight to zoom out far enough to see a whole real
 	// map's floor plan at once (a real Doom level can easily span several
-	// thousand map units per side), found in practice rather than ported
-	// from any particular UDB limit (its own 2D view has no hard zoom-out
-	// ceiling at all - this project keeps one purely so a stray huge
-	// scroll can't zoom out to a degenerate near-infinite size).
+	// thousand map units per side), found in practice. Unlike UDB's 2D
+	// view, which has no hard zoom-out ceiling at all, this project keeps
+	// one purely so a stray huge scroll can't zoom out to a degenerate
+	// near-infinite size.
 	private const float MaxCameraSize = 20000f;
 
 	private readonly Control _viewport;
@@ -81,8 +81,8 @@ public sealed class MapOverlayCamera
 	/// <summary>
 	/// Changes the ortho camera's <see cref="Camera3D.Size"/> (smaller =
 	/// zoomed in) while keeping the map-space point under the cursor fixed
-	/// on screen, the way UDB's own scroll-to-zoom does - otherwise
-	/// zooming would recenter on the map origin instead of the cursor.
+	/// on screen - otherwise zooming would recenter on the map origin
+	/// instead of the cursor.
 	/// </summary>
 	public void ZoomAt(Vector2 screenPosition, float factor)
 	{
@@ -93,12 +93,10 @@ public sealed class MapOverlayCamera
 	}
 
 	/// <summary>
-	/// Grab-and-drag view panning while Space is held - a direct port of
-	/// UDB's own real <c>ClassicMode.OnUpdateViewPanning</c>/
-	/// <c>ScrollBy(lastmappos - mousemappos)</c>: the map point that was
-	/// under the cursor before this motion event ends up under the cursor
-	/// again after it, at whatever the current zoom's screen-to-map ratio
-	/// is - no separate pan speed to tune. Reuses the exact same
+	/// Grab-and-drag view panning while Space is held: the map point that
+	/// was under the cursor before this motion event ends up under the
+	/// cursor again after it, at whatever the current zoom's screen-to-map
+	/// ratio is - no separate pan speed to tune. Reuses the exact same
 	/// before/after-unproject-then-shift-camera trick <see cref="ZoomAt"/>
 	/// already established for keeping a point fixed under the cursor,
 	/// just for a translation instead of a zoom change.

@@ -4,12 +4,10 @@ using DoomArchitect.Core.Editing;
 using Godot;
 
 /// <summary>
-/// A numeric text field with up/down nudge buttons - ports UDB's real
-/// <c>ButtonsNumericTextbox</c> (verified against its actual source: it's
-/// exactly this shape, a plain textbox plus a spinner), used by property
-/// dialogs for height/brightness/gravity-style fields. Reusable across
-/// dialogs the same way <c>ResourceListEditor</c> is - a scene+script
-/// composite embedded via <c>instance=</c>.
+/// A numeric text field with up/down nudge buttons - a plain textbox plus
+/// a spinner, used by property dialogs for height/brightness/gravity-style
+/// fields. Reusable across dialogs the same way <c>ResourceListEditor</c>
+/// is - a scene+script composite embedded via <c>instance=</c>.
 ///
 /// Deliberately not Godot's built-in <see cref="SpinBox"/>: that control
 /// owns and validates its own numeric value directly, which can't
@@ -28,16 +26,16 @@ using Godot;
 /// </summary>
 public partial class StepperLineEdit : HBoxContainer
 {
-	/// <summary>Matches UDB's real <c>ButtonStep</c> - the plain nudge amount with no modifier held.</summary>
+	/// <summary>The plain nudge amount with no modifier held.</summary>
 	[Export] public float Step { get; set; } = 1f;
 
-	/// <summary>Matches UDB's real <c>ButtonStepBig</c> - the nudge amount while Shift is held.</summary>
+	/// <summary>The nudge amount while Shift is held.</summary>
 	[Export] public float StepBig { get; set; } = 1f;
 
-	/// <summary>Matches UDB's real <c>ButtonStepSmall</c> - the nudge amount while Ctrl is held.</summary>
+	/// <summary>The nudge amount while Ctrl is held.</summary>
 	[Export] public float StepSmall { get; set; } = 1f;
 
-	/// <summary>Whether a nudge result is written back as a decimal (gravity) or rounded to a whole number (heights/brightness) - matches UDB's real per-field <c>AllowDecimal</c>.</summary>
+	/// <summary>Whether a nudge result is written back as a decimal (gravity) or rounded to a whole number (heights/brightness).</summary>
 	[Export] public bool AllowDecimal { get; set; }
 
 	private LineEdit _lineEdit;
@@ -57,7 +55,7 @@ public partial class StepperLineEdit : HBoxContainer
 	/// Blocks both typing and the spin buttons - needed by
 	/// <see cref="LinedefEditDialog"/>'s Back tab, whose whole field set is
 	/// disabled outright (not just dimmed) when the selected linedef has no
-	/// back sidedef, matching UDB's real <c>Enabled = false</c> treatment.
+	/// back sidedef.
 	/// </summary>
 	public bool Editable
 	{
@@ -113,12 +111,11 @@ public partial class StepperLineEdit : HBoxContainer
 
 	/// <summary>
 	/// Reads the field's current text as though its "original" were 0 (an
-	/// indeterminate/mixed field has no single original to nudge from, so
-	/// this matches UDB's own real fallback - <c>ButtonsNumericTextbox</c>
-	/// calls <c>textbox.GetResult(0)</c> the same way), applies one step
-	/// scaled by whichever modifier is held, and writes the plain absolute
-	/// result back as text - indistinguishable to <see cref="TextChanged"/>
-	/// subscribers from the user having typed that number directly.
+	/// indeterminate/mixed field has no single original to nudge from),
+	/// applies one step scaled by whichever modifier is held, and writes
+	/// the plain absolute result back as text - indistinguishable to
+	/// <see cref="TextChanged"/> subscribers from the user having typed
+	/// that number directly.
 	/// </summary>
 	private void Nudge(int direction)
 	{

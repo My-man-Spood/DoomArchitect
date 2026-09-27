@@ -82,10 +82,10 @@ public class UdmfTreeParserTests
     [InlineData("1E06")]
     public void Parse_PositiveOrMissingExponentSign_DoesNotParseAsDouble(string literal)
     {
-        // Matches UDB's own (not general scientific-notation) heuristic:
-        // only a literal '.' or the substring "e-" selects the double
-        // path. Neither of these forms contains either, so they fall
-        // through to plain integer parsing and fail.
+        // A deliberately narrow (not general scientific-notation)
+        // heuristic: only a literal '.' or the substring "e-" selects the
+        // double path. Neither of these forms contains either, so they
+        // fall through to plain integer parsing and fail.
         Assert.Throws<UdmfParseException>(() => Parse($"x = {literal};"));
     }
 

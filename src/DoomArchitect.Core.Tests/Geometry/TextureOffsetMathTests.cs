@@ -20,9 +20,8 @@ public class TextureOffsetMathTests
     [Fact]
     public void Nudge_PastTextureNegativeEdge_WrapsAround()
     {
-        // C#'s own remainder operator keeps the dividend's sign - matches
-        // UDB's real (literally ported, not reinterpreted) wrap exactly:
-        // it doesn't force a positive-only result either.
+        // C#'s own remainder operator keeps the dividend's sign, so the
+        // wrap doesn't force a positive-only result either.
         Assert.Equal(-4, TextureOffsetMath.Nudge(4, -8, 64));
     }
 
@@ -35,9 +34,9 @@ public class TextureOffsetMathTests
     [Fact]
     public void Nudge_DeltaIsExactMultipleOfTextureSize_IsATrueNoOp()
     {
-        // Matches UDB's own real short-circuit exactly - nudging by a
-        // whole texture width/height is defined as no visible change at
-        // all, before wrapping even runs.
+        // Nudging by a whole texture width/height is a no-op by
+        // definition - no visible change at all, before wrapping even
+        // runs.
         Assert.Equal(12, TextureOffsetMath.Nudge(12, 64, 64));
         Assert.Equal(12, TextureOffsetMath.Nudge(12, -128, 64));
     }

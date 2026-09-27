@@ -63,11 +63,10 @@ public static class KeyBindings
     }
 
     /// <summary>
-    /// UDB's own real non-blocking rebind-conflict check: every *other*
-    /// action currently bound to the exact same key+modifiers as
-    /// <paramref name="binding"/> - the caller decides what to do with the
-    /// list (UDB's own real Controls preferences just displays it as a
-    /// warning, never refuses the rebind).
+    /// Non-blocking rebind-conflict check: every *other* action currently
+    /// bound to the exact same key+modifiers as <paramref name="binding"/>
+    /// - the caller decides what to do with the list (the Controls page
+    /// just displays it as a warning, never refuses the rebind).
     /// </summary>
     public static IReadOnlyList<string> FindConflicts(KeyBinding binding, string excludingAction)
     {

@@ -7,12 +7,11 @@ namespace DoomArchitect.Core.Geometry;
 public readonly record struct TextureAlignResult(Sidedef Side, WallPartKind Part, double? OffsetX, double? OffsetY);
 
 /// <summary>
-/// A close port of UDB's own real texture auto-align (<c>BaseVisualMode.AutoAlignTexturesUDMF</c>/
-/// <c>AddSidedefsForAlignment</c>, verified directly against source): a
-/// stack-based flood-fill starting from one wall part, walking outward
-/// along shared vertices to connected linedefs, aligning every reachable
-/// sidedef whose *same* part (see the scope note below) carries the same
-/// texture name, until the texture changes or there's nowhere left to go.
+/// Texture auto-align: a stack-based flood-fill starting from one wall
+/// part, walking outward along shared vertices to connected linedefs,
+/// aligning every reachable sidedef whose *same* part (see the scope note
+/// below) carries the same texture name, until the texture changes or
+/// there's nowhere left to go.
 ///
 /// X accumulates by each wall's own real length as the walk proceeds (so
 /// texture columns land edge-to-edge); a "forward" job (one discovered by
@@ -22,8 +21,7 @@ public readonly record struct TextureAlignResult(Sidedef Side, WallPartKind Part
 /// off the near/Start vertex) mirrors it, writing <c>offset - length</c>
 /// and handing that on. This asymmetry - not just "always add" - is what
 /// keeps a chain aligned correctly when walked in both directions from
-/// the same starting point at once, exactly matching UDB's own real
-/// forward/backward job split.
+/// the same starting point at once.
 ///
 /// Y is **not** distance-accumulated at all (two connected walls can sit
 /// at completely different heights) - instead each aligned wall's own
@@ -32,8 +30,8 @@ public readonly record struct TextureAlignResult(Sidedef Side, WallPartKind Part
 /// for that formula (its <c>Top</c> + <c>VerticalTextureOffset</c> is
 /// exactly that world Z, for any pegging state, since
 /// <c>VerticalTextureOffset</c> already encodes whichever pegging rule
-/// applies) rather than re-deriving UDB's own separate per-part Y-anchor
-/// formulas a second time. That trick relies on <c>Top</c> itself being
+/// applies) rather than deriving separate per-part Y-anchor formulas.
+/// That trick relies on <c>Top</c> itself being
 /// independent of the offset being solved for - true for an upper/lower
 /// part (fixed by sector heights alone) but **not** true for a masked
 /// middle, whose own `Top`/`Bottom` shift together with its Y offset (see
@@ -48,11 +46,11 @@ public readonly record struct TextureAlignResult(Sidedef Side, WallPartKind Part
 /// the algorithm itself is directly testable; the caller turns the
 /// result into whatever `SetFieldCommand`s it needs.
 ///
-/// Deliberately scoped down from UDB's own real algorithm (flagged, not
+/// Deliberately scoped down from UDB's own algorithm (flagged, not
 /// silently expanded into):
 /// - Only propagates within the *same* part role (upper-to-upper, lower-
-///   to-lower, middle-to-middle) - real UDB can chain across roles (e.g.
-///   an upper into a neighbor's lower) if they happen to share a texture
+///   to-lower, middle-to-middle) - UDB can chain across roles (e.g. an
+///   upper into a neighbor's lower) if they happen to share a texture
 ///   name, via its own `VisualSidedefParts` triangle-count machinery this
 ///   project has no equivalent of.
 /// - No 3D-floor (`middle3d`)/`GetControlSides` participation - this
@@ -61,8 +59,7 @@ public readonly record struct TextureAlignResult(Sidedef Side, WallPartKind Part
 ///   itself (the accumulated length, or the Y-solve) - deferred as a
 ///   follow-up once the simpler unscaled version is working.
 /// - No "restrict to selection" variant (`visualautoaligntoselection*`) -
-///   always walks and aligns everything reachable, matching UDB's own
-///   plain `visualautoalign(x/y)` actions.
+///   always walks and aligns everything reachable.
 /// </summary>
 public static class TextureAutoAligner
 {
@@ -146,17 +143,13 @@ public static class TextureAutoAligner
     }
 
     /// <summary>
-    /// A close port of UDB's own real <c>AddSidedefsForAlignment</c>: at
-    /// <paramref name="v"/>, every touching linedef's side that "continues"
-    /// in <paramref name="forward"/>'s direction (matching UDB's own real
-    /// <c>ld.Start == v</c>/<c>ld.End == v</c> branching, which resolves
-    /// which of a two-sided linedef's Front/Back is the one being walked
-    /// onto) gets queued, provided that side's own same-role part is
-    /// actually visible and carries the matching texture name - this
-    /// project's own scoped-down equivalent of UDB's
-    /// <c>SidedefTextureMatch</c>/`matchtop`/`matchbottom`/`matchmid`
-    /// checks, unified into one same-role lookup via
-    /// <see cref="LinedefWallBuilder.Build"/> itself.
+    /// At <paramref name="v"/>, every touching linedef's side that
+    /// "continues" in <paramref name="forward"/>'s direction (resolved via
+    /// <c>ld.Start == v</c>/<c>ld.End == v</c>, to pick which of a
+    /// two-sided linedef's Front/Back is the one being walked onto) gets
+    /// queued, provided that side's own same-role part is actually visible
+    /// and carries the matching texture name - unified into one same-role
+    /// lookup via <see cref="LinedefWallBuilder.Build"/> itself.
     /// </summary>
     private static void PushNeighbors(
         Stack<AlignJob> stack, Vertex v, bool forward, double offsetX, WallPartKind part, string textureName,

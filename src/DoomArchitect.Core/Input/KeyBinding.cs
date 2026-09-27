@@ -8,11 +8,7 @@ namespace DoomArchitect.Core.Input;
 /// <c>InputEventKey</c>. <see cref="KeyName"/> is Godot's own real
 /// <c>Key</c> enum member name as plain text (e.g. <c>"Left"</c>,
 /// <c>"Z"</c>, <c>"Bracketleft"</c>) rather than its numeric value - keeps
-/// a saved settings file human-readable and hand-editable, matching UDB's
-/// own real <c>shortcuts {{ }}</c> file being exactly that (even though
-/// UDB's own encoding is a raw bit-packed integer, not a name - this
-/// project has no reason to replicate that specific storage choice, only
-/// the concept of a user-editable saved override).
+/// a saved settings file human-readable and hand-editable.
 ///
 /// A modifier key (Shift/Ctrl/Alt) is itself a perfectly valid
 /// <see cref="KeyName"/> - "is Shift held" is exactly as real a rebindable

@@ -45,7 +45,7 @@ public class ImageFormatSnifferTests
     {
         // Regression test: colorMapType/imageType alone matched a real Doom
         // patch_t header often enough to misclassify legitimate patches as
-        // TGA (caught in review). UDB's real heuristic also range-checks
+        // TGA (caught in review). The heuristic also range-checks
         // width/height and bits-per-pixel - this data passes the first two
         // checks but has a zeroed width, which those extra checks must catch.
         var data = new byte[18];

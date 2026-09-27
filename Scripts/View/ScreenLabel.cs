@@ -5,10 +5,9 @@ using Godot;
 /// <c>DrawOverlayHandler.DrawLengthLabel</c> established for Draw mode's
 /// own length/angle readout, extracted so <see cref="TagIndicatorOverlayHandler"/>'s
 /// sector tag-number label can reuse it exactly rather than duplicating
-/// it - a background panel behind the text (a DoomArchitect-specific
-/// legibility choice, not a UDB behavior - UDB draws its own text labels
-/// against its editor theme's own background, which this project's
-/// overlay has no equivalent concept of) drawn at a caller-supplied
+/// it - a background panel behind the text (a legibility choice, since
+/// this project's overlay has no editor-theme background to draw against)
+/// drawn at a caller-supplied
 /// baseline, so callers stay free to compute wherever that baseline
 /// should sit (centered on a segment's own midpoint, a sector's own bbox
 /// center, etc.) using this project's own established "derive the offset

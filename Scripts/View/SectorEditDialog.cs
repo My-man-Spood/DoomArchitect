@@ -11,83 +11,57 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Sector properties, ported from UDB's real sector dialogs - both field
-/// scope and on-screen layout. The tab strip mirrors the real UDMF dialog's
-/// 6 tabs (Properties/Surfaces/Colors/Slopes-Portals/Comment/Custom,
-/// <c>SectorEditFormUDMF</c>) - only Properties and Surfaces are live, the
-/// rest are placeholders so the dialog's overall shape is recognizable even
-/// before they're built. Floor/Ceiling Texture live on their own Surfaces
-/// tab, not folded into Properties - an earlier version of this dialog did
-/// fold them into Properties' Heights section, modeled after the older
-/// classic-format <c>SectorEditForm</c>'s single combined "Floor and
-/// ceiling" group box, but that's not how the real UDMF dialog
-/// (<c>SectorEditFormUDMF</c>) actually lays it out - corrected once this
-/// was checked against the real thing directly, not the classic-format
-/// screenshot this had been mistakenly modeled on. Heights (Floor/Ceiling
-/// Height, Height Offset, read-only Sector Height), Effects, and
-/// Identification sections still come from the real UDMF dialog's
-/// <c>groupfloorceiling</c>/<c>groupeffect</c>/<c>groupaction</c> group
-/// boxes (verified against <c>SectorEditFormUDMF.Designer.cs</c>'s actual
-/// control positions, not guessed). Flags is rebuilt per game configuration
-/// from
-/// <see cref="IGameConfiguration.GetSectorFlags"/> (see
+/// Sector properties. The tab strip has 6 tabs (Properties/Surfaces/Colors/
+/// Slopes-Portals/Comment/Custom) - only Properties and Surfaces are live,
+/// the rest are placeholders so the dialog's overall shape is recognizable
+/// even before they're built. Floor/Ceiling Texture live on their own
+/// Surfaces tab, not folded into Properties. Flags is rebuilt per game
+/// configuration from <see cref="IGameConfiguration.GetSectorFlags"/> (see
 /// <see cref="RebuildFlagsCheckboxes"/>) rather than authored statically in
 /// the scene, since the flag set itself differs by configuration. Damage
-/// Type and Sound Sequence are plain free-text fields rather than UDB's
-/// real combo boxes - both of UDB's real backing lists come from parsing
-/// the map's own DECORATE actors/SNDSEQ lumps respectively, which this
-/// project has no parser for yet; the additional-tags field
-/// (<c>moreids</c>) is likewise a plain space-separated text field rather
-/// than UDB's real add/remove-chip list - all three deliberate, flagged v1
-/// simplifications, not fidelity gaps in what's actually editable. Every
-/// section header is a real <see cref="GroupBox"/> (a titled, bordered
-/// section box), not a bare <see cref="Label"/>. Floor/Ceiling Texture
-/// each use a <see cref="TexturePreviewEdit"/> - a real, reusable port of
-/// UDB's actual <c>ImageSelectorControl</c> shape (preview stacked above
-/// the plain name field, a floating corner label showing the decoded
-/// texture's own real pixel dimensions) shared with
-/// <see cref="LinedefEditDialog"/>'s own Front/Back texture pickers -
-/// an earlier pass modeled this as a horizontal label+small-preview+field
-/// row instead, from a screenshot rather than the real control's own real
-/// layout, corrected once checked directly (typing a name and clicking
-/// the preview both work, and the preview updates live either way,
-/// exactly like the real control). The Surfaces tab
-/// mirrors UDB's real per-surface layout (two group boxes, "Ceiling" then
-/// "Floor" - verified against <c>SectorEditFormUDMF.Designer.cs</c>, not
-/// assumed to be Properties-adjacent) with the real UDMF texture offset
+/// Type and Sound Sequence are plain free-text fields rather than proper
+/// combo boxes - a real combo box would need to parse the map's own
+/// DECORATE actors/SNDSEQ lumps for its backing list, which this project
+/// has no parser for yet; the additional-tags field (<c>moreids</c>) is
+/// likewise a plain space-separated text field rather than an add/remove-
+/// chip list - all three deliberate, flagged v1 simplifications, not
+/// fidelity gaps in what's actually editable. Every section header is a
+/// real <see cref="GroupBox"/> (a titled, bordered section box), not a bare
+/// <see cref="Label"/>. Floor/Ceiling Texture each use a
+/// <see cref="TexturePreviewEdit"/> (preview stacked above the plain name
+/// field, a floating corner label showing the decoded texture's own real
+/// pixel dimensions), shared with <see cref="LinedefEditDialog"/>'s own
+/// Front/Back texture pickers. The Surfaces tab has two group boxes,
+/// "Ceiling" then "Floor", with the UDMF texture offset
 /// (<c>x/ypanningfloor</c>/<c>ceiling</c>), scale (<c>x/yscalefloor</c>/
 /// <c>ceiling</c>), rotation (<c>rotationfloor</c>/<c>ceiling</c>), and
 /// per-surface light override (<c>lightfloor</c>/<c>ceiling</c> +
 /// <c>lightfloorabsolute</c>/<c>lightceilingabsolute</c>) fields added
 /// alongside the texture name - all OK-only, since this project's mesh
 /// builders don't apply any of them yet (no visual effect to preview,
-/// unlike Floor/Ceiling Height/Texture/Brightness). UDB's real rotation
-/// dial widget, "use linedef angles" checkbox, render-style dropdown,
-/// terrain dropdown, and reflectivity field are deliberately not built -
-/// the dial/checkbox because a plain typed rotation field covers the same
-/// data with no exotic custom widget, the rest because they need real
-/// infrastructure (a render-style enum, terrain game-config schema) this
-/// project doesn't have yet. See <c>TODO.md</c> for what else is
-/// deliberately deferred.
+/// unlike Floor/Ceiling Height/Texture/Brightness). A rotation dial widget,
+/// "use linedef angles" checkbox, render-style dropdown, terrain dropdown,
+/// and reflectivity field are deliberately not built - the dial/checkbox
+/// because a plain typed rotation field covers the same data with no
+/// exotic custom widget, the rest because they need real infrastructure (a
+/// render-style enum, terrain game-config schema) this project doesn't
+/// have yet. See <c>TODO.md</c> for what else is deliberately deferred.
 ///
 /// Height/texture/brightness/height-offset fields apply live to the
-/// selected sectors as you type (matching UDB's own real-time-apply-while-
-/// open feel) and revert completely on Cancel, since nothing is pushed to
-/// <see cref="UndoStack"/> until <see cref="Confirmed"/> fires - exactly
-/// one combined undo step for the whole dialog session, same as UDB's own
-/// single <c>CreateUndo</c> block. Everything else (Special/Tag/Gravity,
-/// and now Flags/Sector damage/Sound Sequence/Fog Density/additional tags)
-/// is deliberately *not* applied live (matching UDB's own real split too,
-/// and it's the same split: gameplay-only fields with nothing to preview
-/// in the 2D/3D view) - see <see cref="OnConfirmed"/>'s remarks for why
-/// that split is also required by <see cref="SetFieldCommand"/>'s
-/// construction-time snapshot, not just a fidelity choice.
+/// selected sectors as you type and revert completely on Cancel, since
+/// nothing is pushed to <see cref="UndoStack"/> until <see cref="Confirmed"/>
+/// fires - exactly one combined undo step for the whole dialog session.
+/// Everything else (Special/Tag/Gravity, and now Flags/Sector damage/Sound
+/// Sequence/Fog Density/additional tags) is deliberately *not* applied
+/// live: gameplay-only fields with nothing to preview in the 2D/3D view -
+/// see <see cref="OnConfirmed"/>'s remarks for why that split is also
+/// required by <see cref="SetFieldCommand"/>'s construction-time snapshot,
+/// not just a design choice.
 ///
-/// Multi-select "mixed value" handling matches UDB's real
-/// <c>NumericTextbox</c> grammar (see <see cref="NumericFieldExpression"/>):
-/// a field shows blank when the selected sectors disagree, and resolving
-/// that blank text always means "this sector's own original value," never
-/// "zero."
+/// Multi-select "mixed value" handling (see
+/// <see cref="NumericFieldExpression"/>): a field shows blank when the
+/// selected sectors disagree, and resolving that blank text always means
+/// "this sector's own original value," never "zero."
 /// </summary>
 public partial class SectorEditDialog : AcceptDialog
 {
@@ -242,8 +216,8 @@ public partial class SectorEditDialog : AcceptDialog
 	/// <see cref="TabContainer"/>'s own minimum-size computation
 	/// deliberately excludes its tab bar's width - tabs are allowed to
 	/// scroll independently of whatever the current page needs, so
-	/// <c>wrap_controls</c> alone can never guarantee all 6 real UDB tab
-	/// headers are visible without scroll arrows. Measured here from the
+	/// <c>wrap_controls</c> alone can never guarantee all 6 tab headers are
+	/// visible without scroll arrows. Measured here from the
 	/// tab bar's actual live theme font/size rather than a guessed pixel
 	/// number, so it stays correct across different themes, font sizes, and
 	/// content scale settings instead of only happening to work on one
@@ -343,8 +317,7 @@ public partial class SectorEditDialog : AcceptDialog
 	/// before <see cref="_flagsContainer"/> (a <c>VFlowContainer</c>) starts
 	/// a second column - chosen generously enough that every flag set this
 	/// project currently ships (11, for GZDoom's Doom2 UDMF configuration)
-	/// fits in one column with room to spare, matching UDB's own real
-	/// dialog. It only matters at all for a hypothetical future
+	/// fits in one column with room to spare. It only matters at all for a hypothetical future
 	/// configuration with meaningfully more flags than that - this is the
 	/// one knob that decides when such a set would start spilling into a
 	/// second column instead of growing the dialog taller indefinitely.
@@ -367,8 +340,8 @@ public partial class SectorEditDialog : AcceptDialog
 	/// (shows checked only if every selected sector already has it set) -
 	/// it's never read back unless the user actually toggles that specific
 	/// checkbox (see <see cref="_touchedFlags"/> and <see cref="OnConfirmed"/>),
-	/// matching UDB's real tri-state semantics without needing an
-	/// indeterminate checkbox state.
+	/// giving tri-state semantics without needing an indeterminate checkbox
+	/// state.
 	///
 	/// <see cref="_flagsContainer"/>'s <see cref="Control.CustomMinimumSize"/>
 	/// is set here (not once in the scene) to exactly fit however many
@@ -401,12 +374,11 @@ public partial class SectorEditDialog : AcceptDialog
 	}
 
 	/// <summary>
-	/// UDB's real read-only "Sector Height" field (<c>sectorheightlabel</c>/
-	/// <c>sectorheight</c> in <c>groupfloorceiling</c>) - ceiling minus
-	/// floor, recomputed from each selected sector's own current live
-	/// values (already kept in sync by <see cref="ApplyRealTimeNumber"/>
-	/// as you type), shown shared-or-blank exactly like every other field
-	/// here. Never itself editable or applied anywhere - purely derived.
+	/// Read-only "Sector Height" field - ceiling minus floor, recomputed
+	/// from each selected sector's own current live values (already kept
+	/// in sync by <see cref="ApplyRealTimeNumber"/> as you type), shown
+	/// shared-or-blank exactly like every other field here. Never itself
+	/// editable or applied anywhere - purely derived.
 	/// </summary>
 	private void UpdateSectorHeight() =>
 		_sectorHeightValue.Text = SharedOrBlank(_sectors.Select(s => s.CeilingHeight - s.FloorHeight));
@@ -415,14 +387,14 @@ public partial class SectorEditDialog : AcceptDialog
 	/// Floor Height, Ceiling Height, and Height Offset are resolved
 	/// together rather than by three independent handlers, since Height
 	/// Offset only ever nudges the other two - it's never itself a stored
-	/// sector value (confirmed against UDB's real dialog: the field always
-	/// shows "0" and is never written anywhere). Both height fields resolve
-	/// against each sector's own original snapshot value (never the
-	/// sector's current live value), exactly as before, so re-editing any
-	/// of the three fields stays idempotent instead of compounding. The
-	/// offset itself is resolved by <see cref="ResolveHeightOffset"/>
-	/// against that sector's own resolved (not original) height, matching
-	/// UDB's real tooltip-documented <c>++</c>/<c>--</c> behavior.
+	/// sector value (the field always shows "0" and is never written
+	/// anywhere). Both height fields resolve against each sector's own
+	/// original snapshot value (never the sector's current live value),
+	/// exactly as before, so re-editing any of the three fields stays
+	/// idempotent instead of compounding. The offset itself is resolved by
+	/// <see cref="ResolveHeightOffset"/> against that sector's own resolved
+	/// (not original) height, matching the <c>++</c>/<c>--</c> convention
+	/// documented in the field's tooltip.
 	/// </summary>
 	private void RecomputeHeights()
 	{
@@ -503,15 +475,14 @@ public partial class SectorEditDialog : AcceptDialog
 
 	/// <summary>
 	/// Opens the shared texture browser in flats mode (both fields here
-	/// are flats first - real UDB's own <c>FlatSelectorControl</c>), plus
-	/// the current game configuration's own real <c>mixtexturesflats</c>
-	/// setting (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) -
-	/// true for GZDoom/ZDoom-family configs, so the browser also offers
-	/// wall textures there, since that engine's own texture manager
-	/// doesn't distinguish them for a sector's Floor/Ceiling either - the
-	/// click target is the thumbnail itself, matching UDB's real
-	/// <c>ImageSelectorControl</c> (its inline preview image is what you
-	/// click to browse, not a separate button). Setting
+	/// are flats first), plus the current game configuration's own real
+	/// <c>mixtexturesflats</c> setting
+	/// (<see cref="IGameConfiguration.MixTexturesAndFlats"/>) - true for
+	/// GZDoom/ZDoom-family configs, so the browser also offers wall
+	/// textures there, since that engine's own texture manager doesn't
+	/// distinguish them for a sector's Floor/Ceiling either - the click
+	/// target is the thumbnail itself (its inline preview image is what
+	/// you click to browse, not a separate button). Setting
 	/// <see cref="TexturePreviewEdit.Text"/> directly doesn't raise
 	/// <c>TextChanged</c> (a plain Godot behavior already relied on
 	/// elsewhere, e.g. <see cref="StepperLineEdit.Text"/>'s own silent

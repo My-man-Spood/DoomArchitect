@@ -36,11 +36,11 @@ public class CfgLoaderTests
     [Fact]
     public void Load_IncludeConflictingWithAPriorLeafAssignment_TheIncludedValueWins()
     {
-        // Matches UDB's real Combine(cs, inc) semantics: the second
-        // argument (the included content) wins a leaf conflict against
-        // whatever the including scope already had at that point - not
-        // "whichever was written later in a naive sense", specifically
-        // "the include always wins over what came before it".
+        // Combine's semantics: the second argument (the included content)
+        // wins a leaf conflict against whatever the including scope
+        // already had at that point - not "whichever was written later in
+        // a naive sense", specifically "the include always wins over what
+        // came before it".
         var loader = new CfgLoader(new InMemoryCfgFileSource(new Dictionary<string, string>
         {
             ["Main.cfg"] = "value = 1; include(\"Shared.cfg\");",

@@ -6,11 +6,10 @@ namespace DoomArchitect.Core.IO;
 /// Reads a PK3 - a real GZDoom/ZDoom-convention zip archive that stands in
 /// for a WAD's flat lump directory with a folder structure instead
 /// (<c>patches/</c>, <c>textures/</c>, <c>flats/</c>, <c>sprites/</c>,
-/// <c>graphics/</c> in place of <c>P_START</c>/<c>P_END</c> etc. - verified
-/// against UDB's own real <c>PK3StructuredReader</c>). Deliberately built on
-/// .NET's own built-in <see cref="System.IO.Compression.ZipArchive"/>
-/// instead of the third-party archive library UDB uses (SharpCompress,
-/// there only so UDB can tolerate a PK3 that's secretly a rar/7z file) -
+/// <c>graphics/</c> in place of <c>P_START</c>/<c>P_END</c> etc.).
+/// Deliberately built on .NET's own built-in
+/// <see cref="System.IO.Compression.ZipArchive"/> instead of a third-party
+/// archive library that also tolerates a PK3 secretly being a rar/7z file -
 /// a real PK3 is a zip file by spec, and that extra tolerance isn't a
 /// real-world need here.
 ///
@@ -46,9 +45,7 @@ public sealed class Pk3File : IResourceContainer, IDisposable
 
             var key = Normalize(entry.FullName);
             // First entry wins on a duplicate path, later ones are dropped -
-            // matches UDB's own real PK3 behavior (DirectoryFilesList.cs),
-            // not real GZDoom's last-wins - see the plan's Context section
-            // for why this project follows UDB here rather than "fixing" it.
+            // matches UDB's own behavior, not real GZDoom's last-wins.
             _entriesByPath.TryAdd(key, entry);
         }
     }
@@ -71,12 +68,11 @@ public sealed class Pk3File : IResourceContainer, IDisposable
     }
 
     /// <summary>
-    /// The real fallback order GZDoom/UDB search patches in when a lookup
-    /// isn't restricted to one specific namespace (UDB's own
-    /// <c>PatchLocations</c>) - applied here as this container's one
-    /// general-purpose lookup order, since DoomArchitect's texture pipeline
-    /// doesn't yet distinguish call-sites as finely as UDB's does (a
-    /// deliberate simplification, not a UDB behavior gap).
+    /// The fallback order GZDoom/UDB search patches in when a lookup isn't
+    /// restricted to one specific namespace. Applied here as this
+    /// container's one general-purpose lookup order, since DoomArchitect's
+    /// texture pipeline doesn't yet distinguish call-sites as finely as UDB
+    /// does (a deliberate simplification).
     /// </summary>
     private static readonly ResourceNamespace[] FallbackOrder =
     {
@@ -156,8 +152,7 @@ public sealed class Pk3File : IResourceContainer, IDisposable
     /// <summary>
     /// .NET's own <see cref="ZipArchiveEntry.FullName"/> is always
     /// '/'-separated per the zip spec, but a defensive backslash swap costs
-    /// nothing and guards against archives written by non-compliant tools -
-    /// the same real-world gotcha UDB itself guards against explicitly.
+    /// nothing and guards against archives written by non-compliant tools.
     /// </summary>
     private static string Normalize(string path) => path.Replace('\\', '/');
 

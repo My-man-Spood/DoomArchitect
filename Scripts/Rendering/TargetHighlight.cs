@@ -220,9 +220,8 @@ public partial class TargetHighlight : Node3D
     /// bounds (<see cref="ThingPickBoundsLookup"/> - same dimensions
     /// <see cref="MapRaycaster"/> actually hit-tests against, so this is
     /// an honest "here's what you're clicking" affordance, not just a
-    /// decorative marker) - the same idea as UDB's own real "thing cage"
-    /// display, just filled rather than wireframe to match this class's
-    /// existing flat/wall highlight look. Deliberately axis-aligned, not
+    /// decorative marker), filled rather than wireframe to match this
+    /// class's existing flat/wall highlight look. Deliberately axis-aligned, not
     /// billboarded to the camera the way the Thing's own rendered sprite
     /// is - matching the pick box itself, which isn't billboarded either.
     /// A no-op if <see cref="ThingPickBoundsLookup"/> was never wired up.

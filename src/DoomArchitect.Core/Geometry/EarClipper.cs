@@ -3,15 +3,11 @@ using System.Numerics;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// Ported from Ultimate Doom Builder's ear-clipping step in
-/// <c>Triangulation.DoEarClip</c>/<c>EarClipVertex</c>: clips ears off a
-/// simple (hole-free) polygon until only triangles remain. Tracks each
-/// vertex's convex/reflex/ear-tip status incrementally as vertices are
-/// removed - after an ear is clipped, only its two former neighbors are
-/// re-evaluated, not the whole remaining polygon - matching UDB's actual
-/// algorithm rather than recomputing everything from scratch each
-/// iteration, since a large enough sector polygon would make that
-/// difference real.
+/// Clips ears off a simple (hole-free) polygon until only triangles
+/// remain. Tracks each vertex's convex/reflex/ear-tip status incrementally
+/// as vertices are removed - after an ear is clipped, only its two former
+/// neighbors are re-evaluated, not the whole remaining polygon, since a
+/// large enough sector polygon would make that difference real.
 /// </summary>
 public static class EarClipper
 {
@@ -189,10 +185,10 @@ public static class EarClipper
         {
             var p = reflex.Position;
 
-            // Position-based, matching UDB exactly: a reflex vertex that
-            // happens to share a position with one of this triangle's
-            // corners (routine here, again from bridge points) is treated
-            // as a corner, not a real containment case.
+            // Position-based: a reflex vertex that happens to share a
+            // position with one of this triangle's corners (routine here,
+            // again from bridge points) is treated as a corner, not a real
+            // containment case.
             if (p == a || p == b || p == c) continue;
 
             if (p.X < MathF.Min(a.X, MathF.Min(b.X, c.X)) || p.X > MathF.Max(a.X, MathF.Max(b.X, c.X)) ||

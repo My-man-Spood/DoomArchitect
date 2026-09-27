@@ -4,9 +4,9 @@ namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
 /// A standard orientation-based 2D segment-intersection test (four
-/// cross-product signs) - not a port of any specific UDB method, just
-/// well-known general-purpose math, written fresh rather than sourced.
-/// No special handling for collinear-overlapping segments - matches the
+/// cross-product signs) - well-known general-purpose math, written fresh
+/// rather than ported from anywhere specific. No special handling for
+/// collinear-overlapping segments - matches the
 /// level of rigor a marquee-select rectangle-edge test needs, not a
 /// general-purpose robust geometry primitive.
 /// </summary>

@@ -17,10 +17,10 @@ using MapVector2 = System.Numerics.Vector2;
 /// </summary>
 public sealed class MarqueeSelector
 {
-	private const float MarqueeStartThresholdPixels = 2f; // matches UDB's own MouseSelectionThreshold default
-	private const float MarqueeMinSize = 0.1f; // matches UDB's own selectionvolume guard
+	private const float MarqueeStartThresholdPixels = 2f;
+	private const float MarqueeMinSize = 0.1f;
 
-	/// <summary>One color per <see cref="MarqueeSelectionMode"/>, matching which combine mode the current marquee drag would apply on release (see <see cref="GetSelectionMode"/>) - this project's own color choices, not a port of UDB's actual theme values.</summary>
+	/// <summary>One color per <see cref="MarqueeSelectionMode"/>, matching which combine mode the current marquee drag would apply on release (see <see cref="GetSelectionMode"/>).</summary>
 	private static readonly Color SelectColor = new(0.9f, 0.9f, 0.9f);
 	private static readonly Color AddColor = new(0.3f, 0.9f, 0.3f);
 	private static readonly Color SubtractColor = new(0.9f, 0.3f, 0.3f);
@@ -39,7 +39,7 @@ public sealed class MarqueeSelector
 
 	public bool IsSelecting { get; private set; }
 
-	/// <summary>Ported from UDB's real <c>BaseClassicMode.GetMultiSelectionMode</c> - the two modifier roles are real, independently rebindable actions (<c>marquee_subtract_modifier</c>/<c>marquee_add_modifier</c>).</summary>
+	/// <summary>The two modifier roles are independently rebindable actions (<c>marquee_subtract_modifier</c>/<c>marquee_add_modifier</c>).</summary>
 	public static MarqueeSelectionMode GetSelectionMode()
 	{
 		var ctrl = Input.IsActionPressed("marquee_subtract_modifier");
@@ -80,7 +80,7 @@ public sealed class MarqueeSelector
 		return true;
 	}
 
-	/// <summary>Left-button release while a marquee was in progress: applies the combine mode over the final rectangle, unless it's too small to have been a real drag (matches UDB's own <c>selectionvolume</c> guard).</summary>
+	/// <summary>Left-button release while a marquee was in progress: applies the combine mode over the final rectangle, unless it's too small to have been a real drag.</summary>
 	public void End(Action<MapVector2, MapVector2> applySelection)
 	{
 		var min = MapVector2.Min(_selectStartMap, _selectEndMap);
@@ -95,10 +95,9 @@ public sealed class MarqueeSelector
 
 	/// <summary>
 	/// The live marquee rectangle while a left-button drag is in progress
-	/// - an unfilled outline, matching UDB's own real
-	/// <c>ClassicMode.RenderMultiSelection</c> (a border-only rectangle,
-	/// not a filled one). Color reflects whichever combine mode would
-	/// apply if released right now, so the modifier-key feedback is live.
+	/// - an unfilled outline, border-only rather than a filled rectangle.
+	/// Color reflects whichever combine mode would apply if released right
+	/// now, so the modifier-key feedback is live.
 	/// </summary>
 	public void Draw(CanvasItem target)
 	{

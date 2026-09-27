@@ -24,8 +24,8 @@ public class DoomFlatReaderTests
     [Fact]
     public void TryRead_NonSquareLengthOver4096_ForcesTo64x64AndTruncates()
     {
-        // 5000 bytes: not a perfect square, but over 4096 - UDB's own
-        // quirk forces 64x64 and reads only the first 4096 bytes.
+        // 5000 bytes: not a perfect square, but over 4096 - forces 64x64
+        // and reads only the first 4096 bytes.
         var data = new byte[5000];
         Array.Fill(data, (byte)0, 0, 4096);
         Array.Fill(data, (byte)255, 4096, 5000 - 4096); // trailing bytes must be ignored, not read

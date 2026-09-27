@@ -7,21 +7,18 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Browse and pick a wall texture or flat by thumbnail, ported from UDB's
-/// real <c>TextureBrowserForm</c> - a per-resource tree ("All" plus one
-/// node per loaded WAD/PK3, matching UDB's own real <c>ResourceTextureSet</c>
-/// tree shape) alongside a live-filtered icon gallery. Single-click
-/// selects only; double-click (or Enter, via <see cref="ItemList.ItemActivated"/>)
-/// confirms and closes exactly like OK - matching UDB's real interaction
-/// model precisely (verified against source, not guessed).
+/// Browse and pick a wall texture or flat by thumbnail - a per-resource
+/// tree ("All" plus one node per loaded WAD/PK3) alongside a live-filtered
+/// icon gallery. Single-click selects only; double-click (or Enter, via
+/// <see cref="ItemList.ItemActivated"/>) confirms and closes exactly like
+/// OK.
 ///
-/// <see cref="Browse"/>'s <c>flats</c> parameter mirrors UDB's own real
-/// fixed split (its <c>FlatSelectorControl</c> always browses flats,
-/// <c>TextureSelectorControl</c> always browses textures - a Sector's
-/// Floor/Ceiling vs. a Linedef's wall-texture fields, never varying per
-/// map). <c>mixTexturesAndFlats</c> is the separate, genuinely
-/// game-configuration-dependent axis - UDB's real <c>mixtexturesflats</c>
-/// setting (see <see cref="DoomArchitect.Core.Configuration.IGameConfiguration.MixTexturesAndFlats"/>):
+/// <see cref="Browse"/>'s <c>flats</c> parameter is a fixed split - a
+/// Sector's Floor/Ceiling fields always browse flats, a Linedef's
+/// wall-texture fields always browse textures, never varying per map.
+/// <c>mixTexturesAndFlats</c> is the separate, genuinely
+/// game-configuration-dependent axis (see
+/// <see cref="DoomArchitect.Core.Configuration.IGameConfiguration.MixTexturesAndFlats"/>):
 /// when true, both the flats and textures pickers additionally offer the
 /// *other* namespace's names, since GZDoom/ZDoom-family configs' own real
 /// texture manager doesn't distinguish them for either field; when false

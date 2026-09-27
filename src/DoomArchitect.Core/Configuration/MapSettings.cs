@@ -1,18 +1,15 @@
 namespace DoomArchitect.Core.Configuration;
 
 /// <summary>
-/// One WAD's real UDB-equivalent <c>.dbs</c> sidecar content - verified
-/// directly against UDB's own <c>Source/Core/Map/MapOptions.cs</c>
-/// (both the read constructor and <c>WriteConfiguration</c>), not
-/// guessed. Two real, easy-to-miss shape details carried over exactly:
-/// <c>gameconfig</c> is a single top-level field shared by every map in
-/// the WAD's <c>.dbs</c> (not per-map, even though a WAD can hold several
-/// maps), while <c>resources</c> genuinely is nested per map header name
-/// (<c>maps.&lt;name&gt;.resources</c>), since different maps in one WAD
-/// can reasonably want different extra resources. Only these two fields
-/// are modeled - every other real UDB <c>.dbs</c> field (script document
-/// state, tag labels, sector-drawing overrides, etc.) is preserved-but-
-/// uninterpreted on a load-then-save round-trip (see
+/// One WAD's <c>.dbs</c> sidecar content. Two easy-to-miss shape details
+/// carried over exactly: <c>gameconfig</c> is a single top-level field
+/// shared by every map in the WAD's <c>.dbs</c> (not per-map, even though a
+/// WAD can hold several maps), while <c>resources</c> genuinely is nested
+/// per map header name (<c>maps.&lt;name&gt;.resources</c>), since
+/// different maps in one WAD can reasonably want different extra
+/// resources. Only these two fields are modeled - every other <c>.dbs</c>
+/// field (script document state, tag labels, sector-drawing overrides,
+/// etc.) is preserved-but-uninterpreted on a load-then-save round-trip (see
 /// <see cref="CfgBlock.WithAssignment"/>/<see cref="CfgBlock.WithBlock"/>'s
 /// own remarks) - the same "model what's used, preserve the rest"
 /// principle already used for UDMF <c>CustomFields</c>.

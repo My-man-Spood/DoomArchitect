@@ -123,13 +123,13 @@ public class CompositeTextureBuilderTests
     [Fact]
     public void Build_PatchWithPartialAlphaPixel_TreatsItAsFullyOpaque()
     {
-        // UDB's actual alpha test is `pixel.a > 0.5f` against a raw byte
-        // (0-255) field - since C# widens byte to float, any nonzero byte
-        // already exceeds 0.5, so UDB treats partial alpha (e.g. 50, from
-        // a real PNG's alpha channel) as fully opaque, not half-blended.
-        // Only alpha==0 is transparent. Regression test for that exact
-        // quirk (caught in review - a naive ">127" threshold would
-        // instead skip this pixel).
+        // The alpha test is `pixel.a > 0.5f` against a raw byte (0-255)
+        // field - since C# widens byte to float, any nonzero byte already
+        // exceeds 0.5, so partial alpha (e.g. 50, from a real PNG's alpha
+        // channel) is treated as fully opaque, not half-blended. Only
+        // alpha==0 is transparent. Regression test for that exact quirk
+        // (caught in review - a naive ">127" threshold would instead skip
+        // this pixel).
         var patch = new PatchPlacement(0, 0, "PARTIAL");
         var definition = new CompositeTextureDefinition("TEX", 2, 2, new[] { patch });
         var rgba = new byte[2 * 2 * 4];

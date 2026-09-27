@@ -4,9 +4,8 @@ public static class BrightnessConversions
 {
     /// <summary>
     /// A 0-255 brightness value (see <c>Core.Lighting.SectorBrightness</c>)
-    /// as a flat grayscale multiplier - matches UDB's own conversion,
-    /// which is a plain per-channel multiply with no palette/colormap
-    /// tinting involved.
+    /// as a flat grayscale multiplier - a plain per-channel multiply with
+    /// no palette/colormap tinting involved.
     ///
     /// <c>brightness / 255</c> is a *perceptual* value - how bright this
     /// should actually look, the same way Doom's original palette colors

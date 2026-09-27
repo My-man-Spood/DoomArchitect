@@ -5,12 +5,12 @@ using Godot;
 namespace DoomArchitect.Settings;
 
 /// <summary>
-/// Reads/writes one WAD's real UDB-equivalent <c>.dbs</c> sidecar file
-/// (literally UDB's own extension - see <see cref="Core.Configuration.MapSettings"/>'s
-/// own remarks on the exact shape). A real UDB <c>.dbs</c> already sitting
-/// next to a WAD is read tolerantly (unmodeled fields survive a load-
-/// then-save round-trip untouched) and only ever updated for the fields
-/// DoomArchitect actually manages.
+/// Reads/writes one WAD's <c>.dbs</c> sidecar file - the same extension
+/// UDB uses (see <see cref="Core.Configuration.MapSettings"/>'s own
+/// remarks on the exact shape), so an existing UDB <c>.dbs</c> already
+/// sitting next to a WAD is read tolerantly (unmodeled fields survive a
+/// load-then-save round-trip untouched) and only ever updated for the
+/// fields DoomArchitect actually manages.
 /// </summary>
 public static class MapSettingsFile
 {

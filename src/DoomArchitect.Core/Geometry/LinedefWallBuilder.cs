@@ -65,42 +65,35 @@ public enum WallPartKind
 
 /// <summary>
 /// Computes which wall quads exist for a linedef and their vertical
-/// extents - a close port of UDB's own visual-mode wall builders
-/// (<c>BaseVisualSector</c>/<c>VisualUpper</c>/<c>VisualLower</c>/
-/// <c>VisualMiddleSingle</c>/<c>VisualMiddleDouble</c>,
-/// Source/Plugins/BuilderModes/VisualModes/).
+/// extents.
 ///
-/// Every wall part's real pegging is ported directly from its own UDB
-/// counterpart (see each <c>Add*IfVisible</c>/<see cref="BuildOneSided"/>'s
-/// own remarks) - a single-sided wall and a two-sided wall's lower part
-/// both default to top-pegged and switch to bottom-pegged when the
-/// line's "lower unpegged" flag (<see cref="IsLowerUnpegged"/>) is set;
-/// a two-sided wall's upper part is the mirror image - it defaults to
-/// *bottom*-pegged (hangs up from the opening) and only becomes top-
-/// pegged when the line's "upper unpegged" flag
-/// (<see cref="IsUpperUnpegged"/>) is set. This default-bottom-pegged
-/// upper behavior is easy to get backwards (it reads unintuitively next
-/// to the lower/single/masked-middle wall parts, which all default to
-/// top-pegged) - verified directly against <c>VisualUpper.Setup</c>'s own
-/// <c>tp.tlt.y</c> computation, not re-derived from memory.
+/// Every wall part's pegging follows UDB's real behavior (see each
+/// <c>Add*IfVisible</c>/<see cref="BuildOneSided"/>'s own remarks) - a
+/// single-sided wall and a two-sided wall's lower part both default to
+/// top-pegged and switch to bottom-pegged when the line's "lower
+/// unpegged" flag (<see cref="IsLowerUnpegged"/>) is set; a two-sided
+/// wall's upper part is the mirror image - it defaults to *bottom*-
+/// pegged (hangs up from the opening) and only becomes top-pegged when
+/// the line's "upper unpegged" flag (<see cref="IsUpperUnpegged"/>) is
+/// set. This default-bottom-pegged upper behavior is easy to get
+/// backwards - it reads unintuitively next to the lower/single/masked-
+/// middle wall parts, which all default to top-pegged.
 ///
-/// A two-sided linedef's *masked* middle texture (fences, bars, windows -
-/// <c>VisualMiddleDouble</c> in UDB) additionally needs the real
-/// composited texture's pixel height just to size its own quad
-/// (independent of pegging), which isn't something this pure-geometry
-/// layer has on its own - callers pass a <c>textureHeightLookup</c>
-/// delegate for it, now also consulted by every other wall part's own
-/// default-pegging math above. One thing is still deliberately not
-/// modeled:
+/// A two-sided linedef's *masked* middle texture (fences, bars, windows)
+/// additionally needs the real composited texture's pixel height just to
+/// size its own quad (independent of pegging), which isn't something
+/// this pure-geometry layer has on its own - callers pass a
+/// <c>textureHeightLookup</c> delegate for it, now also consulted by
+/// every other wall part's own default-pegging math above. One thing is
+/// still deliberately not modeled:
 /// - Repeating (<c>wrapmidtex</c>/Hexen's <c>Line_SetIdentification</c>
 ///   arg): always treated as off (UDB's own vanilla-format default too -
 ///   the flag doesn't even exist outside UDMF/Hexen), so a masked middle
 ///   texture taller than the opening is clipped to it, and one shorter
 ///   than the opening leaves the remainder of the opening with no
-///   geometry at all, matching UDB exactly rather than tiling. Plain
-///   upper/lower/single walls were never affected by this - they always
-///   tile via the App layer's own repeating texture sampler, matching
-///   UDB's own real (non-masked-middle) wall rendering.
+///   geometry at all, rather than tiling. Plain upper/lower/single walls
+///   were never affected by this - they always tile via the App layer's
+///   own repeating texture sampler.
 /// - UDB's vanilla "both sides have a sky ceiling" pegging-glitch
 ///   emulation for a lower-unpegged lower wall (<c>VisualLower.Setup</c>'s
 ///   own <c>HasSkyCeiling</c> special case) - a narrow, sky-flat-specific
@@ -108,10 +101,9 @@ public enum WallPartKind
 ///   codebase has no sky-flat concept modeled yet to key it off of.
 ///
 /// Also not ported: UDB's "render as sky" substitution for a missing
-/// upper/lower texture next to a sky-flat sector - confirmed (by reading
-/// UDB's own code) to be a texture/render-pass decision only, with zero
-/// effect on wall shape, so there's nothing for this pure-geometry layer
-/// to do about it either way.
+/// upper/lower texture next to a sky-flat sector - it's a texture/
+/// render-pass decision only, with zero effect on wall shape, so there's
+/// nothing for this pure-geometry layer to do about it either way.
 /// </summary>
 public static class LinedefWallBuilder
 {
@@ -142,11 +134,9 @@ public static class LinedefWallBuilder
     }
 
     /// <summary>
-    /// Spans the full sector height - matches UDB's <c>VisualMiddleSingle</c>.
-    /// Default (lower-unpegged flag clear) is top-pegged (V=0 at the
-    /// ceiling); flag set anchors the texture's own bottom edge to the
-    /// sector's own floor instead (hangs up), matching
-    /// <c>VisualMiddleSingle.Setup</c>'s own <c>tp.tlt.y</c> formula.
+    /// Spans the full sector height. Default (lower-unpegged flag clear)
+    /// is top-pegged (V=0 at the ceiling); flag set anchors the texture's
+    /// own bottom edge to the sector's own floor instead (hangs up).
     /// </summary>
     private static IReadOnlyList<WallSegment> BuildOneSided(Linedef linedef, Sidedef side, Func<string, double>? textureHeightLookup)
     {
@@ -186,24 +176,19 @@ public static class LinedefWallBuilder
 
     /// <summary>
     /// A side gets an upper wall exactly when its own sector's ceiling is
-    /// higher than the other side's - matches UDB's <c>VisualUpper</c>
-    /// (called once per side, with <paramref name="side"/>/
-    /// <paramref name="other"/> swapped for the back side, so equal
-    /// ceilings correctly produce no upper wall on either side). The
-    /// <c>Math.Max</c> clamp on the bottom replicates UDB's defensive
-    /// handling of an inverted/"closed" other-sector (floor above
-    /// ceiling) - a real vanilla-Doom mapping trick.
+    /// higher than the other side's (called once per side, with
+    /// <paramref name="side"/>/<paramref name="other"/> swapped for the
+    /// back side, so equal ceilings correctly produce no upper wall on
+    /// either side). The <c>Math.Max</c> clamp on the bottom handles an
+    /// inverted/"closed" other-sector (floor above ceiling) - a real
+    /// vanilla-Doom mapping trick.
     ///
     /// Pegging is the mirror image of every other wall part: default
     /// (upper-unpegged flag clear) is *bottom*-pegged - the texture's own
     /// bottom edge anchors to <paramref name="other"/>'s own ceiling
     /// (using its real, unclamped height, not the clamped visible
-    /// <c>bottom</c> above - matching <c>VisualUpper.Setup</c>'s own
-    /// <c>tp</c> formula, which always references <c>Sidedef.Other.Sector.CeilHeight</c>
-    /// directly) and hangs up; flag set switches to top-pegged (V=0 at
-    /// <paramref name="side"/>'s own ceiling), matching
-    /// <c>VisualUpper.Setup</c>'s own <c>IsFlagSet(UpperUnpeggedFlag)</c>
-    /// branch exactly.
+    /// <c>bottom</c> above) and hangs up; flag set switches to top-pegged
+    /// (V=0 at <paramref name="side"/>'s own ceiling).
     /// </summary>
     private static void AddUpperIfVisible(List<WallSegment> segments, Linedef linedef, Sidedef side, Sidedef other, Func<string, double>? textureHeightLookup)
     {
@@ -225,15 +210,13 @@ public static class LinedefWallBuilder
     }
 
     /// <summary>
-    /// Mirror of <see cref="AddUpperIfVisible"/> for floors - matches
-    /// UDB's <c>VisualLower</c>. Default (lower-unpegged flag clear) is
-    /// top-pegged (V=0 at the top of the visible gap); flag set anchors
-    /// the texture's own top edge to <paramref name="side"/>'s own
-    /// ceiling minus <paramref name="other"/>'s own floor (both real,
-    /// unclamped heights - matching <c>VisualLower.Setup</c>'s own
-    /// <c>tp.tlt.y</c> formula, which needs no texture height at all for
-    /// this branch, unlike <see cref="AddUpperIfVisible"/>'s default
-    /// case).
+    /// Mirror of <see cref="AddUpperIfVisible"/> for floors. Default
+    /// (lower-unpegged flag clear) is top-pegged (V=0 at the top of the
+    /// visible gap); flag set anchors the texture's own top edge to
+    /// <paramref name="side"/>'s own ceiling minus <paramref name="other"/>'s
+    /// own floor (both real, unclamped heights - this branch needs no
+    /// texture height at all, unlike <see cref="AddUpperIfVisible"/>'s
+    /// default case).
     /// </summary>
     private static void AddLowerIfVisible(List<WallSegment> segments, Linedef linedef, Sidedef side, Sidedef other, Func<string, double>? textureHeightLookup)
     {
@@ -253,19 +236,16 @@ public static class LinedefWallBuilder
     }
 
     /// <summary>
-    /// A sidedef's real per-part texture offset and scale, matching UDB's
-    /// own pattern (identical across every one of <c>VisualUpper</c>/
-    /// <c>VisualLower</c>/<c>VisualMiddleSingle</c>/<c>VisualMiddleDouble</c>'s
-    /// own <c>Setup</c>): <c>tscale = (scalex_&lt;partSuffix&gt;,
+    /// A sidedef's real per-part texture offset and scale (the same
+    /// pattern for every wall part): <c>tscale = (scalex_&lt;partSuffix&gt;,
     /// scaley_&lt;partSuffix&gt;)</c> (each defaulting to 1, e.g.
     /// <c>scalex_mid</c>/<c>scaley_mid</c> for <c>"mid"</c>), then
     /// <c>tof = (Sidedef.OffsetX, Sidedef.OffsetY) + (offsetx_&lt;partSuffix&gt;,
     /// offsety_&lt;partSuffix&gt;)</c> divided by <c>Abs(tscale)</c> - UDB
     /// gates that division behind a game-configuration
     /// <c>ScaledTextureOffsets</c> flag that's <c>true</c> in every real
-    /// game config shipped with UDB (vanilla and every ZDoom-family one
-    /// alike, verified directly against the actual `.cfg` data), so with
-    /// no game-configuration system here to make it configurable, it's
+    /// game config (vanilla and every ZDoom-family one alike), so with no
+    /// game-configuration system here to make it configurable, it's
     /// hardcoded true - the same precedent
     /// <c>CompositeTextureBuilder</c> already set for its own two
     /// always-true vanilla compatibility flags. A classic-format sidedef
@@ -336,8 +316,7 @@ public static class LinedefWallBuilder
     }
 
     /// <summary>
-    /// UDB's own real classic <c>ML_DONTPEGBOTTOM</c> bit (value 16,
-    /// verified directly against its own game-configuration data) for a
+    /// The classic <c>ML_DONTPEGBOTTOM</c> flag bit (value 16) for a
     /// classic-format linedef, or the UDMF <c>dontpegbottom</c> field for
     /// one loaded from a UDMF map - <c>ClassicMapReader</c> stores a
     /// classic linedef's whole raw flags word verbatim as an integer
@@ -350,8 +329,7 @@ public static class LinedefWallBuilder
         linedef.Fields.GetBool("dontpegbottom", false) || (linedef.Fields.GetInteger("flags", 0) & 16) != 0;
 
     /// <summary>
-    /// UDB's own real classic <c>ML_DONTPEGTOP</c> bit (value 8,
-    /// verified directly against its own game-configuration data) for a
+    /// The classic <c>ML_DONTPEGTOP</c> flag bit (value 8) for a
     /// classic-format linedef, or the UDMF <c>dontpegtop</c> field for one
     /// loaded from a UDMF map - same dual-storage-convention read as
     /// <see cref="IsLowerUnpegged"/>, see its own remarks.
@@ -360,13 +338,12 @@ public static class LinedefWallBuilder
         linedef.Fields.GetBool("dontpegtop", false) || (linedef.Fields.GetInteger("flags", 0) & 8) != 0;
 
     /// <summary>
-    /// A two-sided masked middle (fence/bars/window) - matches UDB's
-    /// <c>VisualMiddleDouble</c>: the "opening" between the two sectors is
+    /// A two-sided masked middle (fence/bars/window): the "opening"
+    /// between the two sectors is
     /// <c>[max(floor_front, floor_back), min(ceiling_front, ceiling_back)]</c>
-    /// (same bounds an upper/lower wall's own gap uses). Real pegging,
-    /// ported directly from <c>VisualMiddleDouble.Setup</c>'s own real
-    /// crop-plane computation: with the line's own "lower unpegged" flag
-    /// set, the texture's *bottom* edge anchors to the opening's own
+    /// (same bounds an upper/lower wall's own gap uses). With the line's
+    /// own "lower unpegged" flag set, the texture's *bottom* edge anchors
+    /// to the opening's own
     /// bottom and hangs *up*; the default (flag unset) anchors the *top*
     /// edge to the opening's own top and hangs down, this class's own
     /// prior unconditional behavior. Either way, the real combined offset

@@ -6,9 +6,8 @@ using Godot;
 
 /// <summary>
 /// The combined "which game does this map belong to, and what additional
-/// resources (e.g. its IWAD) should it use" prompt - matches UDB's own
-/// real single "Open Map Options" dialog (config + resources together)
-/// rather than two separate steps. Shown both when a WAD is first opened
+/// resources (e.g. its IWAD) should it use" prompt, asked together in a
+/// single dialog rather than as two separate steps. Shown both when a WAD is first opened
 /// and (unchanged) when revisiting the currently loaded map's options -
 /// see <c>OpenMapMenu</c>.
 /// </summary>

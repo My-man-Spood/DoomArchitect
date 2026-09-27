@@ -8,8 +8,8 @@ namespace DoomArchitect.Core.Map;
 /// action-argument tag slots (e.g. a Teleport's destination tag), since
 /// neither <see cref="Linedef"/> nor <see cref="Thing"/> has typed
 /// argument accessors and <c>IGameConfiguration</c> has no per-argument
-/// "this is a tag" metadata to identify them by; a real gap against UDB's
-/// own broader search, not an oversight.
+/// "this is a tag" metadata to identify them by - a deliberate gap, not
+/// an oversight.
 /// </summary>
 public static class MapDataTagQueries
 {

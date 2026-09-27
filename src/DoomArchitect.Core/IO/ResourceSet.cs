@@ -2,13 +2,11 @@ namespace DoomArchitect.Core.IO;
 
 /// <summary>
 /// An ordered list of resource containers - WADs, PK3s, or a mix of both -
-/// treated as one layered resource pool. Later entries are higher priority,
-/// exactly matching UDB's own real <c>DataManager</c> precedence (confirmed
-/// via source: its single-item lookups search the container list
-/// backwards, so the most recently added resource always wins a name
-/// collision). The map currently being edited is always the highest-
-/// priority entry (last in the list passed to the constructor) - the same
-/// forced ordering UDB's own <c>MapManager</c> applies.
+/// treated as one layered resource pool. Later entries are higher priority:
+/// a lookup searches the container list backwards, so the most recently
+/// added resource always wins a name collision. The map currently being
+/// edited is always the highest-priority entry (last in the list passed to
+/// the constructor).
 ///
 /// Was <c>WadResourceSet</c>, WAD-only, before PK3 support existed - widened
 /// to hold any <see cref="IResourceContainer"/> once a PK3 reader
@@ -46,12 +44,11 @@ public sealed class ResourceSet
 
     /// <summary>
     /// Each resource's own namespace is scanned independently and the
-    /// results concatenated in priority order - matching UDB's real
-    /// sprite-range handling (each container owns its own bounded range;
-    /// <c>DataManager</c> has no single merged global range, it just tries
-    /// each resource in priority order). Returning them in priority order
-    /// means a plain <c>FirstOrDefault</c> name match on the result already
-    /// respects precedence with no extra logic needed at the call site.
+    /// results concatenated in priority order - there's no single merged
+    /// global range, each container just owns its own bounded range.
+    /// Returning them in priority order means a plain
+    /// <c>FirstOrDefault</c> name match on the result already respects
+    /// precedence with no extra logic needed at the call site.
     /// </summary>
     public IReadOnlyList<WadLump> FindNamespaceLumps(ResourceNamespace ns) =>
         _byPriorityDescending.SelectMany(r => r.FindNamespaceLumps(ns)).ToList();

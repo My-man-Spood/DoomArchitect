@@ -19,7 +19,7 @@ public sealed class MapOverlayGrid
 	public const float MinGridSize = 1f;
 	public const float MaxGridSize = 1024f;
 
-	/// <summary>UDB's own threshold in <c>Renderer2D.RenderGrid</c> for when a grid tier is too dense to read.</summary>
+	/// <summary>Threshold for when a grid tier is too dense to read.</summary>
 	private const float MinGridCellPixels = 6f;
 	private const int MaxGridDoublings = 20;
 	private const float Grid64Size = 64f;
@@ -37,20 +37,18 @@ public sealed class MapOverlayGrid
 	public float GridSize { get; set; } = DefaultGridSize;
 
 	/// <summary>
-	/// Mirrors UDB's own "DynamicGridSize" setting (default on there too):
-	/// while enabled, zooming recomputes <see cref="GridSize"/> via
-	/// <see cref="DynamicGridSize"/> instead of leaving it
-	/// fixed. Manually changing grid size (<c>[</c>/<c>]</c>) turns this
-	/// off, matching UDB's <c>DisableDynamicGridResize</c>.
+	/// While enabled, zooming recomputes <see cref="GridSize"/> via
+	/// <see cref="DynamicGridSize"/> instead of leaving it fixed. Manually
+	/// changing grid size (<c>[</c>/<c>]</c>) turns this off.
 	/// </summary>
 	public bool DynamicGridSizeEnabled { get; set; } = true;
 
 	/// <summary>
-	/// Matches UDB's own <c>[</c>/<c>]</c> grid-size keys: doubles within
-	/// the 1..1024 bound, and turns off <see cref="DynamicGridSizeEnabled"/>
-	/// first, matching UDB's <c>DisableDynamicGridResize</c> - manual and
-	/// automatic sizing shouldn't fight each other. Shared by the keybind
-	/// and the grid toolbar's +/- buttons so both go through one policy.
+	/// The <c>[</c>/<c>]</c> grid-size keys: doubles within the 1..1024
+	/// bound, and turns off <see cref="DynamicGridSizeEnabled"/> first -
+	/// manual and automatic sizing shouldn't fight each other. Shared by
+	/// the keybind and the grid toolbar's +/- buttons so both go through
+	/// one policy.
 	/// </summary>
 	public void IncreaseGridSize()
 	{
@@ -64,7 +62,7 @@ public sealed class MapOverlayGrid
 		if (GridSize >= MinGridSize * 2) GridSize /= 2f;
 	}
 
-	/// <summary>Ported from UDB's <c>ClassicMode.MatchGridSizeToDisplayScale</c>, called on every zoom change.</summary>
+	/// <summary>Called on every zoom change.</summary>
 	public void ApplyDynamicGridSize()
 	{
 		var (min, max) = _camera.ViewportBounds();
@@ -74,14 +72,12 @@ public sealed class MapOverlayGrid
 	}
 
 	/// <summary>
-	/// Ported from UDB's <c>RenderBackgroundGrid</c>/<c>RenderGrid</c>:
-	/// the configured grid draws in the normal color, plus - whenever
+	/// The configured grid draws in the normal color, plus - whenever
 	/// that configured size is 64 or finer - a second tier always fixed
 	/// at exactly 64 units (Doom's standard alignment unit) in a distinct
 	/// color, so that reference stays visible however fine you've zoomed
-	/// the working grid. Not ported: UDB's separate "DynamicGridSize"
-	/// setting that auto-adjusts the persisted grid size itself as you
-	/// zoom - this only adapts what's drawn, never the configured/snap size.
+	/// the working grid. This only adapts what's drawn, never the
+	/// configured/snap size.
 	/// </summary>
 	public void Draw(CanvasItem target)
 	{
@@ -91,10 +87,8 @@ public sealed class MapOverlayGrid
 
 	/// <summary>
 	/// Doubles <paramref name="baseSize"/> until each cell is at least
-	/// <see cref="MinGridCellPixels"/> wide on screen, exactly like UDB's
-	/// own "increase rendered grid size if needed" fallback in
-	/// <c>RenderGrid</c> - otherwise a fine grid zoomed far out renders as
-	/// a dense, illegible mesh of lines.
+	/// <see cref="MinGridCellPixels"/> wide on screen - otherwise a fine
+	/// grid zoomed far out renders as a dense, illegible mesh of lines.
 	/// </summary>
 	private void DrawTier(CanvasItem target, float baseSize, Color color)
 	{

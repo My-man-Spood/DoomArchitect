@@ -25,8 +25,8 @@ public class GridSnapperTests
     public void Snap_ExactMidpoint_RoundsToEven()
     {
         // 32 / 64 = 0.5 and 96 / 64 = 1.5 are exact ties - .NET's default
-        // MathF.Round (and UDB's own unqualified Math.Round call) breaks
-        // ties towards the nearest even integer, not away from zero.
+        // MathF.Round breaks ties towards the nearest even integer, not
+        // away from zero.
         var result = GridSnapper.Snap(new Vector2(32, 96), 64);
 
         Assert.Equal(new Vector2(0, 128), result);

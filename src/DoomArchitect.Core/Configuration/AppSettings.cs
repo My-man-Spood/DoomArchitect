@@ -6,12 +6,10 @@ namespace DoomArchitect.Core.Configuration;
 /// DoomArchitect's own global, app-wide settings - not tied to any
 /// specific map/WAD (see <see cref="MapSettings"/> for that): a default
 /// resource list per game configuration (so a user only has to point at
-/// their IWAD once rather than for every single map of the same game -
-/// mirrors UDB's own real per-configuration default resources,
-/// <c>ConfigurationInfo.Resources</c>) and a user's own keybind overrides
-/// (see <see cref="KeyBindingOverrides"/>) - minus the settings this
-/// project doesn't have an equivalent concept for yet (no UI theme/plugin
-/// settings live here).
+/// their IWAD once rather than for every single map of the same game) and
+/// a user's own keybind overrides (see <see cref="KeyBindingOverrides"/>)
+/// - minus the settings this project doesn't have an equivalent concept
+/// for yet (no UI theme/plugin settings live here).
 /// </summary>
 public sealed class AppSettings
 {

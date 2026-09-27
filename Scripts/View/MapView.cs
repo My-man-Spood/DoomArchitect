@@ -59,7 +59,7 @@ public partial class MapView : Node3D
 
 	// "What am I looking at" 3D targeting - see MapRaycaster's own remarks
 	// for why this is hand-rolled Core geometry rather than Godot physics.
-	private const double PickIntervalSeconds = 0.08; // matches UDB's own 80ms PICK_INTERVAL
+	private const double PickIntervalSeconds = 0.08; // 80ms pick interval
 	private readonly IMapSpatialIndex _spatialIndex = new UniformGridSpatialIndex();
 	private IMapTargetFinder _targetFinder;
 	private TargetHighlight _targetHighlight;
@@ -69,13 +69,11 @@ public partial class MapView : Node3D
 
 	/// <summary>
 	/// 3D visual-mode selection - genuinely separate from the classic 2D
-	/// selection (<c>Sector.IsSelected</c>/<c>Linedef.IsSelected</c>),
-	/// matching UDB's own real model (its visual-mode wrapper objects
-	/// carry their own local <c>selected</c> flag, distinct from
-	/// <c>MapElement.Selected</c>). Bridged with the classic selection
-	/// only at the moment of entering/leaving 3D mode (see the
-	/// <c>toggle_2d_3d</c> handling in <see cref="_UnhandledInput"/>), not
-	/// shared live the way an earlier version of this feature did.
+	/// selection (<c>Sector.IsSelected</c>/<c>Linedef.IsSelected</c>).
+	/// Bridged with the classic selection only at the moment of
+	/// entering/leaving 3D mode (see the <c>toggle_2d_3d</c> handling in
+	/// <see cref="_UnhandledInput"/>), not shared live the way an earlier
+	/// version of this feature did.
 	/// </summary>
 	private readonly HashSet<Sector> _selectedSectors3D = new();
 	private readonly HashSet<Linedef> _selectedLinedefs3D = new();
@@ -246,7 +244,7 @@ public partial class MapView : Node3D
 	/// Re-picks whatever the perspective camera is currently looking at,
 	/// throttled to <see cref="PickIntervalSeconds"/> rather than every
 	/// frame (see MapRaycaster/UniformGridSpatialIndex's own remarks on
-	/// why - directly adopted from UDB's own proven throttle). Rebuilds
+	/// why). Rebuilds
 	/// the highlight every tick regardless of whether the hover target's
 	/// identity changed, since a selection-only change (from a click, with
 	/// no hover-target change) needs to be reflected too - still cheap at
@@ -271,18 +269,13 @@ public partial class MapView : Node3D
 	/// granularity - clicking any part of a wall selects its whole
 	/// Linedef, any part of a floor/ceiling selects its whole Sector, a
 	/// Thing selects itself. A plain click always toggles (adds if
-	/// unselected, removes if selected) - UDB's own real visual-mode click
-	/// (<c>BaseVisualGeometrySector.OnSelectEnd</c>/
-	/// <c>BaseVisualGeometrySidedef.OnSelectEnd</c>/
-	/// <c>BaseVisualThing.OnSelectEnd</c>) does the identical toggle, with
-	/// no modifier needed. Touches only the local 3D selection
+	/// unselected, removes if selected), with no modifier needed. Touches
+	/// only the local 3D selection
 	/// (<see cref="_selectedSectors3D"/>/<see cref="_selectedLinedefs3D"/>/
 	/// <see cref="_selectedThings3D"/>), not the classic 2D selection -
-	/// they're bridged only on entering/leaving 3D mode, matching UDB's
-	/// real separate-selection model. Unlike 2D, there's no "current mode"
-	/// restricting which type can be selected - clicking a floor then a
-	/// wall then a Thing naturally builds a mixed selection, matching
-	/// UDB's real visual-mode behavior.
+	/// they're bridged only on entering/leaving 3D mode. Unlike 2D, there's
+	/// no "current mode" restricting which type can be selected - clicking
+	/// a floor then a wall then a Thing naturally builds a mixed selection.
 	/// </summary>
 	private void HandleThreeDSelectClick()
 	{
@@ -312,15 +305,10 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// UDB's own real visual-mode right-click ("visualedit", bound to the
-	/// right mouse button by default, exactly like classic mode's own
-	/// "classicedit") - opens the properties dialog for whichever element
-	/// *type* is currently targeted (<c>BaseVisualGeometrySector.OnEditEnd</c>'s
-	/// own real <c>ShowEditSectors</c> for a floor/ceiling,
-	/// <c>BaseVisualGeometrySidedef.OnEditEnd</c>'s own real
-	/// <c>ShowEditLinedefs</c> for a wall), for the *whole* current 3D-mode
-	/// selection of that type if any - matching UDB's real
-	/// <c>GetSelectedObjects</c> fallback exactly: only when nothing of
+	/// Right-click opens the properties dialog for whichever element
+	/// *type* is currently targeted - a floor/ceiling opens Sector
+	/// properties, a wall opens Linedef properties - acting on the *whole*
+	/// current 3D-mode selection of that type if any; only when nothing of
 	/// that type is selected does it fall back to acting on just the
 	/// targeted element. Which dialog opens is decided purely by what's
 	/// under the crosshair, not by which selection happens to be
@@ -361,32 +349,25 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// UDB's own real visual-mode plain-mouse-wheel default binding
-	/// (<c>raisesector8</c>/<c>lowersector8</c>, verified directly against
-	/// its default keybind config - the numeric action-key values there
-	/// decode into "plain wheel" for the unmodified 8-unit raise/lower,
-	/// "wheel+Shift" for a 1-unit fine adjustment, "wheel+Ctrl" for
-	/// brightness instead, the latter two not ported here since the user's
-	/// own request was specifically the plain-wheel case): raises or
-	/// lowers whichever *specific* surface - floor or ceiling, exactly
-	/// matching <see cref="TargetSurfaceKind"/> - is currently targeted,
-	/// by <paramref name="amount"/> map units, undoably. A wall target is
-	/// deliberately left untouched, matching the user's own explicit
-	/// scope ("if we're pointing at a ceiling or a floor").
+	/// Plain mouse-wheel raises or lowers whichever *specific* surface -
+	/// floor or ceiling, exactly matching <see cref="TargetSurfaceKind"/> -
+	/// is currently targeted, by <paramref name="amount"/> map units,
+	/// undoably. Only the unmodified 8-unit raise/lower is implemented; a
+	/// Shift-modified fine adjustment and a Ctrl-modified brightness
+	/// variant are not ported. A wall target is deliberately left
+	/// untouched.
 	///
 	/// Unlike the edit-click above, this deliberately does *not* extend to
 	/// the whole 3D-mode selection - <see cref="_selectedSectors3D"/> only
 	/// ever tracks *which sectors* are selected, not separately *which
-	/// surface* of each (UDB's own real per-surface
-	/// <c>BaseVisualGeometrySector</c> objects do track that distinction,
-	/// letting a multi-select scroll raise several floors *and* ceilings
-	/// together correctly) - always acting on just the live target avoids
-	/// that ambiguity entirely rather than guessing. Each wheel notch is
-	/// also its own separate undo step, unlike UDB's own real
-	/// <c>UndoGroup</c>-based coalescing of a rapid scroll gesture into
-	/// one - this project's own <see cref="UndoStack"/> has no such
-	/// merging mechanism yet, a deliberately small, flagged simplification
-	/// rather than a new general-purpose one built just for this.
+	/// surface* of each, unlike a model where per-surface objects would
+	/// let a multi-select scroll raise several floors *and* ceilings
+	/// together - always acting on just the live target avoids that
+	/// ambiguity entirely rather than guessing. Each wheel notch is also
+	/// its own separate undo step - unlike a coalesced rapid-scroll
+	/// gesture, <see cref="UndoStack"/> has no merging mechanism yet, a
+	/// deliberately small, flagged simplification rather than a new
+	/// general-purpose one built just for this.
 	/// </summary>
 	private void AdjustTargetHeight(double amount)
 	{
@@ -402,30 +383,23 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// UDB's own real texture-offset-nudge keybinds
-	/// (<c>movetextureleft</c>/<c>right</c>/<c>up</c>/<c>down</c>, plain/
-	/// <c>*8</c>/<c>*gs</c> variants, verified against its own default
-	/// keybind config): plain arrow = 1 pixel, Alt+arrow = 8 pixels,
-	/// Ctrl+arrow = the current grid size (<see cref="MapOverlay.GridSize"/> -
-	/// not a fixed step, matches UDB's own real behavior for the step sizes
-	/// themselves). The 8-pixel modifier is Alt here, not UDB's own real
-	/// Shift - Shift is this project's own pre-existing
-	/// <c>FreeFlyCamera</c> fly-down control (polled every frame,
-	/// independent of whatever else is happening with the key), and a real
-	/// collision surfaced the same day this landed: holding Shift+Arrow to
-	/// nudge also silently drifted the camera downward. Reassigning
-	/// fly-down to a fresh key was tried first and reverted at the user's
-	/// own request - Shift stays fly-down, unchanged from before this
-	/// feature existed, and the nudge modifier moved instead. Always
-	/// writes the targeted wall's own *per-part* UDMF offset field
+	/// Texture-offset nudge keybinds: plain arrow = 1 pixel, Alt+arrow = 8
+	/// pixels, Ctrl+arrow = the current grid size
+	/// (<see cref="MapOverlay.GridSize"/> - not a fixed step). The 8-pixel
+	/// modifier is Alt here, not Shift, because Shift is this project's
+	/// pre-existing <c>FreeFlyCamera</c> fly-down control (polled every
+	/// frame, independent of whatever else is happening with the key), and
+	/// a real collision surfaced the same day this landed: holding
+	/// Shift+Arrow to nudge also silently drifted the camera downward.
+	/// Reassigning fly-down to a fresh key was tried first and reverted at
+	/// the user's own request - Shift stays fly-down, unchanged from
+	/// before this feature existed, and the nudge modifier moved instead.
+	/// Always writes the targeted wall's own *per-part* UDMF offset field
 	/// (<c>offsetx_&lt;part&gt;</c>/<c>offsety_&lt;part&gt;</c>, resolved via
 	/// <see cref="WallSegment.PartKind"/> - see <see cref="LinedefWallBuilder.PartSuffix"/>'s
 	/// own remarks), never the shared <see cref="Sidedef.OffsetX"/>/
-	/// <see cref="Sidedef.OffsetY"/> - matches every one of UDB's own real
-	/// <c>VisualUpper</c>/<c>VisualLower</c>/<c>VisualMiddleSingle</c>/
-	/// <c>VisualMiddleDouble.MoveTextureOffset</c> overrides, which all do
-	/// the identical thing. Same "act on just the live target, never the
-	/// whole selection" scope as <see cref="AdjustTargetHeight"/> above,
+	/// <see cref="Sidedef.OffsetY"/>. Same "act on just the live target,
+	/// never the whole selection" scope as <see cref="AdjustTargetHeight"/> above,
 	/// for the identical reason (this project's selection model tracks
 	/// *which linedefs* are selected, not separately *which wall part* of
 	/// each).
@@ -467,9 +441,9 @@ public partial class MapView : Node3D
 		// the same way relative to the camera as whatever wall it was
 		// tuned against, and wrong for others (a wall in a different room,
 		// or the same wall viewed from the opposite end of it). Flip the
-		// base UDB-literal sign (`Right` = <c>+delta</c> in the wall's own
-		// direction) whenever that direction actually points toward the
-		// camera's own screen-left instead of screen-right.
+		// base sign (`Right` = <c>+delta</c> in the wall's own direction)
+		// whenever that direction actually points toward the camera's own
+		// screen-left instead of screen-right.
 		if (dx != 0)
 		{
 			var wallDirection = segment.End.Position - segment.Start.Position;
@@ -506,12 +480,11 @@ public partial class MapView : Node3D
 	}
 
 	/// <summary>
-	/// UDB's own real texture auto-align (<c>visualautoalign</c>/<c>x</c>/
-	/// <c>y</c>, see <see cref="TextureAutoAligner"/>'s own remarks for the
-	/// real algorithm this ports) - starts from the currently targeted wall
-	/// part and flood-fills outward, so this deliberately reads
-	/// <see cref="_currentTarget"/> fresh rather than the 3D-mode selection,
-	/// same reasoning as <see cref="HandleTextureNudge"/> above.
+	/// Texture auto-align starts from the currently targeted wall part and
+	/// flood-fills outward (see <see cref="TextureAutoAligner"/> for the
+	/// algorithm) - this deliberately reads <see cref="_currentTarget"/>
+	/// fresh rather than the 3D-mode selection, same reasoning as
+	/// <see cref="HandleTextureNudge"/> above.
 	/// </summary>
 	private void HandleTextureAutoAlign(bool alignX, bool alignY)
 	{
@@ -977,9 +950,7 @@ public partial class MapView : Node3D
 	/// crosses into a different sector.
 	///
 	/// Also clamps against the *opposite* surface using the type's own
-	/// real collision height (<paramref name="info"/> - matches UDB's own
-	/// real <c>BaseVisualThing</c> Z-position resolution exactly, verified
-	/// directly against source): a floor-standing Thing whose own
+	/// collision height (<paramref name="info"/>): a floor-standing Thing whose own
 	/// mapper-set <see cref="Thing.Height"/> offset (or a tall type in a
 	/// low room) would push it above <c>ceiling - info.Height</c> gets
 	/// pulled back down to it instead (never below its own floor, for a
@@ -989,11 +960,11 @@ public partial class MapView : Node3D
 	/// partially or fully inside solid floor/ceiling geometry, both
 	/// looking wrong *and* becoming unhoverable in 3D (its own pick box,
 	/// buried behind the very floor/ceiling surface a ray would hit
-	/// first, can never win against it). UDB's own <c>AbsoluteZ</c>/
-	/// <c>nointeraction</c>/special-DoomEdNum-9500-9501 branches aren't
-	/// modeled - no per-type <c>AbsoluteZ</c> flag or special-actor
-	/// concept exists here yet, so every Thing always gets the same real
-	/// clamped floor/ceiling-relative treatment.
+	/// first, can never win against it). Per-type <c>AbsoluteZ</c>/
+	/// <c>nointeraction</c>/special-DoomEdNum branches aren't modeled - no
+	/// per-type <c>AbsoluteZ</c> flag or special-actor concept exists here
+	/// yet, so every Thing always gets the same clamped
+	/// floor/ceiling-relative treatment.
 	/// </summary>
 	private double ResolveThingWorldZ(Thing thing, ThingTypeInfo info)
 	{
@@ -1139,17 +1110,14 @@ public partial class MapView : Node3D
 			return;
 		}
 
-		// Texture-offset nudging (UDB's own real movetextureleft/right/up/down*
-		// actions all set `repeat = true` - held-down-arrow-keeps-nudging is
-		// the real behavior, not a single-shot press) - handled here, before
-		// the `Echo: false` filter every other keyboard action goes through
-		// below, same reason the mouse-wheel height adjustment above isn't
-		// gated by it either.
+		// Texture-offset nudging needs held-down-arrow-keeps-nudging behavior,
+		// not a single-shot press - handled here, before the `Echo: false`
+		// filter every other keyboard action goes through below, same reason
+		// the mouse-wheel height adjustment above isn't gated by it either.
 		if (_in3D && @event is InputEventKey { Pressed: true } nudgeKey)
 		{
 			// allowEcho: true - these are the one place in this method that
-			// deliberately reads a held-down key repeatedly (UDB's own real
-			// `repeat = true` on movetextureleft/right/up/down*), unlike
+			// deliberately reads a held-down key repeatedly, unlike
 			// IsActionPressed's own default of rejecting OS key-repeat.
 			NudgeDirection? direction = nudgeKey switch
 			{
@@ -1186,11 +1154,9 @@ public partial class MapView : Node3D
 
 		if (_in3D && key.IsActionPressed("texture_auto_align"))
 		{
-			// UDB's own real default keybinds, verified against its
-			// Actions.cfg/UDBuilder.default.cfg: plain A = X only,
-			// Shift+A = Y only, Ctrl+A = both (the one most mappers
-			// actually reach for) - none of the three are `repeat`d,
-			// unlike the arrow-key nudges above.
+			// Plain A = X only, Shift+A = Y only, Ctrl+A = both (the one
+			// most mappers actually reach for) - none of the three are
+			// `repeat`d, unlike the arrow-key nudges above.
 			var axisSwap = Input.IsActionPressed("texture_auto_align_axis_swap_modifier");
 			var both = Input.IsActionPressed("texture_auto_align_both_modifier");
 			HandleTextureAutoAlign(alignX: !axisSwap, alignY: axisSwap || both);
@@ -1236,8 +1202,7 @@ public partial class MapView : Node3D
 			if (_in3D)
 			{
 				// Entering 3D - seed the local 3D selection from
-				// whatever's currently selected in 2D (UDB's real
-				// sync-on-entry bridge between the two selections).
+				// whatever's currently selected in 2D.
 				_selectedSectors3D.Clear();
 				_selectedSectors3D.UnionWith(_map.GetSelectedSectors());
 				_selectedLinedefs3D.Clear();

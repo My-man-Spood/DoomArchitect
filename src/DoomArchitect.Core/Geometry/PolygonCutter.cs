@@ -3,16 +3,14 @@ using System.Numerics;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// Ported from Ultimate Doom Builder's <c>Triangulation.DoCutting</c>/
-/// <c>MergeInnerPolys</c>/<c>SplitOuterWithInner</c>: walks a
-/// <see cref="PolygonNesting"/> tree and bridges each hole into its
-/// enclosing outer polygon via a rightward ray cast, producing a flat
+/// Walks a <see cref="PolygonNesting"/> tree and bridges each hole into
+/// its enclosing outer polygon via a rightward ray cast, producing a flat
 /// list of hole-free polygons ready for ear-clipping. A hole's own
 /// children (an island floating inside it) are promoted back to
 /// independent top-level polygons rather than merged - they get their own
-/// pass. Includes UDB's tie-break rules for a ray that grazes a perfectly
-/// horizontal edge, or lands where a previous cut already sits on the
-/// same horizontal.
+/// pass. Includes tie-break rules (matching UDB) for a ray that grazes a
+/// perfectly horizontal edge, or lands where a previous cut already sits
+/// on the same horizontal.
 /// </summary>
 public static class PolygonCutter
 {

@@ -17,9 +17,8 @@ namespace DoomArchitect.Core.Textures;
 ///
 /// Callers never pass the map-format sentinel <c>"-"</c> ("no texture")
 /// into <see cref="GetWallTexture"/>/<see cref="GetFlatTexture"/> - that
-/// sentinel is a map-format-layer concept only (UDB's own data loader has
-/// zero special-casing for it), so skipping the lookup entirely for "-" is
-/// the caller's job.
+/// sentinel is a map-format-layer concept only, so skipping the lookup
+/// entirely for "-" is the caller's job.
 /// </summary>
 public sealed class TextureSet
 {
@@ -105,13 +104,12 @@ public sealed class TextureSet
     /// <summary>
     /// Checks the classic <c>TEXTURE1</c>/<c>TEXTURE2</c>-composed
     /// definitions first, then falls back to a plain image sitting in a
-    /// PK3's <c>textures/</c> folder - real GZDoom/UDB behavior verified
-    /// against <c>PK3StructuredReader.LoadTextures</c>: a folder image is
-    /// used directly as the complete picture (never patch-composited) and
-    /// only fills in a name nothing else already defines ("Textures
-    /// defined in TEXTURES override ones in 'textures' folder" - the same
-    /// first-write-wins precedence applies to <c>TEXTURE1</c>/<c>TEXTURE2</c>,
-    /// which this project resolves before ever consulting the folder).
+    /// PK3's <c>textures/</c> folder: a folder image is used directly as
+    /// the complete picture (never patch-composited) and only fills in a
+    /// name nothing else already defines ("Textures defined in TEXTURES
+    /// override ones in 'textures' folder" - the same first-write-wins
+    /// precedence applies to <c>TEXTURE1</c>/<c>TEXTURE2</c>, which this
+    /// project resolves before ever consulting the folder).
     ///
     /// Only after both of those miss does this fall back to resolving
     /// <paramref name="name"/> as a *flat* instead (reusing
@@ -177,7 +175,7 @@ public sealed class TextureSet
     /// <c>TEXTURE1</c>/<c>TEXTURE2</c> names only if <paramref name="resource"/>
     /// is <see cref="WallTextureSource"/> (the one resource that actually
     /// won them - see its own remarks for why that's winner-take-all,
-    /// never merged, matching UDB's own real behavior).
+    /// never merged).
     /// </summary>
     public IReadOnlyList<string> GetWallTextureNames(IResourceContainer resource) =>
         (resource.Equals(WallTextureSource) ? (IEnumerable<string>)_wallDefinitions.Keys : Array.Empty<string>())
@@ -189,8 +187,7 @@ public sealed class TextureSet
     /// today - these are single indivisible lumps, so layering several
     /// resources never merges their texture definitions together the way
     /// e.g. flats do; the highest-priority resource that defines either
-    /// lump wins the whole thing, matching UDB's own real
-    /// <c>DataManager</c> precedence. <c>null</c> if neither is defined
+    /// lump wins the whole thing. <c>null</c> if neither is defined
     /// anywhere in this set.
     /// </summary>
     public IResourceContainer? WallTextureSource => _resources.FindLumpSource("TEXTURE1") ?? _resources.FindLumpSource("TEXTURE2");
@@ -198,11 +195,7 @@ public sealed class TextureSet
     /// <summary>
     /// Sniffs for a modern image format first (e.g. a PNG flat, common in
     /// a GZDoom-oriented PK3/resource pack), only falling back to the raw
-    /// headerless classic flat format if that finds nothing - real
-    /// GZDoom/UDB treat flats and wall textures symmetrically for decode-
-    /// format detection (both go through the same signature-sniff-first
-    /// dispatch, <c>ImageDataFormat.TryLoadImage</c>, in UDB), so this
-    /// project doesn't special-case one over the other either. Order
+    /// headerless classic flat format if that finds nothing. Order
     /// matters here in a way it doesn't for
     /// <see cref="PatchImageResolver.TryResolvePatch"/>'s own two
     /// candidates: unlike the classic *patch* format (which has enough
@@ -213,7 +206,7 @@ public sealed class TextureSet
     /// bytes with no header or signature to validate against at all -
     /// <see cref="DoomFlatReader.TryRead"/> "successfully" reads *any*
     /// sufficiently large lump, including a PNG-encoded one, as pure
-    /// noise. A real, previously-missed gap here (this method used to try
+    /// noise. A previously-missed gap here (this method used to try
     /// <see cref="DoomFlatReader"/> first, unlike every other patch/image
     /// lookup in this class): a PNG-format flat decoded as garbage instead
     /// of routing to the real image decoder.
@@ -298,14 +291,9 @@ public sealed class TextureSet
     }
 
     /// <summary>
-    /// Resolves the real Doom sprite-rotation naming convention (a public,
-    /// objective engine fact - not UDB's own creative content, the same
-    /// kind of safe-to-implement-directly fact as a UDMF field name) into an
+    /// Resolves the real Doom sprite-rotation naming convention into an
     /// 8-entry table, one per viewing angle (index 0 = rotation digit 1,
-    /// index 7 = rotation digit 8 - matching UDB's own real
-    /// <c>ThingTypeInfo.SpriteFrame</c> array indexing exactly, verified
-    /// directly against its own <c>SetupSpriteFrame</c>/render-time
-    /// <c>info.SpriteFrame[spriteangle]</c> lookup). <paramref name="representativeSpriteName"/>
+    /// index 7 = rotation digit 8). <paramref name="representativeSpriteName"/>
     /// is a game-configuration thing-type's own stored <c>sprite</c> value
     /// (e.g. <c>"TROOA2A8"</c>) - only its first 5 characters (actor code +
     /// frame letter, e.g. <c>"TROOA"</c>) matter here; the specific

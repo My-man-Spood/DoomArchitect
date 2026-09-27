@@ -12,35 +12,30 @@ using MapVector2 = System.Numerics.Vector2;
 /// select/marquee/drag input (a Thing drags itself, like Vertex, via
 /// <c>MapData.MoveThing</c>/<see cref="MoveThingCommand"/> rather than the
 /// vertex-based commands every other mode uses), and drawing (the largest
-/// single piece of this project's whole 2D-view code, ported from UDB's
-/// real <c>Renderer2D.RenderThingsBatch</c> - see <see cref="Draw"/>'s own
-/// remarks).
+/// single piece of this project's whole 2D-view code - see
+/// <see cref="Draw"/>'s own remarks).
 ///
-/// Right-clicking empty space is this mode's own distinct real UDB
-/// action - <c>ThingsMode.OnEditBegin</c>'s own "nothing highlighted"
-/// branch inserts a new Thing right there (<c>InsertThing</c>), not
-/// "start Draw mode" the way Vertices/Linedefs/Sectors' own identical-
-/// looking empty right-click does (their own real <c>AutoDrawOnEdit</c>
-/// branch) - wired via the shared engine's own <c>onEmptyRightClick</c>
-/// slot regardless, since from this handler's own point of view it's
-/// still just "a side effect with no return value the generic engine
-/// itself needs to react to," the same shape as theirs. One deliberate
-/// simplification versus UDB's own real behavior, flagged rather than
-/// silently dropped: UDB's own insert continues straight into dragging
-/// the newly created Thing within the very same mouse gesture
-/// (<c>editthings = new List&lt;Thing&gt; { t }</c>, picked up by its own
-/// <c>OnDragStart</c>) - this project's own shared
-/// <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/> has no
-/// hook for "the thing this same press just created is now what should
-/// drag," so a newly inserted Thing here is created and selected, but a
-/// separate right-click-drag is needed afterward to reposition it.
+/// Right-clicking empty space in Things mode inserts a new Thing right
+/// there, not "start Draw mode" the way Vertices/Linedefs/Sectors' own
+/// identical-looking empty right-click does - wired via the shared
+/// engine's own <c>onEmptyRightClick</c> slot regardless, since from this
+/// handler's own point of view it's still just "a side effect with no
+/// return value the generic engine itself needs to react to," the same
+/// shape as theirs. One deliberate simplification, flagged rather than
+/// silently dropped: continuing straight into dragging the newly inserted
+/// Thing within the same mouse gesture would need a hook this project's
+/// shared <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>
+/// doesn't have ("the thing this same press just created is now what
+/// should drag") - so a newly inserted Thing here is created and
+/// selected, but a separate right-click-drag is needed afterward to
+/// reposition it.
 /// </summary>
 public sealed class ThingOverlayHandler
 {
-	/// <summary>Inset between the square's own edge and the real sprite drawn inside it - matches UDB's own real small fixed inset (<c>THING_SPRITE_SHRINK</c>), not zero, so the sprite never visually merges into the square's own border.</summary>
+	/// <summary>Inset between the square's own edge and the real sprite drawn inside it - kept small but not zero, so the sprite never visually merges into the square's own border.</summary>
 	private const float SpriteInsetPixels = 2f;
 
-	/// <summary>The Thing square's own corner radius - a DoomArchitect-specific softening UDB's own real square icon doesn't have, kept small (and scaled down further for a genuinely tiny square via the <c>screenRadius * 0.3f</c> cap at its own call site) so it still reads as "a square," not a rounded pill.</summary>
+	/// <summary>The Thing square's own corner radius - a small softening this project adds, kept small (and scaled down further for a genuinely tiny square via the <c>screenRadius * 0.3f</c> cap at its own call site) so it still reads as "a square," not a rounded pill.</summary>
 	private const float SquareCornerRadiusPixels = 3f;
 
 	/// <summary>The shaft's own visible length, as a multiple of the square's own half-size - a fixed reach beyond wherever <see cref="DrawArrow"/> determines the square's own true edge to be along the facing direction, so the shaft reads the same length whether the thing faces a side or a corner.</summary>
@@ -116,36 +111,28 @@ public sealed class ThingOverlayHandler
 	}
 
 	/// <summary>
-	/// Ported from UDB's own real <c>Renderer2D.RenderThingsBatch</c>
-	/// (verified directly, not guessed): a square (not circle - "things
-	/// are square in Doom"), sized to the type's own real radius; the
-	/// actual decoded sprite drawn on top at its own native colors and
-	/// aspect ratio (never rotated to <see cref="Thing.Angle"/> - a Doom
-	/// sprite's own facing is baked into *which rotation frame* is shown,
-	/// resolved live per-thing via
+	/// A square (not circle - "things are square in Doom"), sized to the
+	/// type's own real radius; the actual decoded sprite drawn on top at
+	/// its own native colors and aspect ratio (never rotated to
+	/// <see cref="Thing.Angle"/> - a Doom sprite's own facing is baked into
+	/// *which rotation frame* is shown, resolved live per-thing via
 	/// <see cref="SpriteIconCache.GetOrDecodeRotationFrame"/>/
 	/// <see cref="Core.Textures.TextureSet.ResolveSpriteRotations"/>, not
 	/// by rotating a fixed image); a small separate arrow only for a type
 	/// that actually has a meaningful facing
 	/// (<see cref="ThingTypeInfo.ShowsDirection"/>), rotated to
 	/// <see cref="Thing.Angle"/> since it's the one element that genuinely
-	/// needs to point somewhere. Unlike UDB's own bundled
-	/// <c>ThingTexture2D.png</c> atlas art, the square here is a plain
-	/// flat fill - this project's own original choice of exactly how to
-	/// draw "a square", not a claim about matching UDB's own bundled
-	/// pixels.
+	/// needs to point somewhere. The square itself is a plain flat fill
+	/// rather than atlas art - this project's own original choice of
+	/// exactly how to draw "a square".
 	///
 	/// The hovered thing is drawn in its own separate pass, after every
 	/// other thing, so it's always on top regardless of where it happens
 	/// to sit in <see cref="MapData.Things"/>'s own list order (which
 	/// otherwise decides paint order outright - later in the list draws
-	/// over earlier, no other sorting at all) - matches UDB's own real
-	/// <c>Renderer2D.RenderThingsBatch</c>, confirmed directly: its own
-	/// main pass explicitly skips <c>t.Highlighted</c>
-	/// (<c>if(!fixedcolor &amp;&amp; t.Highlighted) continue;</c>) and
-	/// renders it separately afterward for the exact same reason - two
-	/// overlapping things at similar screen positions should never let
-	/// list order hide the one actually being pointed at.
+	/// over earlier, no other sorting at all) - two overlapping things at
+	/// similar screen positions should never let list order hide the one
+	/// actually being pointed at.
 	/// </summary>
 	public void Draw(CanvasItem target)
 	{
@@ -191,17 +178,15 @@ public sealed class ThingOverlayHandler
 	}
 
 	/// <summary>
-	/// UDB's own real per-angle rotation-frame selection
-	/// (<c>General.ClampAngle(-t.AngleDoom + 270) / 45</c>, verified
-	/// directly against <c>Renderer2D.RenderThingsBatch</c>) - two things
-	/// of the identical type facing different directions genuinely show
-	/// different decoded sprite frames, not the same image rotated. Drawn
-	/// at its own real aspect ratio (never stretched to fill the square)
-	/// and native colors (never tinted by the category color, matching
-	/// UDB's own real behavior) - a missing/undecoded sprite simply
-	/// leaves the plain colored square with no overlay, same "still
-	/// renders something, just less detail" fallback this project's own
-	/// texture previews already use elsewhere.
+	/// Per-angle rotation-frame selection (angle index =
+	/// <c>ClampAngle(-t.AngleDoom + 270) / 45</c>) - two things of the
+	/// identical type facing different directions genuinely show different
+	/// decoded sprite frames, not the same image rotated. Drawn at its own
+	/// real aspect ratio (never stretched to fill the square) and native
+	/// colors (never tinted by the category color) - a missing/undecoded
+	/// sprite simply leaves the plain colored square with no overlay, same
+	/// "still renders something, just less detail" fallback this project's
+	/// own texture previews already use elsewhere.
 	/// </summary>
 	private void DrawSprite(CanvasItem target, Thing thing, ThingTypeInfo info, Rect2 square, float alpha)
 	{
@@ -226,16 +211,13 @@ public sealed class ThingOverlayHandler
 	/// <summary>
 	/// A thin "stick" arrow (a shaft plus a two-line V-shaped head, no fill
 	/// and no closed outline shape at all) pointing in
-	/// <see cref="Thing.Angle"/>'s own facing direction - UDB's own real
-	/// arrow is a separate element drawn in addition to (not instead of)
-	/// the rotation-aware sprite, confirmed directly against
-	/// <c>Renderer2D.CreateThingArrowVerts</c>. The stick shape itself,
-	/// and its exact geometry, are DoomArchitect-specific choices, not
-	/// UDB's own real ones: a filled triangle sat on top of the sprite and
-	/// hid whatever was underneath instead of just pointing at it, and a
-	/// shaft starting at the thing's own center ran back across the
-	/// sprite too - the shaft now starts just past the square's own true
-	/// edge along the facing direction (see this method's own
+	/// <see cref="Thing.Angle"/>'s own facing direction, drawn as a
+	/// separate element in addition to (not instead of) the rotation-aware
+	/// sprite. An earlier version used a filled triangle that sat on top
+	/// of the sprite and hid whatever was underneath, with a shaft that
+	/// started at the thing's own center and ran back across the sprite
+	/// too - the shaft now starts just past the square's own true edge
+	/// along the facing direction (see this method's own
 	/// <c>edgeDistance</c>/<see cref="ArrowGapMultiplier"/>) and reaches
 	/// only a short, fixed way further out regardless of that direction
 	/// (<see cref="ArrowShaftLengthMultiplier"/>), with wider wings
@@ -243,19 +225,15 @@ public sealed class ThingOverlayHandler
 	/// they stay readable at this small a size.
 	///
 	/// Colored white-on-black (a wider black pass first, a thinner white
-	/// pass on top of the exact same lines) rather than one flat color -
-	/// verified directly against UDB's own real
-	/// <c>CreateThingArrowVerts</c>, whose own vertex color is packed
-	/// opaque white (<c>verts[offset].c = -1</c>), drawn from an icon
-	/// atlas whose own art already bakes in a black outline for contrast
-	/// against any background; reproduced here as an actual two-pass
-	/// outlined stroke instead, since this project draws the arrow as
-	/// plain geometry rather than a textured atlas sprite. Plain white
-	/// alone (or plain black alone, tried first) reads poorly against
-	/// whichever half of the map view happens to share that same tone -
-	/// the outline keeps it visible against both. Never the category/
-	/// hover/selection tint the square uses - it only ever needs to read
-	/// as "a facing indicator," not carry any of that state itself.
+	/// pass on top of the exact same lines) rather than one flat color,
+	/// drawn as an actual two-pass outlined stroke since this project
+	/// draws the arrow as plain geometry rather than a textured atlas
+	/// sprite with a baked-in outline. Plain white alone (or plain black
+	/// alone, tried first) reads poorly against whichever half of the map
+	/// view happens to share that same tone - the outline keeps it visible
+	/// against both. Never the category/hover/selection tint the square
+	/// uses - it only ever needs to read as "a facing indicator," not
+	/// carry any of that state itself.
 	/// </summary>
 	private void DrawArrow(CanvasItem target, Thing thing, Vector2 center, float screenRadius, float alpha)
 	{

@@ -5,12 +5,10 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// Ported from UDB's real <c>Tools.FindClosestPath</c>/<c>FindPotentialSectorAt</c>/
-/// <c>FindOuterLines</c>/<c>FindInnerLines</c> - walks a closed boundary of
-/// <see cref="LinedefSide"/>s starting from one edge/side, over the map's
-/// raw vertex/linedef topology (every linedef touching each vertex, old
-/// and newly-drawn alike - no special-casing, exactly matching UDB's own
-/// uniform walk). This is genuinely new geometry work, distinct from
+/// Walks a closed boundary of <see cref="LinedefSide"/>s starting from
+/// one edge/side, over the map's raw vertex/linedef topology (every
+/// linedef touching each vertex, old and newly-drawn alike - no
+/// special-casing). This is genuinely new geometry work, distinct from
 /// <see cref="SectorTracer"/>: that class only ever walks a single
 /// already-built <see cref="Sector"/>'s own already-assigned sidedefs;
 /// this one discovers a *candidate* boundary before any sidedef/sector
@@ -19,19 +17,14 @@ namespace DoomArchitect.Core.Geometry;
 ///
 /// The outer/hole validation reuses this project's own already-built,
 /// already-tested <see cref="Loop"/> (point-in-polygon containment) and
-/// <see cref="PolygonNesting"/> (recursive nesting) rather than porting a
-/// second, parallel polygon class the way UDB's own separate
-/// <c>EarClipPolygon</c> exists - both are constructible here since this
-/// lives in the same <c>Core.Geometry</c> namespace/assembly
-/// (<see cref="Loop"/>'s constructor is <c>internal</c>, not
-/// <c>private</c>).
+/// <see cref="PolygonNesting"/> (recursive nesting) rather than a
+/// second, parallel polygon class.
 ///
 /// <see cref="FindOuterLines"/> retries from a different starting edge
 /// (found via a rightward ray-cast from the wrongly-traced loop's own
 /// right-most vertex) when its first attempted trace turns out to be an
-/// inner loop rather than the true outer boundary - UDB's own real
-/// retry, ported directly rather than left as the "just fail" gap this
-/// class used to have (see its own remarks for the full algorithm).
+/// inner loop rather than the true outer boundary, rather than simply
+/// failing (see its own remarks for the full algorithm).
 /// </summary>
 public static class BoundaryTracer
 {
@@ -43,10 +36,10 @@ public static class BoundaryTracer
     /// The full boundary a new sector (or an existing one being joined)
     /// would have on <paramref name="front"/>'s side of
     /// <paramref name="startLinedef"/> - the outer loop plus every hole
-    /// nested inside it, as one flat list (matching UDB's own real
-    /// <c>alllines</c> - only this flat list survives past the trace/
-    /// validation step, never the loop/tree structure used to find it).
-    /// <c>null</c> if no valid closed boundary could be found.
+    /// nested inside it, as one flat list (only this flat list survives
+    /// past the trace/validation step, never the loop/tree structure
+    /// used to find it). <c>null</c> if no valid closed boundary could
+    /// be found.
     /// </summary>
     public static IReadOnlyList<LinedefSide>? FindPotentialSectorAt(MapData map, Linedef startLinedef, bool front)
     {
@@ -60,47 +53,45 @@ public static class BoundaryTracer
     }
 
     /// <summary>
-    /// UDB's own real two-endpoint <c>Tools.FindClosestPath</c> - walks
-    /// from <paramref name="startLinedef"/>'s own <paramref name="startFront"/>
-    /// side until it reaches <paramref name="endLinedef"/>'s own
-    /// <paramref name="endFront"/> side, over the map's raw vertex/linedef
-    /// topology (the same walk <see cref="FindPotentialSectorAt"/>'s own
-    /// self-closing trace already uses via <see cref="Walk"/> - that one
-    /// is just this same method's <c>start == end</c> special case). Used
-    /// by <see cref="DrawGapCloser"/> to route a genuinely open drawn
+    /// Walks from <paramref name="startLinedef"/>'s own
+    /// <paramref name="startFront"/> side until it reaches
+    /// <paramref name="endLinedef"/>'s own <paramref name="endFront"/>
+    /// side, over the map's raw vertex/linedef topology (the same walk
+    /// <see cref="FindPotentialSectorAt"/>'s own self-closing trace
+    /// already uses via <see cref="Walk"/> - that one is just this same
+    /// method's <c>start == end</c> special case). Used by
+    /// <see cref="DrawGapCloser"/> to route a genuinely open drawn
     /// polyline's own two loose ends back together *through* existing map
-    /// geometry (UDB's own real gap-closing, as opposed to the "crosses
-    /// existing lines along its own straight path" case the stitch pass
-    /// already handles). <c>null</c> if no such path exists.
+    /// geometry, as opposed to the "crosses existing lines along its own
+    /// straight path" case the stitch pass already handles. <c>null</c>
+    /// if no such path exists.
     /// </summary>
     public static IReadOnlyList<LinedefSide>? FindClosestPath(Linedef startLinedef, bool startFront, Linedef endLinedef, bool endFront, bool turnAtEnds = true) =>
         Walk(new LinedefSide(startLinedef, startFront), new LinedefSide(endLinedef, endFront), turnAtEnds);
 
     /// <summary>
-    /// UDB's own real per-linedef interior/exterior determination
-    /// (<c>Tools.DrawLines</c>' own "Determine drawing interior" step) -
-    /// geometry-driven, not a global clockwise/counterclockwise polygon-
-    /// winding shortcut, which only ever works for a single simple
-    /// polygon and breaks down once stitching can produce a self-
-    /// touching or multiply-connected shape. Front is interior if tracing
-    /// from the front side finds a genuinely valid, self-containing
-    /// boundary (<see cref="FindPotentialSectorAt"/> already does the
-    /// trace + build-loop + validate-own-side-point-is-contained work
-    /// this needs); otherwise falls back to checking whether the *back*
-    /// side's own trace is valid instead - if it is, front is not
-    /// interior; if neither side traces to a valid boundary, defaults to
-    /// front being interior, matching UDB's own real default.
+    /// Per-linedef interior/exterior determination - geometry-driven,
+    /// not a global clockwise/counterclockwise polygon-winding shortcut,
+    /// which only ever works for a single simple polygon and breaks down
+    /// once stitching can produce a self-touching or multiply-connected
+    /// shape. Front is interior if tracing from the front side finds a
+    /// genuinely valid, self-containing boundary
+    /// (<see cref="FindPotentialSectorAt"/> already does the trace +
+    /// build-loop + validate-own-side-point-is-contained work this
+    /// needs); otherwise falls back to checking whether the *back* side's
+    /// own trace is valid instead - if it is, front is not interior; if
+    /// neither side traces to a valid boundary, defaults to front being
+    /// interior.
     ///
-    /// One flagged simplification: UDB's own real fallback check is
-    /// subtly different - it tests whether the *front* side's own point
-    /// falls inside the *back* trace's own polygon, not merely whether
-    /// the back trace is independently valid. Ported here as "does the
-    /// back trace succeed at all" instead, reusing
-    /// <see cref="FindPotentialSectorAt"/>'s own already-correct
-    /// containment validation rather than re-deriving UDB's separate
-    /// <c>EarClipPolygon.CalculateArea</c>/<c>Intersect</c> machinery a
-    /// second time - should be behaviorally equivalent in practice, not
-    /// verified byte-for-byte against every possible pathological shape.
+    /// One flagged simplification: UDB's own fallback check is subtly
+    /// different - it tests whether the *front* side's own point falls
+    /// inside the *back* trace's own polygon, not merely whether the back
+    /// trace is independently valid. Ported here as "does the back trace
+    /// succeed at all" instead, reusing <see cref="FindPotentialSectorAt"/>'s
+    /// own already-correct containment validation rather than re-deriving
+    /// a second, parallel polygon-area/intersection routine - should be
+    /// behaviorally equivalent in practice, not verified byte-for-byte
+    /// against every possible pathological shape.
     /// </summary>
     public static bool DetermineFrontInterior(MapData map, Linedef linedef)
     {
@@ -111,11 +102,11 @@ public static class BoundaryTracer
     /// <summary>
     /// Traces from <paramref name="start"/> and validates the result is
     /// actually the outer boundary containing <paramref name="start"/>'s
-    /// own side-point, not some other loop the walk happened to close on -
-    /// UDB's own real <c>FindOuterLines</c>: when a trace closes on the
-    /// wrong loop (an inner/hole boundary rather than the true outer one
-    /// containing <paramref name="start"/>'s own side-point), it doesn't
-    /// just fail - it retries from a different starting edge, found by
+    /// own side-point, not some other loop the walk happened to close on:
+    /// when a trace closes on the wrong loop (an inner/hole boundary
+    /// rather than the true outer one containing <paramref name="start"/>'s
+    /// own side-point), it doesn't just fail - it retries from a
+    /// different starting edge, found by
     /// casting a ray rightward from the wrongly-traced loop's own
     /// right-most vertex to the next linedef it crosses, and continues
     /// scanning rightward from there until either a trace succeeds or the
@@ -128,11 +119,11 @@ public static class BoundaryTracer
         var sidePoint = SidePoint(start);
         var scan = start;
 
-        // MaxOuterRetries is a defensive safety net beyond what's
-        // confirmed of UDB's own real behavior (which retries
-        // unboundedly, trusting real map geometry to always terminate) -
-        // same reasoning as Walk's own MaxPathLength, guaranteeing
-        // termination on pathological/malformed input instead of hanging.
+        // MaxOuterRetries is a defensive safety net: UDB itself retries
+        // unboundedly here, trusting real map geometry to always
+        // terminate. Same reasoning as Walk's own MaxPathLength,
+        // guaranteeing termination on pathological/malformed input
+        // instead of hanging.
         for (var retry = 0; retry < MaxOuterRetries; retry++)
         {
             var path = Walk(scan, scan, turnAtEnds: true);
@@ -153,7 +144,7 @@ public static class BoundaryTracer
         return null;
     }
 
-    /// <summary>The right-most vertex touched by any line in a (wrongly-traced) loop - UDB's own real seed for the rightward ray-cast retry below.</summary>
+    /// <summary>The right-most vertex touched by any line in a (wrongly-traced) loop - the seed for the rightward ray-cast retry below.</summary>
     private static Vertex FindRightmostVertex(IReadOnlyList<LinedefSide> lines)
     {
         Vertex best = lines[0].Linedef.Start;
@@ -168,16 +159,15 @@ public static class BoundaryTracer
     }
 
     /// <summary>
-    /// UDB's own real rightward ray-cast: the closest linedef (by
-    /// crossing X, strictly to the right of <paramref name="from"/>) that
-    /// crosses the horizontal ray running rightward from
-    /// <paramref name="from"/> - "all sectors are closed" is the
-    /// assumption this relies on (the very next thing the ray hits is
-    /// necessarily a real boundary edge to continue tracing from). A tie
-    /// (two lines crossing at the same X) prefers whichever is closer to
-    /// parallel with the x-axis - UDB's own real
-    /// <c>GetRelativeAngle</c>-based tie-break, approximated here directly
-    /// via each candidate's own acute angle from horizontal rather than
+    /// A rightward ray-cast: the closest linedef (by crossing X, strictly
+    /// to the right of <paramref name="from"/>) that crosses the
+    /// horizontal ray running rightward from <paramref name="from"/> -
+    /// "all sectors are closed" is the assumption this relies on (the
+    /// very next thing the ray hits is necessarily a real boundary edge
+    /// to continue tracing from). A tie (two lines crossing at the same
+    /// X) prefers whichever is closer to parallel with the x-axis -
+    /// UDB's own relative-angle tie-break, approximated here directly via
+    /// each candidate's own acute angle from horizontal rather than
     /// re-derived byte-for-byte (a genuinely rare exact-tie case).
     /// </summary>
     private static Linedef? FindNextLinedefToTheRight(MapData map, Vertex from)
@@ -239,8 +229,8 @@ public static class BoundaryTracer
     /// <summary>
     /// Finds every hole nested inside <paramref name="outerLoop"/> by
     /// repeatedly tracing from the right-most as-yet-unclaimed vertex
-    /// strictly inside it, matching UDB's own real <c>FindInnerLines</c>.
-    /// Appends each valid hole's lines into <paramref name="allLines"/>.
+    /// strictly inside it. Appends each valid hole's lines into
+    /// <paramref name="allLines"/>.
     /// </summary>
     private static void FindInnerLines(MapData map, Loop outerLoop, List<LinedefSide> allLines)
     {
@@ -265,8 +255,7 @@ public static class BoundaryTracer
 
             // A real hole's silhouette encloses solid space on its
             // *outside* - the side-point of the line we started from must
-            // therefore land outside the traced ring itself, matching
-            // UDB's own real check.
+            // therefore land outside the traced ring itself.
             if (loop == null || loop.Contains(SidePoint(startSide.Value)))
             {
                 ignoredStarts.Add(candidate);
@@ -282,9 +271,8 @@ public static class BoundaryTracer
     /// The right-most vertex, strictly inside <paramref name="outerLoop"/>,
     /// that still has at least one linedef not already accounted for in
     /// <paramref name="claimed"/> - a candidate seed for another hole to
-    /// discover. Searches every vertex in the map (not just ones touching
-    /// already-claimed linedefs), matching UDB's own real "any as-yet-
-    /// unclaimed map vertex" search.
+    /// discover. Searches every vertex in the map, not just ones touching
+    /// already-claimed linedefs.
     /// </summary>
     private static Vertex? FindUnclaimedVertexInside(MapData map, Loop outerLoop, HashSet<Linedef> claimed, HashSet<Vertex> ignore)
     {
@@ -311,16 +299,16 @@ public static class BoundaryTracer
     }
 
     /// <summary>
-    /// UDB's own real deterministic hole-trace starting side, at the
-    /// right-most as-yet-unclaimed vertex found inside the outer loop -
-    /// *not* whichever of its linedefs happens to come first in
+    /// The deterministic hole-trace starting side, at the right-most
+    /// as-yet-unclaimed vertex found inside the outer loop - *not*
+    /// whichever of its linedefs happens to come first in
     /// <see cref="Vertex.Linedefs"/> (this project's own earlier,
     /// incorrect approach): since every linedef touching this vertex
     /// necessarily points away from it (it's the right-most point in
     /// this whole region), a plain test point 100 units to its own
     /// *right* is guaranteed to sit outside whatever loop gets traced
     /// from here, regardless of which side of that linedef the walk
-    /// starts from - matching UDB's own real <c>FindInnerLines</c>
+    /// starts from - this matches UDB's own <c>FindInnerLines</c>
     /// exactly. The wrong-side-first-found bug this fixes: an existing,
     /// already-partially-owned island sitting inside a brand-new loop
     /// (e.g. a pillar's own boundary, its interior side already
@@ -370,11 +358,11 @@ public static class BoundaryTracer
     /// candidate other than the edge just arrived on) flips to that same
     /// linedef's other side and keeps walking, capped at
     /// <see cref="MaxTraceCountAtDeadEnd"/> visits to any one linedef
-    /// before giving up - matching UDB's own real <c>turnatends</c>/
-    /// trace-count-cap behavior. <see cref="MaxPathLength"/> is a
-    /// defensive safety net beyond what's confirmed of UDB's own real
-    /// behavior, guaranteeing termination on pathological input rather
-    /// than hanging.
+    /// before giving up - matching UDB's own <c>turnatends</c>/
+    /// trace-count-cap behavior. <see cref="MaxPathLength"/> is an
+    /// additional defensive safety net (UDB itself has no such cap,
+    /// trusting real map geometry to terminate on its own), guaranteeing
+    /// termination on pathological input rather than hanging.
     /// </summary>
     private static List<LinedefSide>? Walk(LinedefSide start, LinedefSide end, bool turnAtEnds)
     {

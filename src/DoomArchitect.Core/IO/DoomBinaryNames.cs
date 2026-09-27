@@ -6,8 +6,7 @@ namespace DoomArchitect.Core.IO;
 /// Decodes an 8-byte fixed-length Doom "name" field (lump names, texture
 /// names in binary map lumps) - ASCII, null-terminated if shorter than 8
 /// bytes, using the full 8 bytes as-is if not (there's nothing to
-/// truncate past - only 8 bytes are ever read). Matches UDB's own
-/// <c>Lump.MakeNormalName</c>.
+/// truncate past - only 8 bytes are ever read).
 /// </summary>
 internal static class DoomBinaryNames
 {

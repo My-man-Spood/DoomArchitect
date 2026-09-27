@@ -4,31 +4,26 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Undo;
 
 /// <summary>
-/// UDB's own real "insert a new Thing" (<c>ThingsMode.InsertThing</c>,
-/// backing its own real right-click-on-empty-space action) - creates one
-/// at a given position with UDB's own real default settings
-/// (<c>ProgramConfiguration.ApplyDefaultThingSettings</c>, verified
-/// directly against its source rather than guessed).
+/// Creates a new Thing at a given position with default settings
+/// (angle, flags) applied - the same action as a right-click-on-empty-
+/// space placement.
 /// </summary>
 public sealed class CreateThingCommand : ICommand
 {
     /// <summary>
-    /// Player 1 Start - UDB's own real <c>defaultthingtype</c> field
-    /// default, before any session ever customizes it. Only ever used as
-    /// this class's own fallback (a caller that genuinely has no better
-    /// value, e.g. a Core test) - the App layer's real caller
-    /// (<c>ThingOverlayHandler</c>) instead passes whatever
-    /// <c>MapOverlay.LastUsedThingType</c> currently holds, matching
-    /// UDB's own real <c>General.Settings.DefaultThingType</c> (a session
-    /// value the thing-edit dialog keeps updated with whatever type was
-    /// last actually applied there - <c>ThingEditFormUDMF</c>'s own
-    /// <c>thingtype.GetResult(...)</c> assignment, ported the same way).
+    /// Player 1 Start - the default thing type, before any session ever
+    /// customizes it. Only ever used as this class's own fallback (a
+    /// caller that genuinely has no better value, e.g. a Core test) - the
+    /// App layer's real caller (<c>ThingOverlayHandler</c>) instead
+    /// passes whatever <c>MapOverlay.LastUsedThingType</c> currently
+    /// holds, a session value kept updated with whatever type was last
+    /// actually placed.
     /// </summary>
     public const int DefaultType = 1;
 
     public const int DefaultAngle = 0;
 
-    /// <summary>Easy | Medium | Hard (bits 1, 2, 4) - UDB's own real classic-format <c>defaultthingflags</c> (<c>Doom_misc.cfg</c>: <c>{ 1; 2; 4; }</c>). Not Ambush (8) or Multiplayer-only (16).</summary>
+    /// <summary>Easy | Medium | Hard (bits 1, 2, 4) - UDB's classic-format <c>defaultthingflags</c> (<c>Doom_misc.cfg</c>: <c>{ 1; 2; 4; }</c>). Not Ambush (8) or Multiplayer-only (16).</summary>
     public const ushort DefaultRawFlags = 0b0111;
 
     private readonly MapData map;

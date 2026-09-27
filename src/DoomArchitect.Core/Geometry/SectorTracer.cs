@@ -4,9 +4,8 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// Ported from Ultimate Doom Builder's <c>SectorBuilder</c>/<c>Triangulation</c>
-/// tracing step: a sector owns no vertices of its own, so its boundary
-/// loop(s) are reconstructed by walking its sidedefs. A front sidedef is
+/// A sector owns no vertices of its own, so its boundary loop(s) are
+/// reconstructed by walking its sidedefs. A front sidedef is
 /// walked Start-to-End; a back sidedef is walked End-to-Start - either way,
 /// the sector being traced ends up on the walker's right at every step.
 /// </summary>
@@ -78,15 +77,14 @@ public static class SectorTracer
 
     /// <summary>
     /// Traces one closed loop starting and ending at <paramref name="start"/>.
-    /// Ported from UDB's <c>DoTracePath</c>: recursive with backtracking -
-    /// candidates at a branch are tried in order (best-angle first per
-    /// <see cref="RelativeAngle"/>), and if a branch's continuation
-    /// eventually dead-ends, the next candidate is tried instead. Matches
-    /// UDB exactly in one respect that looks like a bug but isn't: a
-    /// sidedef visited along a dead-end branch stays marked visited even
-    /// after backtracking past it, rather than being un-marked. For any
-    /// simple (non-self-intersecting) sector this never costs a solution -
-    /// it just avoids re-exploring ground already known to fail.
+    /// Recursive with backtracking - candidates at a branch are tried in
+    /// order (best-angle first per <see cref="RelativeAngle"/>), and if a
+    /// branch's continuation eventually dead-ends, the next candidate is
+    /// tried instead. One thing that looks like a bug but isn't: a sidedef
+    /// visited along a dead-end branch stays marked visited even after
+    /// backtracking past it, rather than being un-marked. For any simple
+    /// (non-self-intersecting) sector this never costs a solution - it
+    /// just avoids re-exploring ground already known to fail.
     /// </summary>
     private static List<Sidedef>? TracePath(Vertex start, Sector sector, ISet<Sidedef> remaining)
     {
@@ -141,11 +139,11 @@ public static class SectorTracer
     }
 
     /// <summary>
-    /// Ported from UDB's <c>SidedefAngleSorter</c>, for a vertex where more
-    /// than one of the sector's own sidedefs meet (a sector touching
-    /// itself at a single point). Orders candidates so the one that best
-    /// continues the loop just walked (largest angle relative to the edge
-    /// just arrived on) is tried first - backtracking in
+    /// For a vertex where more than one of the sector's own sidedefs meet
+    /// (a sector touching itself at a single point): orders candidates so
+    /// the one that best continues the loop just walked (largest angle
+    /// relative to the edge just arrived on) is tried first - backtracking
+    /// in
     /// <see cref="TraceFrom"/> falls through to the rest in order if it
     /// turns out wrong.
     /// </summary>

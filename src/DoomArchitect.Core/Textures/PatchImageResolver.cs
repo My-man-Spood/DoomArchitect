@@ -1,10 +1,9 @@
 namespace DoomArchitect.Core.Textures;
 
 /// <summary>
-/// The single "decode these lump bytes into pixels" entry point, mirroring
-/// UDB's <c>ImageDataFormat.TryLoadImage</c> dispatch order: sniff for a
-/// modern format first, and only fall back to classic Doom picture format
-/// if nothing modern matched. Both standalone patch lookups and
+/// The single "decode these lump bytes into pixels" entry point: sniff
+/// for a modern format first, and only fall back to classic Doom picture
+/// format if nothing modern matched. Both standalone patch lookups and
 /// composite-texture patch resolution go through this, so a PNG-encoded
 /// patch decodes identically in either context.
 /// </summary>

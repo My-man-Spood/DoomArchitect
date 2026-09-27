@@ -31,11 +31,10 @@ internal static class GeometryMath
     /// Same bounded segment-vs-segment math as <see cref="SegmentsIntersect"/>,
     /// also returning where along b (<paramref name="uB"/>, 0 at
     /// <paramref name="b1"/>, 1 at <paramref name="b2"/>) and the actual
-    /// intersection point - mirrors UDB's real <c>Line2D.GetIntersection</c>,
-    /// whose own <c>u</c> output is along its "other" argument (verified by
-    /// its own real call site, <c>Tools.DrawLines</c>, using the returned
-    /// <c>u</c> against the segment passed as "other" to get the split
-    /// coordinates), the same convention kept here.
+    /// intersection point. The convention of measuring <c>u</c> along the
+    /// "other" segment (here, b) rather than a matters to callers that
+    /// split a segment using the returned coordinate - keeping it explicit
+    /// avoids an easy mix-up between the two segments' roles.
     /// </summary>
     public static bool TryGetSegmentIntersection(Vector2 a1, Vector2 a2, Vector2 b1, Vector2 b2, out float uB, out Vector2 point)
     {

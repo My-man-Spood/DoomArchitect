@@ -106,12 +106,11 @@ public sealed class MapData
     public void RestoreVertex(Vertex vertex) => _vertices.Add(vertex);
 
     /// <summary>
-    /// UDB's own real <c>Vertex.Join</c>: redirects every linedef
-    /// touching <paramref name="from"/> onto <paramref name="into"/>,
-    /// then removes <paramref name="from"/>. Skips UDB's own pre-merge
-    /// position snap (<c>into.Move(from.Position)</c>) - every real
-    /// caller (<c>GeometryStitcher</c>'s own stitching passes) only ever
-    /// merges vertices already within its own tiny stitch-distance
+    /// Redirects every linedef touching <paramref name="from"/> onto
+    /// <paramref name="into"/>, then removes <paramref name="from"/>.
+    /// Skips the pre-merge position snap (<c>into.Move(from.Position)</c>)
+    /// - every real caller (<c>GeometryStitcher</c>'s own stitching passes)
+    /// only ever merges vertices already within its own tiny stitch-distance
     /// tolerance, so the position difference is already imperceptible.
     /// </summary>
     public void MergeVertex(Vertex from, Vertex into)
@@ -134,23 +133,22 @@ public sealed class MapData
     public void RemoveThing(Thing thing) => _things.Remove(thing);
 
     /// <summary>
-    /// Inserts <paramref name="vertex"/> mid-<paramref name="linedef"/>,
-    /// mirroring UDB's real <c>Linedef.Split</c>: <paramref name="linedef"/>
-    /// shrinks in place to end at <paramref name="vertex"/>, and a brand-
-    /// new second half (from <paramref name="vertex"/> to the original
-    /// End) is returned. <paramref name="vertex"/> is assumed already
-    /// created and positioned exactly on the line - the caller's job,
-    /// matching this class's own "trusted internal invariant" style.
+    /// Inserts <paramref name="vertex"/> mid-<paramref name="linedef"/>:
+    /// <paramref name="linedef"/> shrinks in place to end at
+    /// <paramref name="vertex"/>, and a brand-new second half (from
+    /// <paramref name="vertex"/> to the original End) is returned.
+    /// <paramref name="vertex"/> is assumed already created and positioned
+    /// exactly on the line - the caller's job, matching this class's own
+    /// "trusted internal invariant" style.
     ///
     /// Both the linedef's own <see cref="Linedef.Fields"/> and each
     /// sidedef's textures/offsets/<see cref="UniFields"/> are duplicated
-    /// onto the new half unchanged - UDB's real <c>CopyXY</c>
-    /// <c>SplitLineBehavior</c> (one of its own real, supported modes,
-    /// just not its default <c>Interpolate</c>, which needs the split
-    /// texture's actual pixel width to recompute offsets - a lookup this
-    /// project's texture-agnostic Core layer deliberately has no access
-    /// to; see the Phase 2 plan's own remarks). Things are never touched
-    /// by a split, matching UDB's real behavior exactly.
+    /// onto the new half unchanged (the <c>CopyXY</c> split behavior)
+    /// rather than recomputing offsets from the split texture's actual
+    /// pixel width (the default <c>Interpolate</c> behavior) - a lookup
+    /// this project's texture-agnostic Core layer deliberately has no
+    /// access to; see the Phase 2 plan's own remarks. Things are never
+    /// touched by a split.
     /// </summary>
     public Linedef SplitLinedef(Linedef linedef, Vertex vertex)
     {
@@ -206,26 +204,20 @@ public sealed class MapData
     }
 
     /// <summary>
-    /// UDB's own real <c>Linedef.Join</c> - the counterpart
-    /// <c>GeometryStitcher.JoinOverlappingLines</c> uses once two lines
+    /// Used by <c>GeometryStitcher.JoinOverlappingLines</c> once two lines
     /// turn out to be fully coincident (same two endpoints, matching or
-    /// reversed direction - the only shape UDB's own real call site,
-    /// <c>MapSet.JoinOverlappingLines</c>, ever actually hands it,
-    /// confirmed directly against its source): reconciles
-    /// <paramref name="remove"/>'s own sidedefs onto <paramref name="keep"/>
-    /// by comparing which of their sectors match on which side - the
-    /// full real branching, ported exactly (including a couple of checks
-    /// that read as unreachable given the branch they sit in - UDB's own
-    /// source has them too, so they're kept rather than "corrected"),
-    /// then disposes <paramref name="remove"/>. UDB's own additional
-    /// texture *preservation* pass on top of this (<c>AddTexturesTo</c>/
-    /// <c>RemoveUnneededTextures</c>, gated by its own
-    /// <c>AutoClearSidedefTextures</c> setting this project has no
-    /// equivalent of) is deliberately not ported - a freshly created
-    /// sidedef here still gets <paramref name="remove"/>'s donor side's
-    /// own full properties via the same <see cref="CopySidedefProperties"/>
-    /// <see cref="SplitLinedef"/> already uses, just without the extra
-    /// migrate-textures-from-the-superseded-side step on top.
+    /// reversed direction): reconciles <paramref name="remove"/>'s own
+    /// sidedefs onto <paramref name="keep"/> by comparing which of their
+    /// sectors match on which side (including a couple of checks that
+    /// read as unreachable given the branch they sit in - kept rather
+    /// than "corrected"), then disposes <paramref name="remove"/>. The
+    /// additional texture *preservation* pass layered on top of this
+    /// elsewhere (migrating textures off the superseded side, gated by a
+    /// setting this project has no equivalent of) is deliberately not
+    /// ported here - a freshly created sidedef still gets
+    /// <paramref name="remove"/>'s donor side's own full properties via
+    /// the same <see cref="CopySidedefProperties"/> <see cref="SplitLinedef"/>
+    /// already uses, just without that extra migration step on top.
     /// </summary>
     public void JoinLinedefs(Linedef keep, Linedef remove)
     {
@@ -337,13 +329,12 @@ public sealed class MapData
     /// <paramref name="linedef"/>'s <paramref name="front"/> (or back)
     /// side to <paramref name="sector"/> - creating a fresh sidedef if
     /// that side is currently one-sided (void), or re-pointing an
-    /// already-existing one at <paramref name="sector"/> instead (UDB's
-    /// own real dual behavior - see <see cref="Sidedef.Sector"/>'s own
-    /// remarks). When a fresh sidedef newly makes a one-sided linedef
-    /// two-sided, the *opposite* side's now-superfluous middle texture is
-    /// cleared, matching UDB's own real cleanup exactly (a one-sided
-    /// wall's middle texture has nothing to mean once there's a real
-    /// sector on both sides).
+    /// already-existing one at <paramref name="sector"/> instead (see
+    /// <see cref="Sidedef.Sector"/>'s own remarks). When a fresh sidedef
+    /// newly makes a one-sided linedef two-sided, the *opposite* side's
+    /// now-superfluous middle texture is cleared - a one-sided wall's
+    /// middle texture has nothing to mean once there's a real sector on
+    /// both sides.
     /// </summary>
     public void AttachOrRetargetSidedef(Linedef linedef, bool front, Sector sector)
     {
@@ -504,10 +495,9 @@ public sealed class MapData
     /// <summary>
     /// Recomputes every one of <paramref name="sector"/>'s bordering
     /// linedefs' selection to <c>(front sector selected) OR (back sector
-    /// selected)</c> - a close port of UDB's own real <c>SectorsMode.
-    /// SelectSector</c>, which runs this exact resync every time a
-    /// sector's selection changes (not just on a mode-switch conversion,
-    /// see <see cref="ConvertGeometrySelection"/>). Without it, a linedef
+    /// selected)</c> - run every time a sector's selection changes (not
+    /// just on a mode-switch conversion, see
+    /// <see cref="ConvertGeometrySelection"/>). Without it, a linedef
     /// selected as a side effect of converting into Sectors mode would
     /// stay stuck selected even after its sector is toggled off - since
     /// nothing else would ever clear it. The OR-across-both-sides rule
@@ -543,12 +533,10 @@ public sealed class MapData
 
     /// <summary>
     /// Re-derives the Vertices/Linedefs/Sectors selection to match
-    /// <paramref name="target"/>, exactly matching UDB's real
-    /// <c>MapSet.ConvertSelection</c> (called by every classic mode's
-    /// <c>OnEngage</c> on a mode switch, always converting from
-    /// everything currently selected across all three types - the only
-    /// case this codebase needs). Never touches Thing selection, which is
-    /// independent (matches UDB). Not undoable, like every other
+    /// <paramref name="target"/> - called on every mode switch, always
+    /// converting from everything currently selected across all three
+    /// types (the only case this codebase needs). Never touches Thing
+    /// selection, which is independent. Not undoable, like every other
     /// selection operation - this is view state, not document state.
     /// </summary>
     public void ConvertGeometrySelection(GeometrySelectionType target)
@@ -568,7 +556,7 @@ public sealed class MapData
     }
 
     /// <summary>
-    /// Additive/preserved (UDB never clears vertex selection here): a
+    /// Additive/preserved (vertex selection is never cleared here): a
     /// vertex stays/becomes selected if it already was, is an endpoint of
     /// a selected linedef, or touches a linedef whose front-or-back
     /// sector is selected.
@@ -660,13 +648,11 @@ public sealed class MapData
         }
     }
 
-    // Marquee/box-select - a close port of UDB's real per-mode marquee
-    // hit-tests and 4-case SELECT/ADD/SUBTRACT/INTERSECT apply logic
-    // (BaseClassicMode.GetMultiSelectionMode + each classic mode's own
-    // OnEndMultiSelection). Vertices/Things take no "touching" parameter
-    // at all - a single point has no fully-enclosed-vs-crossing
-    // distinction to make, matching UDB's own real scope (its touching
-    // toggle only ever appears in Linedefs/Sectors mode toolbars).
+    // Marquee/box-select - per-mode hit-tests plus 4-case
+    // SELECT/ADD/SUBTRACT/INTERSECT apply logic. Vertices/Things take no
+    // "touching" parameter at all - a single point has no
+    // fully-enclosed-vs-crossing distinction to make (the touching toggle
+    // only ever appears in Linedefs/Sectors mode toolbars).
 
     public void MarqueeSelectVertices(Vector2 min, Vector2 max, MarqueeSelectionMode mode)
     {
@@ -710,8 +696,7 @@ public sealed class MapData
     /// <summary>
     /// Default (non-touching): both endpoints must be inside. Touching:
     /// either endpoint inside, or the segment crosses a rectangle edge
-    /// with both endpoints outside - matches UDB's real
-    /// <c>LinedefsMode.IsInSelectionRect</c>.
+    /// with both endpoints outside.
     /// </summary>
     private static bool IsLinedefInRect(Linedef linedef, Vector2 min, Vector2 max, bool touching)
     {
@@ -724,12 +709,10 @@ public sealed class MapData
     }
 
     /// <summary>
-    /// Default (non-touching): every vertex of the sector must be inside
-    /// (equivalent to UDB's real "bounding box fully contained" test).
+    /// Default (non-touching): every vertex of the sector must be inside.
     /// Touching: a fully-enclosed sector still always counts; otherwise
     /// selected if any bordering linedef has an endpoint inside the rect
-    /// or crosses one of its edges - matches UDB's real
-    /// <c>SectorsMode.IsInSelectionRect</c>.
+    /// or crosses one of its edges.
     /// </summary>
     private static bool IsSectorInRect(Sector sector, List<Vertex> vertices, Vector2 min, Vector2 max, bool touching)
     {

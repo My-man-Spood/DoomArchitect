@@ -6,10 +6,10 @@ namespace DoomArchitect.Core.Configuration;
 /// <summary>
 /// Best-guess default selection for the always-shown Doom/Doom2 picker a
 /// WAD load presents (see <c>OpenMapMenu</c>) - never authoritative on its
-/// own, since UDB itself has no reliable way to tell Doom and Doom2 apart
-/// from a bare WAD's content either (confirmed via its own source: it
-/// relies on an explicit project setting, a sidecar file, or asking the
-/// user). Signals are checked in order, most reliable first, rather than
+/// own, since there's no reliable way to tell Doom and Doom2 apart from a
+/// bare WAD's content alone; the real signal is an explicit project
+/// setting, a sidecar file, or asking the user. Signals are checked in
+/// order, most reliable first, rather than
 /// combined into a weighted score - simpler to write, read, and test for
 /// the same practical result:
 ///

@@ -4,16 +4,14 @@ using DoomArchitect.Core.Map;
 namespace DoomArchitect.Core.Geometry;
 
 /// <summary>
-/// A direct port of UDB's own real geometry-stitching primitives
-/// (<c>MapSet.JoinVertices</c>/<c>SplitLinesByVertices</c>/
-/// <c>RemoveLoopedLinedefs</c>/<c>JoinOverlappingLines</c>/
-/// <c>FlipBackwardLinedefs</c>, plus <c>Tools.DrawLines</c>' own
-/// per-segment existing-line-crossing pre-pass) - see the "Port UDB's
-/// Real Geometry-Stitching Pipeline" plan for the full research this is
-/// built from. Every method here is orchestration only: it searches the
-/// map graph and calls <see cref="MapData"/>'s own public mutation
-/// primitives (never touches an <c>internal</c> setter directly except
-/// where <see cref="MapData"/> itself doesn't yet expose a primitive for
+/// Geometry-stitching primitives for a completed draw operation:
+/// joining coincident vertices, splitting lines by vertices sitting on
+/// them, dropping degenerate looped lines, merging overlapping lines,
+/// and flipping any linedef left with only a Back side. Every method
+/// here is orchestration only: it searches the map graph and calls
+/// <see cref="MapData"/>'s own public mutation primitives (never
+/// touches an <c>internal</c> setter directly except where
+/// <see cref="MapData"/> itself doesn't yet expose a primitive for
 /// something this needs - <see cref="Linedef.Start"/>/<see cref="Linedef.End"/>/
 /// <see cref="Vertex.AddLinedef"/>/<see cref="Vertex.RemoveLinedef"/>
 /// reassignment for undo closures, matching the exact same pattern
@@ -28,24 +26,22 @@ namespace DoomArchitect.Core.Geometry;
 /// closures, reverse order on <c>Undo()</c>" pattern intact instead of
 /// introducing a second undo mechanism just for stitching.
 ///
-/// Deliberately not ported: UDB's own real <c>SplitLinesByLines</c> (new-
-/// line-vs-new-line crossing splitting) - confirmed directly against its
-/// source to be a complete no-op in <c>MergeGeometryMode.CLASSIC</c>,
-/// which is <c>Tools.DrawLines</c>' own real default mode. A self-
-/// intersecting drawn polygon genuinely isn't split by real UDB during a
-/// normal draw either - not a gap on this project's side.
+/// Deliberately not ported: new-line-vs-new-line crossing splitting
+/// (UDB's <c>SplitLinesByLines</c>) - it's a complete no-op in
+/// <c>MergeGeometryMode.CLASSIC</c>, UDB's own default draw mode. A
+/// self-intersecting drawn polygon genuinely isn't split by UDB during
+/// a normal draw either - not a gap on this project's side.
 /// </summary>
 public static class GeometryStitcher
 {
-    /// <summary>UDB's own real <c>MapSet.STITCH_DISTANCE</c> - float-precision-coincidence tolerance, not a visual snap radius (that's the separate, already-correct UI-layer click-to-vertex/linedef snap).</summary>
+    /// <summary>Float-precision-coincidence tolerance, not a visual snap radius (that's the separate, already-correct UI-layer click-to-vertex/linedef snap).</summary>
     public const float StitchDistance = 0.005f;
 
-    /// <summary>UDB's own real <c>Tools.MINIMUM_INTERSECTION_DISTANCE</c> - already a *squared* distance threshold (UDB compares it directly against its own squared-distance helper), guarding against a spurious split when drawing nearly parallel to/along an existing line.</summary>
+    /// <summary>Already a *squared* distance threshold (compared directly against squared distances), guarding against a spurious split when drawing nearly parallel to/along an existing line.</summary>
     public const float MinimumIntersectionDistanceSquared = 0.25f;
 
     /// <summary>
-    /// UDB's own real per-segment pre-pass in <c>Tools.DrawLines</c>:
-    /// splits <paramref name="segment"/> (a just-created new linedef) at
+    /// Splits <paramref name="segment"/> (a just-created new linedef) at
     /// every point it crosses an *existing* linedef that belongs to a
     /// sector - never touches the existing line itself yet (that happens
     /// later, once the resulting split vertices are folded into the
@@ -54,14 +50,7 @@ public static class GeometryStitcher
     /// and every newly split-off linedef half to
     /// <paramref name="newLinedefs"/> - <paramref name="segment"/> itself
     /// is assumed already present in <paramref name="newLinedefs"/> by
-    /// the caller. UDB's own real version tracks these split vertices in
-    /// a separate <c>mergeverts</c>/<c>intersectverts</c> set, distinct
-    /// from its own broader <c>newverts</c> - a distinction that only
-    /// matters because a UDB <c>DrawnVertex</c> can individually opt out
-    /// of stitching (<c>stitch: false</c>); this project's own
-    /// <see cref="Undo.DrawPoint"/> has no such per-point opt-out, so
-    /// every new vertex is always stitch-eligible and one list serves
-    /// both roles.
+    /// the caller.
     /// </summary>
     public static void SplitAgainstExistingLines(
         MapData map, Linedef segment, IReadOnlyList<Linedef> existingLines,
@@ -74,7 +63,7 @@ public static class GeometryStitcher
         foreach (var existing in existingLines)
         {
             if (existing == segment) continue;
-            if (existing.Front == null && existing.Back == null) continue; // "belongs to a sector" - matches UDB's own map.Sectors/Sidedefs walk
+            if (existing.Front == null && existing.Back == null) continue; // "belongs to a sector" - a construction line with no sidedef on either side doesn't count
 
             var existingStart = existing.Start.Position;
             var existingEnd = existing.End.Position;
@@ -121,7 +110,7 @@ public static class GeometryStitcher
         }
     }
 
-    /// <summary>UDB's own real <c>MapSet.JoinVertices(set1, set2, keepsecond: true, joindist)</c> - merges each of <paramref name="movingVertices"/> onto the nearest <paramref name="fixedVertices"/> within <paramref name="joinDistance"/>, discarding the moving one every time (this project's only real use case - stitching our own new vertices onto pre-existing ones, never the reverse).</summary>
+    /// <summary>Merges each of <paramref name="movingVertices"/> onto the nearest <paramref name="fixedVertices"/> within <paramref name="joinDistance"/>, discarding the moving one every time (this project's only use case - stitching our own new vertices onto pre-existing ones, never the reverse).</summary>
     public static void JoinVerticesOntoExisting(MapData map, IReadOnlyList<Vertex> fixedVertices, List<Vertex> movingVertices, float joinDistance, List<Action> undoActions)
     {
         var joinDistanceSquared = joinDistance * joinDistance;
@@ -154,7 +143,7 @@ public static class GeometryStitcher
         while (joined);
     }
 
-    /// <summary>UDB's own real <c>MapSet.JoinVertices(List&lt;Vertex&gt; set, joindist)</c> - merges any two vertices within <paramref name="vertices"/> that end up within <paramref name="joinDistance"/> of each other (this loop's own new vertices coinciding with each other, e.g. two intersection splits landing on the same spot, or the loop closing back onto its own start).</summary>
+    /// <summary>Merges any two vertices within <paramref name="vertices"/> that end up within <paramref name="joinDistance"/> of each other (this loop's own new vertices coinciding with each other, e.g. two intersection splits landing on the same spot, or the loop closing back onto its own start).</summary>
     public static void JoinVerticesWithinSet(MapData map, List<Vertex> vertices, float joinDistance, List<Action> undoActions)
     {
         var joinDistanceSquared = joinDistance * joinDistance;
@@ -199,17 +188,14 @@ public static class GeometryStitcher
     }
 
     /// <summary>
-    /// UDB's own real <c>MapSet.SplitLinesByVertices</c> (the parts
-    /// relevant to <c>MergeGeometryMode.CLASSIC</c>, UDB's own
-    /// <c>Tools.DrawLines</c> default - its own real <c>REPLACE</c>-mode
-    /// sector-removal branch is out of scope here, unused by that call
-    /// path): splits every line in <paramref name="lines"/> wherever any
-    /// of <paramref name="vertices"/> sits exactly on it (within
+    /// Splits every line in <paramref name="lines"/> wherever any of
+    /// <paramref name="vertices"/> sits exactly on it (within
     /// <paramref name="splitDistance"/>) without already being one of its
-    /// endpoints. <paramref name="lines"/> itself grows as splits happen
-    /// (a segment split off earlier in this same pass can itself need
-    /// splitting again by a different vertex - matches UDB's own real
-    /// "add the new line to the blockmap, keep checking" behavior).
+    /// endpoints. Only the classic-mode splitting case is handled here -
+    /// sector-removal ("replace" mode) splitting is out of scope, unused
+    /// by any call path in this project. <paramref name="lines"/> itself
+    /// grows as splits happen (a segment split off earlier in this same
+    /// pass can itself need splitting again by a different vertex).
     /// <paramref name="trackNewSegmentsInto"/> also receives every new
     /// split-off half - pass the same reference as <paramref name="lines"/>
     /// when splitting our own new lines by existing vertices (so nothing
@@ -250,7 +236,7 @@ public static class GeometryStitcher
         }
     }
 
-    /// <summary>UDB's own real <c>MapSet.RemoveLoopedLinedefs</c> - drops any line in <paramref name="lines"/> whose two endpoints are the same vertex (or the same position).</summary>
+    /// <summary>Drops any line in <paramref name="lines"/> whose two endpoints are the same vertex (or the same position).</summary>
     public static void RemoveLoopedLinedefs(MapData map, List<Linedef> lines, List<Action> undoActions)
     {
         for (var i = lines.Count - 1; i >= 0; i--)
@@ -274,12 +260,10 @@ public static class GeometryStitcher
     }
 
     /// <summary>
-    /// UDB's own real <c>MapSet.JoinOverlappingLines</c>: merges any two
-    /// linedefs in <paramref name="lines"/> that end up sharing both
-    /// endpoints into one (<see cref="MapData.JoinLinedefs"/>, UDB's own
-    /// real <c>Linedef.Join</c>) - the survivor is always whichever one
-    /// is being iterated when the overlap is found (matches UDB's own
-    /// real search order exactly), the other is disposed.
+    /// Merges any two linedefs in <paramref name="lines"/> that end up
+    /// sharing both endpoints into one (<see cref="MapData.JoinLinedefs"/>) -
+    /// the survivor is always whichever one is being iterated when the
+    /// overlap is found, the other is disposed.
     /// </summary>
     public static void JoinOverlappingLines(MapData map, List<Linedef> lines, List<Action> undoActions)
     {
@@ -358,7 +342,7 @@ public static class GeometryStitcher
         return null;
     }
 
-    /// <summary>UDB's own real <c>MapSet.FlipBackwardLinedefs</c>: a linedef left with only a Back side (no Front) gets its vertices and sidedefs flipped, matching the format convention that Front must exist whenever Back does.</summary>
+    /// <summary>A linedef left with only a Back side (no Front) gets its vertices and sidedefs flipped, matching the format convention that Front must exist whenever Back does.</summary>
     public static void FlipBackwardLinedefs(List<Linedef> lines, List<Action> undoActions)
     {
         foreach (var line in lines)
@@ -387,7 +371,7 @@ public static class GeometryStitcher
         }
     }
 
-    /// <summary>UDB's own real <c>MapSet.NearestLinedef</c> - the candidate whose own bounded segment lies closest to a point, a plain linear scan (UDB's own version shortcuts through its blockmap first; this project has no equivalent spatial index for 2D edit-mode geometry queries yet).</summary>
+    /// <summary>The candidate whose own bounded segment lies closest to a point - a plain linear scan; this project has no spatial index (UDB shortcuts through its blockmap) for 2D edit-mode geometry queries yet.</summary>
     internal static Linedef? FindNearestLinedef(IReadOnlyList<Linedef> candidates, Vector2 point)
     {
         Linedef? nearest = null;

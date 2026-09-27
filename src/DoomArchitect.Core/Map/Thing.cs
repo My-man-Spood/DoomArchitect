@@ -5,8 +5,7 @@ namespace DoomArchitect.Core.Map;
 /// <summary>
 /// A map object - a monster, item, decoration, player start, etc. Only the
 /// fields every format actually treats as always-present/meaningful are
-/// modeled as typed properties (matching UDB's own required/defaulted
-/// UDMF <c>thing</c> fields); everything else (id, pitch/roll/scale,
+/// modeled as typed properties; everything else (id, pitch/roll/scale,
 /// Hexen-style special/args, and every boolean flag) round-trips through
 /// <see cref="Fields"/> instead - see the Things plan for why this
 /// is enough for a faithful load-then-save without needing a translation

@@ -7,8 +7,7 @@ using Godot;
 /// specific WAD/map can auto-load on startup instead of going through
 /// <c>File &gt; Open Map...</c> every time - meant to be set once in
 /// Godot's own "Debug &gt; Customize Run Instances" dialog (its "Main Run
-/// Args" field) for faster manual testing, not a real UDB feature (UDB
-/// itself has no command-line map-loading either).
+/// Args" field) for faster manual testing.
 ///
 /// Checks both <see cref="OS.GetCmdlineUserArgs"/> (the args after a
 /// literal <c>--</c>/<c>++</c>, which is what a normal terminal launch or

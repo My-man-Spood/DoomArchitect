@@ -5,29 +5,23 @@ using DoomArchitect.Core.Configuration;
 using Godot;
 
 /// <summary>
-/// Browse and pick a linedef action, ported from UDB's real
-/// <c>ActionBrowserForm</c> - a filterable tree grouped by category
-/// (<see cref="CategoryOrder"/>), matching UDB's own real grouping rather
-/// than a single flat list. With the real GZDoom/Hexen action table now
-/// authored close to its full ~190-action breadth (see
-/// <c>Includes/ZDoomGeneric.cfg</c>), a flat list would mean scrolling
-/// through all of them to find one - real UDB avoids exactly this by
-/// grouping into category folders, collapsed by default so only the
+/// Browse and pick a linedef action - a filterable tree grouped by
+/// category (<see cref="CategoryOrder"/>) rather than a single flat list.
+/// With the GZDoom/Hexen action table now authored close to its full
+/// ~190-action breadth (see <c>Includes/ZDoomGeneric.cfg</c>), a flat list
+/// would mean scrolling through all of them to find one - grouping into
+/// category folders avoids that, collapsed by default so only the
 /// categories you actually expand (or that the live filter matches) show
-/// their actions. UDB's own real form also has a separate "Generalized"
-/// tab for Boom generalized specials - deliberately not built here, same
-/// reasoning as the Sector Special browser's own omitted Generalized
-/// Effects support.
+/// their actions. There's no separate "Generalized" tab for Boom
+/// generalized specials - deliberately not built, same reasoning as the
+/// Sector Special browser's own omitted Generalized Effects support.
 /// </summary>
 public partial class LinedefActionBrowserDialog : AcceptDialog
 {
 	/// <summary>
-	/// Real UDB category keys (verified against <c>Hexen_linedefs.cfg</c>'s
-	/// own top-level block names/titles), in that file's own real order,
-	/// paired with a short display title - these are plain taxonomy labels
-	/// ("Door", "Floor", ...), not creative prose, so reusing UDB's own
-	/// real category names here is the same kind of safe, objective reuse
-	/// as a UDMF field name.
+	/// Category keys (from <c>Hexen_linedefs.cfg</c>'s own top-level block
+	/// names/titles), in that file's own order, paired with a short
+	/// display title.
 	/// </summary>
 	private static readonly (string Key, string Title)[] CategoryOrder =
 	{

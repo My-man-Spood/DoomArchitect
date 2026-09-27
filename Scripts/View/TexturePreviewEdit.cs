@@ -3,21 +3,18 @@ using DoomArchitect.Rendering;
 using Godot;
 
 /// <summary>
-/// Ports UDB's real <c>ImageSelectorControl</c> shape exactly: a preview
-/// image with a small floating corner label showing the decoded texture's
-/// own real pixel dimensions (UDB's own real <c>labelSize</c>, verified
-/// directly against <c>ImageSelectorControl.cs</c>/<c>.Designer.cs</c> -
-/// top-left corner, dark semi-transparent background, small light text,
-/// "WIDTHxHEIGHT"), stacked vertically above a plain texture-name field -
-/// not the label+small-preview+field horizontal row this project
-/// originally used for every texture picker, which UDB's own real control
-/// never actually has (an earlier pass modeled it that way from a
-/// screenshot rather than the real control's own real layout, corrected
-/// here since it also made the preview uncomfortably small - freed from
-/// sharing a row with a caption label, the preview can be shown much
-/// bigger). Reused identically by every texture-picking field in this
-/// project (Sector's Floor/Ceiling, Linedef's Front/Back Upper/Middle/
-/// Lower) - previously duplicated ad hoc per dialog.
+/// A preview image with a small floating corner label showing the decoded
+/// texture's own real pixel dimensions (top-left corner, dark
+/// semi-transparent background, small light text, "WIDTHxHEIGHT"), stacked
+/// vertically above a plain texture-name field - not the
+/// label+small-preview+field horizontal row this project originally used
+/// for every texture picker (an earlier pass modeled it that way from a
+/// screenshot rather than getting the layout right, corrected here since
+/// it also made the preview uncomfortably small - freed from sharing a row
+/// with a caption label, the preview can be shown much bigger). Reused
+/// identically by every texture-picking field in this project (Sector's
+/// Floor/Ceiling, Linedef's Front/Back Upper/Middle/Lower) - previously
+/// duplicated ad hoc per dialog.
 ///
 /// Deliberately does not own texture *decoding* - a host dialog still
 /// decides wall vs. flat (<see cref="TextureIconCache.GetOrDecodeWallIcon"/>
@@ -30,11 +27,11 @@ using Godot;
 /// where textures come from and needs no reference to a
 /// <see cref="TextureIconCache"/> at all.
 ///
-/// UDB's real control also has a short/long-name toggle button
-/// (<c>togglefullname</c>) - deliberately not built here, matching this
-/// project's existing "no long-texture-name support" scope (texture names
-/// are always typed/stored as-is, no character-casing/truncation rules
-/// applied anywhere in this project yet).
+/// There's no short/long-name toggle button here - deliberately not
+/// built, matching this project's existing "no long-texture-name support"
+/// scope (texture names are always typed/stored as-is, no
+/// character-casing/truncation rules applied anywhere in this project
+/// yet).
 /// </summary>
 public partial class TexturePreviewEdit : VBoxContainer
 {
@@ -46,7 +43,7 @@ public partial class TexturePreviewEdit : VBoxContainer
 	/// <summary>Fires on user typing (proxied from the inner <see cref="LineEdit"/>) - matches <see cref="StepperLineEdit.TextChanged"/>'s own established shape.</summary>
 	public event Action<string> TextChanged;
 
-	/// <summary>Fires when the preview image itself is clicked - the host wires this to open <see cref="TextureBrowserDialog"/>, matching UDB's real "click the preview to browse" gesture.</summary>
+	/// <summary>Fires when the preview image itself is clicked - the host wires this to open <see cref="TextureBrowserDialog"/>.</summary>
 	public event Action PreviewPressed;
 
 	/// <summary><see cref="LineEdit.Text"/>'s setter is silent (no <see cref="TextChanged"/>), matching <see cref="StepperLineEdit.Text"/>'s own established real Godot behavior.</summary>
@@ -84,8 +81,7 @@ public partial class TexturePreviewEdit : VBoxContainer
 	/// Renders the given already-decoded texture (or a shared placeholder
 	/// for null, matching every other texture preview in this project) and
 	/// updates the corner size label from that texture's own real pixel
-	/// dimensions - never guessed or looked up separately, exactly matching
-	/// UDB's real <c>DisplayImageSize</c> reading the actual loaded image.
+	/// dimensions - never guessed or looked up separately.
 	/// <see cref="PanelContainer"/> has no parent <see cref="Container"/>
 	/// here (its parent, <see cref="_preview"/>, is a plain
 	/// <see cref="TextureButton"/>) to auto-size it to its own content, so

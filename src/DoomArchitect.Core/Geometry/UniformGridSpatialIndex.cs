@@ -11,9 +11,9 @@ namespace DoomArchitect.Core.Geometry;
 /// visiting the sequence of grid cells a line crosses, in order, without
 /// testing every cell in the grid.
 ///
-/// Deliberately simpler than UDB's own quadtree (<c>VisualBlockMap</c>):
-/// no recursive subdivision, no node-splitting logic, just a flat
-/// dictionary keyed by cell coordinates. This trades handling pathological
+/// Deliberately simpler than UDB's quadtree (<c>VisualBlockMap</c>): no
+/// recursive subdivision, no node-splitting logic, just a flat dictionary
+/// keyed by cell coordinates. This trades handling pathological
 /// density (a tiny cluster of geometry lost in a huge empty map) for a much
 /// smaller, easier-to-verify implementation - a reasonable trade for the
 /// fairly evenly-distributed geometry typical of real Doom maps. Swappable

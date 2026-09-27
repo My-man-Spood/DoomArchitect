@@ -9,10 +9,9 @@ public enum UdmfValueKind
 }
 
 /// <summary>
-/// One assignment's value, exactly as UDB's own parser resolves it: an
-/// integer, a double, a boolean, or a string - there is no separate
-/// "float" case (UDB's writer distinguishes float/double only for text
-/// formatting; the reader never produces a float).
+/// One assignment's value: an integer, a double, a boolean, or a string -
+/// there is no separate "float" case, since the writer only distinguishes
+/// float/double for text formatting and the reader never produces a float.
 /// </summary>
 public readonly struct UdmfValue
 {
@@ -45,8 +44,7 @@ public readonly struct UdmfValue
     /// int-typed value transparently (e.g. a vertex coordinate written as
     /// the bare integer <c>0</c> rather than <c>0.0</c>). This is
     /// one-directional - <see cref="AsLong"/>/<see cref="AsInt"/> do NOT
-    /// accept a double-kinded value in return, matching UDB's own
-    /// <c>UniversalEntry.ValidateType</c> exact-type-match check.
+    /// accept a double-kinded value in return; only a double field is lenient.
     /// </summary>
     public double AsDouble() => Kind switch
     {

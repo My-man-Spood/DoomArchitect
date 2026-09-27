@@ -26,8 +26,7 @@ public readonly record struct WallMeshResult(ArrayMesh Mesh, IReadOnlyList<strin
 /// pure math, no Godot) into an actual Godot mesh - each quad single-
 /// sided, wound so its outward face (and generated normal) points into
 /// whichever <see cref="Sidedef.Sector"/> that quad's own <see cref="WallSegment.Side"/>
-/// belongs to, matching UDB's own real single-sided-per-face wall
-/// rendering. Not double-sided the way <c>SectorMeshBuilder</c>'s
+/// belongs to - each face is single-sided. Not double-sided the way <c>SectorMeshBuilder</c>'s
 /// floor/ceiling meshes deliberately still are: a two-sided linedef's
 /// masked middle can carry two genuinely *different* textures at the
 /// exact same 3D position (front's own vs back's own) - <see cref="DoubleSidedMesh"/>
