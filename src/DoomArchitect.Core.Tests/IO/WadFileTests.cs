@@ -22,6 +22,32 @@ public class WadFileTests
     }
 
     [Fact]
+    public void FindByPath_BareLumpName_DelegatesToFindLump()
+    {
+        // A WAD has no real path hierarchy - a ZScript #include inside one
+        // just references another lump directly by name.
+        var bytes = WadTestBuilder.Build(("ZSCRIPT2", WadTestBuilder.TextLump("class Actor {}")));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var found = wad.FindByPath("ZSCRIPT2");
+
+        Assert.Equal("class Actor {}", System.Text.Encoding.ASCII.GetString(found!));
+    }
+
+    [Fact]
+    public void FindByPath_PathLikeIncludeString_StripsToTheBareLumpName()
+    {
+        var bytes = WadTestBuilder.Build(("ZSCRIPT2", WadTestBuilder.TextLump("class Actor {}")));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        // A nested path makes no sense for a WAD, but shouldn't crash -
+        // just strip it down to a bare title and try that.
+        var found = wad.FindByPath("some/path/ZSCRIPT2.txt");
+
+        Assert.Equal("class Actor {}", System.Text.Encoding.ASCII.GetString(found!));
+    }
+
+    [Fact]
     public void Read_InvalidIdentification_Throws()
     {
         var bytes = new byte[] { (byte)'X', (byte)'X', (byte)'X', (byte)'X', 0, 0, 0, 0, 0, 0, 0, 0 };

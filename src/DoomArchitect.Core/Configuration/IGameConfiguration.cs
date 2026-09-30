@@ -15,9 +15,20 @@ namespace DoomArchitect.Core.Configuration;
 /// same "plain taxonomy label" role <c>ActionInfo.Category</c> already
 /// plays for the linedef action browser.
 /// </summary>
+/// <summary>
+/// <paramref name="ClassName"/> is the real DECORATE/ZScript class this
+/// static entry represents (e.g. <c>"ZombieMan"</c>) - a mod's own actor
+/// that inherits from or replaces this name is how live actor discovery
+/// (see the ZDoom namespace) resolves properties/sprite it doesn't itself
+/// redeclare. Some entries have no real class at all (editor-only markers
+/// like player starts) and use UDB's own <c>$</c>-prefixed pseudo-class
+/// convention instead (e.g. <c>"$Player1Start"</c>) - never a real
+/// inheritable name, kept as-is rather than stripped since nothing here
+/// needs to treat it specially yet.
+/// </summary>
 public sealed record ThingTypeInfo(
     int DoomEdNum, string Title, string SpriteName, float Radius, float Height, bool Hangs,
-    bool ShowsDirection, int ColorIndex, string Category);
+    bool ShowsDirection, int ColorIndex, string Category, string ClassName);
 
 /// <summary>
 /// One argument slot (of the fixed 5, <c>arg0</c>-<c>arg4</c>) an action
@@ -43,6 +54,9 @@ public sealed record ArgumentEnumOption(long Value, string Title);
 public sealed record ActionInfo(int Number, string Title, string Category, IReadOnlyList<ArgumentInfo> Args);
 
 public sealed record SectorSpecialInfo(int Number, string Title);
+
+/// <summary>One entry from a real <c>skills</c> block (e.g. <c>3 = "Hurt me plenty";</c>) - the Test Map skill/monsters dropdown's own data source.</summary>
+public sealed record SkillInfo(int Number, string Title);
 
 /// <summary>One real per-sector UDMF boolean field (e.g. <c>silent</c>, <c>nofallingdamage</c>) - <see cref="Key"/> is the literal UDMF field name, read/written on a sector's <c>Fields</c> bag exactly like any other named field.</summary>
 public sealed record SectorFlagInfo(string Key, string Title);
@@ -102,7 +116,59 @@ public interface IGameConfiguration
     /// setting's default when a <c>.cfg</c> doesn't set it at all).
     /// </summary>
     bool MixTexturesAndFlats { get; }
+
+    /// <summary>Every skill level this configuration defines, sorted by number - Test Map's own skill/monsters dropdown data source.</summary>
+    IReadOnlyList<SkillInfo> GetSkills();
+
+    /// <summary>
+    /// The Test Map command-line template (e.g.
+    /// <c>-iwad "%WP" -skill "%S" -file "%AP" "%F" -warp %L1%L2 %NM</c>) -
+    /// see <see cref="TestLaunchCommandBuilder"/> for placeholder
+    /// substitution. Empty when the <c>.cfg</c> doesn't set
+    /// <c>testparameters</c> at all.
+    /// </summary>
+    string TestParameters { get; }
+
+    /// <summary>
+    /// The <c>.cfg</c> <c>testshortpaths</c> setting - real UDB converts
+    /// every path substituted into the Test Map command line to its
+    /// Windows 8.3 short form for source ports with poor long-path/space
+    /// handling. Read here but deliberately not applied: short paths are a
+    /// Windows filesystem concept with no equivalent on Linux/macOS, and
+    /// this project has no Windows-only code path to gate it behind yet -
+    /// a real, flagged gap rather than a silent no-op nobody could find.
+    /// </summary>
+    bool TestShortPaths { get; }
+
+    /// <summary>
+    /// The `.cfg` <c>decorategames</c> setting - a lowercase, space-free
+    /// engine-family tag (e.g. <c>"doom"</c>) a DECORATE/ZScript actor's own
+    /// `$game` property is checked against (see
+    /// <see cref="ZDoom.ActorStructure.CheckActorSupported"/>) to decide
+    /// whether it applies to this game at all - an actor with no `$game`
+    /// property always applies.
+    /// </summary>
+    string DecorateGames { get; }
+
+    /// <summary>
+    /// Real engine archives (e.g. <c>gzdoom.pk3</c>) this configuration
+    /// expects to be present among a map's own resources - see
+    /// <see cref="RequiredArchive"/>. Empty for configs with no such
+    /// requirement (vanilla Doom/Doom2).
+    /// </summary>
+    IReadOnlyList<RequiredArchive> GetRequiredArchives();
 }
+
+/// <summary>
+/// One `.cfg` `requiredarchives` entry (e.g. `gzdoom.pk3`) - a content
+/// fingerprint (<see cref="Entries"/>) used to recognize a specific
+/// resource by what it actually contains, not its file name. Verified
+/// against a resource via <see cref="ZDoom.RequiredArchiveDetector"/>.
+/// </summary>
+public sealed record RequiredArchive(string Id, string FileName, bool ExcludeFromTesting, IReadOnlyList<RequiredArchiveEntry> Entries);
+
+/// <summary>One fingerprint condition - a resource must define a ZScript/DECORATE class named <see cref="ClassName"/> and/or contain a lump/file named <see cref="LumpName"/>. Exactly one of the two is set per entry.</summary>
+public sealed record RequiredArchiveEntry(string? ClassName, string? LumpName);
 
 public enum GameConfigurationKind
 {

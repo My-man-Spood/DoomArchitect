@@ -6,6 +6,7 @@ using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
+using DoomArchitect.Core.ZDoom;
 using DoomArchitect.Settings;
 using Godot;
 
@@ -79,6 +80,8 @@ public partial class OpenMapMenu : PanelContainer
 	private MapData _currentMapData;
 	private string _currentNamespace;
 	private IReadOnlyList<UdmfBlock> _currentUnknownBlocks;
+	private GameConfigurationKind _currentGameConfigurationKind;
+	private IReadOnlyList<string> _currentResourcePaths = Array.Empty<string>();
 
 	// The chosen Save As destination while the "this file already exists"
 	// confirmation is showing - set by OnSaveFileSelected, consumed (and
@@ -127,6 +130,25 @@ public partial class OpenMapMenu : PanelContainer
 		_newMapDialog = GD.Load<PackedScene>("res://Scenes/UI/NewMapDialog.tscn").Instantiate<NewMapDialog>();
 		_newMapDialog.MapNameEntered += OnNewMapNameEntered;
 		AddChild(_newMapDialog);
+	}
+
+	/// <summary>The currently loaded map's own name/game configuration/resource paths - null/empty when nothing's loaded, same "no map yet" case <see cref="SaveMap"/> itself already guards against.</summary>
+	public string CurrentMapName => _currentMapName;
+
+	public GameConfigurationKind CurrentGameConfigurationKind => _currentGameConfigurationKind;
+
+	public IReadOnlyList<string> CurrentResourcePaths => _currentResourcePaths;
+
+	/// <summary>
+	/// The current map's own real saveable bytes, built with the exact same
+	/// construction <see cref="WriteMapToFile"/> uses for a genuine save -
+	/// Test Map's own temp-WAD content, without touching disk or any of
+	/// this class's own "current file" state the way an actual save does.
+	/// </summary>
+	public byte[] BuildCurrentMapBytes()
+	{
+		var document = new UdmfDocument(_currentMapData, _currentNamespace, _currentUnknownBlocks, Array.Empty<string>());
+		return MapFileSaver.SaveUdmfMap(_currentWad?.Lumps, document, _currentMapName);
 	}
 
 	public void ShowOpenFileDialog() => _fileDialog.PopupCentered();
@@ -342,8 +364,13 @@ public partial class OpenMapMenu : PanelContainer
 		// A brand-new map (New Map) has no backing WAD of its own yet to
 		// append as a resource container - nothing to add in that case.
 		if (_pendingWad != null) resourceContainers.Add(_pendingWad);
-		var textures = TextureSet.Load(new ResourceSet(resourceContainers));
-		var gameConfiguration = GameConfigurations.Get(kind);
+		var resources = new ResourceSet(resourceContainers);
+		var textures = TextureSet.Load(resources);
+		// Layers in whatever the map's own resources' ZSCRIPT/DECORATE/
+		// MAPINFO define on top of the static, `.cfg`-driven game
+		// configuration - so a mod's own custom actors show up as
+		// placeable Things instead of only the static roster.
+		var gameConfiguration = ResourceActorScanner.Scan(GameConfigurations.Get(kind), resources);
 
 		// Paired up in the same order the containers were appended above -
 		// the map's own file (no saved path entry of its own) always last,
@@ -367,6 +394,12 @@ public partial class OpenMapMenu : PanelContainer
 			_currentNamespace = _pendingNamespace ?? DefaultNamespaceFor(kind);
 			_currentUnknownBlocks = _pendingUnknownBlocks ?? Array.Empty<UdmfBlock>();
 		}
+
+		// Applies to both branches - "Map Options..." on the already-loaded
+		// map can change its game configuration/resources too, not just a
+		// freshly opened one.
+		_currentGameConfigurationKind = kind;
+		_currentResourcePaths = resourcePaths;
 
 		// A brand-new map has no WAD path to key .dbs settings off of yet -
 		// that persistence only starts to make sense once it's been saved

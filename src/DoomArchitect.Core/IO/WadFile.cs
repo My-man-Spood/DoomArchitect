@@ -82,6 +82,9 @@ public sealed class WadFile : IResourceContainer
     public WadLump? FindLump(string name) =>
         Lumps.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>A WAD has no real path hierarchy - a ZScript `#include` inside one references another lump directly by (bare) name, so this just strips any path/extension and delegates to <see cref="FindLump"/>.</summary>
+    public byte[]? FindByPath(string path) => FindLump(Path.GetFileNameWithoutExtension(path))?.Data;
+
     /// <summary>
     /// Every lump strictly between the first <paramref name="startMarker"/>
     /// and the next <paramref name="endMarker"/> that follows it (e.g.

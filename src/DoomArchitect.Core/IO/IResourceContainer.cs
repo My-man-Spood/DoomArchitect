@@ -17,4 +17,15 @@ public interface IResourceContainer
 
     /// <summary>Every entry belonging to the given namespace, in container-internal order - a WAD's marker-bounded lump range, or a PK3 namespace folder's files.</summary>
     IReadOnlyList<WadLump> FindNamespaceLumps(ResourceNamespace ns);
+
+    /// <summary>
+    /// Resolves a literal `#include`-style path (e.g. a ZScript
+    /// `#include "zscript/actors/actor.zs"`) to that entry's raw bytes, or
+    /// null if it can't be found - the one lookup <see cref="FindLump"/>
+    /// deliberately doesn't cover, since that one is root/namespace-only by
+    /// design. A WAD has no real path hierarchy at all, so it treats
+    /// <paramref name="path"/> as a bare lump name (its own real ZScript
+    /// include convention); a PK3 resolves the full nested path.
+    /// </summary>
+    byte[]? FindByPath(string path);
 }

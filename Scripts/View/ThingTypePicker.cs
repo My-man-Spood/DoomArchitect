@@ -39,12 +39,12 @@ public partial class ThingTypePicker : VBoxContainer
 	/// category this project's own bundled thing-type data actually
 	/// populates (vanilla Doom/Doom2 plus the ZDoom/GZDoom/Boom
 	/// additions - see <c>GZDoomThings.cfg</c>/<c>ZDoomThings.cfg</c>/
-	/// <c>BoomThings.cfg</c>). A category key missing from this list would
-	/// be silently invisible in the tree (see <see cref="RefreshList"/>'s
-	/// own <c>byCategory[key]</c> lookup) even though its entries loaded
-	/// fine into <see cref="Core.Configuration.IGameConfiguration.GetThingTypes"/> -
-	/// this list is the one place that must stay in sync whenever the
-	/// bundled thing-type category set grows.
+	/// <c>BoomThings.cfg</c>) - this list is the one place that must stay
+	/// in sync whenever the bundled thing-type category set grows. A
+	/// category *not* in this list (a live-discovered actor's own
+	/// `$category`/`#region` string, see <see cref="ResourceActorScanner"/>)
+	/// isn't dropped - <see cref="RefreshList"/> gives each of those its
+	/// own folder afterward instead, titled with that raw category string.
 	/// </summary>
 	private static readonly (string Key, string Title)[] CategoryOrder =
 	{
@@ -189,29 +189,48 @@ public partial class ThingTypePicker : VBoxContainer
 
 		foreach (var (key, title) in CategoryOrder)
 		{
-			var types = byCategory[key]
-				.Where(t => !filtering || $"{t.DoomEdNum} {t.Title} {title}".Contains(filter, StringComparison.OrdinalIgnoreCase))
-				.OrderBy(t => t.DoomEdNum)
-				.ToList();
-			if (types.Count == 0) continue;
+			AddCategoryFolder(root, byCategory[key], title, filtering, filter);
+		}
 
-			var categoryItem = _tree.CreateItem(root);
-			categoryItem.SetText(1, title);
-			categoryItem.SetSelectable(0, false);
-			categoryItem.SetSelectable(1, false);
-			categoryItem.Collapsed = !filtering;
-
-			foreach (var type in types)
-			{
-				var item = _tree.CreateItem(categoryItem);
-				item.SetIcon(0, _spriteIconCache?.GetSpriteIcon(type.SpriteName) ?? PlaceholderIcon.Instance);
-				item.SetIconMaxWidth(0, TreeIconMaxSize);
-				item.SetText(1, $"{type.DoomEdNum}: {type.Title}");
-				_typeByTreeItem[item] = type;
-			}
+		// A live-discovered actor (see ResourceActorScanner) can declare
+		// any category string at all ($category, or a #region path) - one
+		// that doesn't match CategoryOrder would otherwise be silently
+		// invisible here despite loading fine into GetThingTypes(). Rather
+		// than dropping it or merging every such actor into one generic
+		// "Custom" bucket, each distinct unmatched category string gets its
+		// own folder, titled with that string - preserving whatever real
+		// grouping the mod itself declared.
+		var handledKeys = new HashSet<string>(CategoryOrder.Select(c => c.Key), StringComparer.OrdinalIgnoreCase);
+		foreach (var group in byCategory.Where(g => !handledKeys.Contains(g.Key)).OrderBy(g => g.Key, StringComparer.OrdinalIgnoreCase))
+		{
+			AddCategoryFolder(root, group, group.Key, filtering, filter);
 		}
 
 		SyncTreeAndPreviewFromTypeId(previousTypeId);
+	}
+
+	private void AddCategoryFolder(TreeItem root, IEnumerable<ThingTypeInfo> candidates, string title, bool filtering, string filter)
+	{
+		var types = candidates
+			.Where(t => !filtering || $"{t.DoomEdNum} {t.Title} {title}".Contains(filter, StringComparison.OrdinalIgnoreCase))
+			.OrderBy(t => t.DoomEdNum)
+			.ToList();
+		if (types.Count == 0) return;
+
+		var categoryItem = _tree.CreateItem(root);
+		categoryItem.SetText(1, title);
+		categoryItem.SetSelectable(0, false);
+		categoryItem.SetSelectable(1, false);
+		categoryItem.Collapsed = !filtering;
+
+		foreach (var type in types)
+		{
+			var item = _tree.CreateItem(categoryItem);
+			item.SetIcon(0, _spriteIconCache?.GetSpriteIcon(type.SpriteName) ?? PlaceholderIcon.Instance);
+			item.SetIconMaxWidth(0, TreeIconMaxSize);
+			item.SetText(1, $"{type.DoomEdNum}: {type.Title}");
+			_typeByTreeItem[item] = type;
+		}
 	}
 
 	private void OnTreeItemSelected()

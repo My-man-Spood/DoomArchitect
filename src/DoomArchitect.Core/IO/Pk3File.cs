@@ -97,6 +97,15 @@ public sealed class Pk3File : IResourceContainer, IDisposable
         return null;
     }
 
+    /// <summary>An exact, normalized full-path match (e.g. `zscript/actors/actor.zs`) - falls back to a root-level title match (ignoring the query's own extension) for an include written as a bare title rather than a full path.</summary>
+    public byte[]? FindByPath(string path)
+    {
+        var normalized = Normalize(path);
+        if (_entriesByPath.TryGetValue(normalized, out var entry)) return ReadLump(path, entry).Data;
+
+        return FindLump(System.IO.Path.GetFileNameWithoutExtension(path))?.Data;
+    }
+
     public IReadOnlyList<WadLump> FindNamespaceLumps(ResourceNamespace ns)
     {
         var folder = FolderFor(ns) + "/";

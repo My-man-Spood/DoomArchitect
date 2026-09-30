@@ -26,7 +26,36 @@ public static class GameConfigurationLoader
             LoadFlagInfoDictionary(document.FindBlock("linedefactivations")),
             LoadFlagInfoDictionary(document.FindBlock("thingflags")),
             LoadDamageTypes(document),
-            document.Find("mixtexturesflats")?.AsBool() ?? false);
+            document.Find("mixtexturesflats")?.AsBool() ?? false,
+            LoadSkills(document.FindBlock("skills")),
+            document.Find("testparameters")?.AsString() ?? string.Empty,
+            document.Find("testshortpaths")?.AsBool() ?? false,
+            document.Find("decorategames")?.AsString() ?? string.Empty,
+            LoadRequiredArchives(document.FindBlock("requiredarchives")));
+    }
+
+    private static List<RequiredArchive> LoadRequiredArchives(CfgBlock? requiredArchives)
+    {
+        var result = new List<RequiredArchive>();
+        if (requiredArchives == null) return result;
+
+        foreach (var archive in requiredArchives.Blocks)
+        {
+            var fileName = archive.Find("filename")?.AsString() ?? string.Empty;
+            var excludeFromTesting = archive.Find("need_exclude")?.AsBool() ?? true;
+
+            var entries = new List<RequiredArchiveEntry>();
+            foreach (var entry in archive.Blocks)
+            {
+                var className = entry.Find("class")?.AsString();
+                var lumpName = entry.Find("lump")?.AsString();
+                if (className != null || lumpName != null) entries.Add(new RequiredArchiveEntry(className, lumpName));
+            }
+
+            result.Add(new RequiredArchive(archive.Key, fileName, excludeFromTesting, entries));
+        }
+
+        return result;
     }
 
     private static Dictionary<int, ThingTypeInfo> LoadThingTypes(CfgBlock? thingTypes)
@@ -50,8 +79,9 @@ public static class GameConfigurationLoader
                 // always a directional icon, a neutral color.
                 var showsDirection = entry.Find("arrow")?.AsBool() ?? category.Find("arrow")?.AsBool() ?? true;
                 var colorIndex = entry.Find("color")?.AsInt() ?? category.Find("color")?.AsInt() ?? 0;
+                var className = entry.Find("class")?.AsString() ?? string.Empty;
 
-                result[doomEdNum] = new ThingTypeInfo(doomEdNum, title, sprite, width, height, hangs, showsDirection, colorIndex, category.Key);
+                result[doomEdNum] = new ThingTypeInfo(doomEdNum, title, sprite, width, height, hangs, showsDirection, colorIndex, category.Key, className);
             }
         }
 
@@ -170,6 +200,21 @@ public static class GameConfigurationLoader
         return result;
     }
 
+    /// <summary><c>skills</c> is a flat <c>number = "title"</c> dictionary like <c>sectortypes</c>, but order matters here (the Test Map dropdown lists them low-to-high) so this mirrors <see cref="LoadSectorSpecials"/> rather than <see cref="LoadFlagInfoDictionary"/>.</summary>
+    private static Dictionary<int, SkillInfo> LoadSkills(CfgBlock? skills)
+    {
+        var result = new Dictionary<int, SkillInfo>();
+        if (skills == null) return result;
+
+        foreach (var assignment in skills.Assignments)
+        {
+            if (!int.TryParse(assignment.Key, out var number)) continue;
+            result[number] = new SkillInfo(number, assignment.Value.AsString());
+        }
+
+        return result;
+    }
+
     /// <summary>A plain space-separated scalar setting at the document root (<c>damagetypes = "Fire Slime ...";</c>), not a block.</summary>
     private static List<string> LoadDamageTypes(CfgBlock document)
     {
@@ -190,6 +235,11 @@ public static class GameConfigurationLoader
         private readonly Dictionary<string, SectorFlagInfo> _thingFlags;
         private readonly List<string> _damageTypes;
         private readonly bool _mixTexturesAndFlats;
+        private readonly Dictionary<int, SkillInfo> _skills;
+        private readonly string _testParameters;
+        private readonly bool _testShortPaths;
+        private readonly string _decorateGames;
+        private readonly List<RequiredArchive> _requiredArchives;
 
         public ParsedGameConfiguration(
             Dictionary<int, ThingTypeInfo> thingTypes,
@@ -200,7 +250,12 @@ public static class GameConfigurationLoader
             Dictionary<string, SectorFlagInfo> linedefActivations,
             Dictionary<string, SectorFlagInfo> thingFlags,
             List<string> damageTypes,
-            bool mixTexturesAndFlats)
+            bool mixTexturesAndFlats,
+            Dictionary<int, SkillInfo> skills,
+            string testParameters,
+            bool testShortPaths,
+            string decorateGames,
+            List<RequiredArchive> requiredArchives)
         {
             _thingTypes = thingTypes;
             _linedefActions = linedefActions;
@@ -211,6 +266,11 @@ public static class GameConfigurationLoader
             _thingFlags = thingFlags;
             _damageTypes = damageTypes;
             _mixTexturesAndFlats = mixTexturesAndFlats;
+            _skills = skills;
+            _testParameters = testParameters;
+            _testShortPaths = testShortPaths;
+            _decorateGames = decorateGames;
+            _requiredArchives = requiredArchives;
         }
 
         public ThingTypeInfo? GetThingType(int doomEdNum) => _thingTypes.GetValueOrDefault(doomEdNum);
@@ -236,5 +296,15 @@ public static class GameConfigurationLoader
         public IReadOnlyList<string> GetDamageTypes() => _damageTypes;
 
         public bool MixTexturesAndFlats => _mixTexturesAndFlats;
+
+        public IReadOnlyList<SkillInfo> GetSkills() => _skills.Values.OrderBy(s => s.Number).ToList();
+
+        public string TestParameters => _testParameters;
+
+        public bool TestShortPaths => _testShortPaths;
+
+        public string DecorateGames => _decorateGames;
+
+        public IReadOnlyList<RequiredArchive> GetRequiredArchives() => _requiredArchives;
     }
 }

@@ -5,6 +5,34 @@ namespace DoomArchitect.Core.Tests.IO;
 public class Pk3FileTests
 {
     [Fact]
+    public void FindByPath_ExactNestedPath_MatchesRegardlessOfCase()
+    {
+        var pk3 = Pk3TestBuilder.Build(("zscript/actors/actor.zs", "class Actor {}"u8.ToArray()));
+
+        var bytes = pk3.FindByPath("ZScript/Actors/Actor.zs");
+
+        Assert.Equal("class Actor {}", System.Text.Encoding.ASCII.GetString(bytes!));
+    }
+
+    [Fact]
+    public void FindByPath_BareTitle_FallsBackToARootEntryMatchByTitle()
+    {
+        var pk3 = Pk3TestBuilder.Build(("zscript.txt", "#include \"actor.zs\""u8.ToArray()));
+
+        var bytes = pk3.FindByPath("zscript");
+
+        Assert.NotNull(bytes);
+    }
+
+    [Fact]
+    public void FindByPath_NotFound_ReturnsNull()
+    {
+        var pk3 = Pk3TestBuilder.Build(("zscript.txt", new byte[] { 1 }));
+
+        Assert.Null(pk3.FindByPath("does/not/exist.zs"));
+    }
+
+    [Fact]
     public void FindLump_RootEntry_MatchesByTitleIgnoringExtension()
     {
         var pk3 = Pk3TestBuilder.Build(("PLAYPAL", new byte[] { 1, 2, 3 }));

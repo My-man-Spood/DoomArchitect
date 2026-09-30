@@ -37,6 +37,18 @@ public class GameConfigurationLoaderTests
         Assert.Equal("POSSA2A8", formerHuman.SpriteName);
         Assert.Equal(20f, formerHuman.Radius);
         Assert.Equal(56f, formerHuman.Height); // inherited from the "monsters" category default, not restated per entry
+        Assert.Equal("ZombieMan", formerHuman.ClassName);
+    }
+
+    [Fact]
+    public void Doom_PlayerStart_ClassNameIsUdbsOwnEditorOnlyPseudoClass()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        var playerStart = doom.GetThingType(1);
+
+        Assert.NotNull(playerStart);
+        Assert.Equal("$Player1Start", playerStart!.ClassName);
     }
 
     [Fact]
@@ -481,5 +493,74 @@ public class GameConfigurationLoaderTests
 
         Assert.Contains(activations, a => a.Key == "playercross");
         Assert.Contains(activations, a => a.Key == "repeatspecial");
+    }
+
+    [Fact]
+    public void Doom_GetSkills_ReturnsTheFiveRealVanillaSkillsInOrder()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        var skills = doom.GetSkills();
+
+        Assert.Equal(new[] { 1, 2, 3, 4, 5 }, skills.Select(s => s.Number));
+        Assert.Contains(skills, s => s.Number == 3 && s.Title == "Hurt me plenty");
+        Assert.Contains(skills, s => s.Number == 5 && s.Title == "Nightmare!");
+    }
+
+    /// <summary>
+    /// Doom.cfg's own real testparameters come from Test_params.cfg's
+    /// "vanilla_exmx" block (included after Doom_common.cfg's own default
+    /// "vanilla_mapxx", overriding it - Doom is the one config using ExMy
+    /// naming) - a two-number warp, not the concatenated single-number form
+    /// Doom2/GZDoom use.
+    /// </summary>
+    [Fact]
+    public void Doom_TestParameters_UsesTheExMyWarpTemplate()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        Assert.Contains("-warp %L1 %L2", doom.TestParameters);
+        Assert.True(doom.TestShortPaths);
+    }
+
+    [Fact]
+    public void Doom2_TestParameters_UsesTheConcatenatedMapxxWarpTemplate()
+    {
+        var doom2 = GameConfigurations.Get(GameConfigurationKind.Doom2);
+
+        Assert.Contains("-warp %L1%L2", doom2.TestParameters);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_TestParameters_UsesTheModernMapCommandTemplate()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        Assert.Contains("+map %L", gzdoom.TestParameters);
+    }
+
+    [Fact]
+    public void GZDoomDoom2UDMF_RequiredArchives_ReadsTheRealGzdoomPk3Fingerprint()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var archives = gzdoom.GetRequiredArchives();
+
+        Assert.Single(archives);
+        var gzdoomPk3 = archives[0];
+        Assert.Equal("gzdoom", gzdoomPk3.Id);
+        Assert.Equal("gzdoom.pk3", gzdoomPk3.FileName);
+        Assert.True(gzdoomPk3.ExcludeFromTesting);
+        Assert.Equal(2, gzdoomPk3.Entries.Count);
+        Assert.Contains(gzdoomPk3.Entries, e => e.ClassName == "actor");
+        Assert.Contains(gzdoomPk3.Entries, e => e.LumpName == "x11r6rgb.txt");
+    }
+
+    [Fact]
+    public void Doom_RequiredArchives_IsEmpty()
+    {
+        var doom = GameConfigurations.Get(GameConfigurationKind.Doom);
+
+        Assert.Empty(doom.GetRequiredArchives());
     }
 }
