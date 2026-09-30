@@ -38,7 +38,10 @@ public partial class MapView : Node3D
 	private MapOverlay _overlay;
 	private ModeToolbar _modeToolbar;
 	private GridToolbar _gridToolbar;
+	private TestMapToolbar _testMapToolbar;
 	private StatusBar _statusBar;
+	private OpenMapMenu _openMapMenu;
+	private MainMenuBar _mainMenuBar;
 	private MapData _map;
 	private TextureCache _textureCache;
 	private TextureSet _textureSet;
@@ -97,10 +100,15 @@ public partial class MapView : Node3D
 		_statusBar = GetNode<StatusBar>("UI/StatusBar");
 		_statusBar.Overlay = _overlay;
 
-		var openMapMenu = GetNode<OpenMapMenu>("UI/OpenMapMenu");
-		openMapMenu.MapLoaded += LoadMap;
-		openMapMenu.MapResourcesChanged += RefreshResources;
-		GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar").Initialize(openMapMenu, _overlay);
+		_openMapMenu = GetNode<OpenMapMenu>("UI/OpenMapMenu");
+		_openMapMenu.MapLoaded += LoadMap;
+		_openMapMenu.MapResourcesChanged += RefreshResources;
+		_mainMenuBar = GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar");
+		_mainMenuBar.Initialize(_openMapMenu, _overlay);
+
+		_testMapToolbar = GetNode<TestMapToolbar>("UI/TopBar/ToolbarMargin/TopToolbar/TestMapToolbar");
+		_testMapToolbar.Overlay = _overlay;
+		_testMapToolbar.MainMenuBar = _mainMenuBar;
 
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.
@@ -153,7 +161,7 @@ public partial class MapView : Node3D
 
 		if (CommandLineOptions.TryGetFileAndMap(out var cliFilePath, out var cliMapName))
 		{
-			openMapMenu.LoadFromCommandLine(cliFilePath, cliMapName);
+			_openMapMenu.LoadFromCommandLine(cliFilePath, cliMapName);
 		}
 	}
 
@@ -1230,6 +1238,7 @@ public partial class MapView : Node3D
 			return;
 		}
 
+		if (key.IsActionPressed("test_map")) { _mainMenuBar.TestMap(); return; }
 		if (key.IsActionPressed("mode_vertices")) { _overlay.Mode = EditMode.Vertices; return; }
 		if (key.IsActionPressed("mode_linedefs")) { _overlay.Mode = EditMode.Linedefs; return; }
 		if (key.IsActionPressed("mode_sectors")) { _overlay.Mode = EditMode.Sectors; return; }

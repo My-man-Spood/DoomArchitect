@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
+using DoomArchitect.Core.ZDoom;
 using Godot;
 
 /// <summary>
@@ -25,8 +27,27 @@ public partial class ResourceListEditor : VBoxContainer
 	private ItemList _list;
 	private FileDialog _addFileDialog;
 	private AcceptDialog _errorDialog;
+	private Label _warningsLabel;
 
 	private readonly List<ResourceEntry> _resources = new();
+	private IGameConfiguration _gameConfiguration;
+
+	/// <summary>
+	/// Which game configuration's own <see cref="IGameConfiguration.GetRequiredArchives"/>
+	/// the warning below checks against - null skips the check entirely
+	/// (e.g. before a caller has resolved one yet). Setting this re-checks
+	/// immediately, so switching game configurations with resources already
+	/// listed updates the warning right away.
+	/// </summary>
+	public IGameConfiguration GameConfiguration
+	{
+		get => _gameConfiguration;
+		set
+		{
+			_gameConfiguration = value;
+			UpdateWarnings();
+		}
+	}
 
 	public override void _Ready()
 	{
@@ -36,6 +57,7 @@ public partial class ResourceListEditor : VBoxContainer
 		var removeButton = GetNode<Button>("ButtonsRow/RemoveButton");
 		_addFileDialog = GetNode<FileDialog>("AddFileDialog");
 		_errorDialog = GetNode<AcceptDialog>("ErrorDialog");
+		_warningsLabel = GetNode<Label>("WarningsLabel");
 
 		_hintLabel.Text = HintText;
 		addButton.Pressed += () => _addFileDialog.PopupCentered();
@@ -99,6 +121,32 @@ public partial class ResourceListEditor : VBoxContainer
 	{
 		_list.Clear();
 		foreach (var resource in _resources) _list.AddItem(Path.GetFileName(resource.Path));
+		UpdateWarnings();
+	}
+
+	/// <summary>
+	/// One line per <see cref="IGameConfiguration.GetRequiredArchives"/>
+	/// entry that nothing in the current list actually satisfies (by real
+	/// content, via <see cref="RequiredArchiveDetector"/> - not by file
+	/// name) - matches UDB's own real "a resource archive is required...
+	/// but not present" warning.
+	/// </summary>
+	private void UpdateWarnings()
+	{
+		if (_warningsLabel == null) return; // not _Ready yet - GameConfiguration's setter can run before then
+
+		var lines = new List<string>();
+		if (_gameConfiguration != null)
+		{
+			foreach (var archive in _gameConfiguration.GetRequiredArchives())
+			{
+				var found = _resources.Any(r => RequiredArchiveDetector.Matches(archive, r.Container));
+				if (!found) lines.Add($"A resource archive is required for this game configuration, but not present: \"{archive.FileName}\".");
+			}
+		}
+
+		_warningsLabel.Text = string.Join("\n", lines);
+		_warningsLabel.Visible = lines.Count > 0;
 	}
 
 	private void ShowError(string message)

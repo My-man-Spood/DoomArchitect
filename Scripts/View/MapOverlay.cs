@@ -199,6 +199,11 @@ public partial class MapOverlay : Control
 	/// </summary>
 	internal int LastUsedThingType { get; set; } = CreateThingCommand.DefaultType;
 
+	/// <summary>Test Map's own last-picked skill/monsters choice (Map menu's skill submenu, F9 reuses it) - session-only, same reasoning as <see cref="LastUsedThingType"/>.</summary>
+	internal int LastTestSkill { get; set; } = 3;
+
+	internal bool LastTestNoMonsters { get; set; }
+
 	public float GridSize
 	{
 		get => _grid.GridSize;

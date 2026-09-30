@@ -29,10 +29,15 @@ public partial class MapOptionsDialog : AcceptDialog
 		_resourceListEditor = GetNode<ResourceListEditor>("Container/ResourceListEditor");
 		_resourceListEditor.HintText =
 			"Additional resources (e.g. the IWAD, or a PK3 like gzdoom.pk3) - lower items override higher ones, this map's own file always wins.";
+
+		_gameConfigOption.ItemSelected += id => _resourceListEditor.GameConfiguration = GameConfigurations.Get(Kinds[(int)id]);
 	}
 
-	public void SetGameConfiguration(GameConfigurationKind kind) =>
+	public void SetGameConfiguration(GameConfigurationKind kind)
+	{
 		_gameConfigOption.Selected = Array.IndexOf(Kinds, kind);
+		_resourceListEditor.GameConfiguration = GameConfigurations.Get(kind);
+	}
 
 	public GameConfigurationKind GetGameConfiguration() => Kinds[_gameConfigOption.Selected];
 

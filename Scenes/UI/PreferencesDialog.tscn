@@ -3,6 +3,7 @@
 [ext_resource type="Script" path="res://Scripts/View/PreferencesDialog.cs" id="1"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/ResourceListEditor.tscn" id="2"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/KeybindsEditor.tscn" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/TestEnginesEditor.tscn" id="4"]
 
 [node name="PreferencesDialog" type="AcceptDialog"]
 title = "Preferences"
@@ -24,4 +25,7 @@ custom_minimum_size = Vector2(140, 200)
 layout_mode = 2
 
 [node name="KeybindsEditor" parent="Tabs" instance=ExtResource("3")]
+layout_mode = 2
+
+[node name="TestEnginesEditor" parent="Tabs" instance=ExtResource("4")]
 layout_mode = 2

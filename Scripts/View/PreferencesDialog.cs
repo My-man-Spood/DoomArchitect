@@ -9,11 +9,13 @@ using Godot;
 /// set of pages: "Game Configurations" (a list of configurations on one
 /// side, a single shared details area on the other that swaps to show
 /// whichever one is currently selected, rather than duplicating the same
-/// fields once per configuration) and "Keybinds" (<see cref="KeybindsEditor"/>).
-/// Switching selection within the Game Configurations
-/// tab captures whatever's currently in the details area into an in-memory
-/// working copy first (so it isn't lost), and only writes to disk - and
-/// live-applies any rebound keys - when the dialog is actually confirmed.
+/// fields once per configuration), "Keybinds" (<see cref="KeybindsEditor"/>),
+/// and "Test Engines" (<see cref="TestEnginesEditor"/>, Test Map's own
+/// per-game-configuration source-port profiles). Switching selection
+/// within the Game Configurations tab captures whatever's currently in the
+/// details area into an in-memory working copy first (so it isn't lost),
+/// and only writes to disk - and live-applies any rebound keys - when the
+/// dialog is actually confirmed.
 /// </summary>
 public partial class PreferencesDialog : AcceptDialog
 {
@@ -22,6 +24,7 @@ public partial class PreferencesDialog : AcceptDialog
 	private ItemList _configList;
 	private ResourceListEditor _resourceListEditor;
 	private KeybindsEditor _keybindsEditor;
+	private TestEnginesEditor _testEnginesEditor;
 
 	private AppSettings _workingSettings;
 	private int _selectedIndex;
@@ -31,11 +34,13 @@ public partial class PreferencesDialog : AcceptDialog
 		var tabs = GetNode<TabContainer>("Tabs");
 		tabs.SetTabTitle(0, "Game Configurations");
 		tabs.SetTabTitle(1, "Keybinds");
+		tabs.SetTabTitle(2, "Test Engines");
 
 		_configList = GetNode<ItemList>("Tabs/Container/ConfigList");
 		_resourceListEditor = GetNode<ResourceListEditor>("Tabs/Container/ResourceListEditor");
 		_resourceListEditor.HintText = "Default resources for this game (e.g. its IWAD) - pre-fills new maps for it.";
 		_keybindsEditor = GetNode<KeybindsEditor>("Tabs/KeybindsEditor");
+		_testEnginesEditor = GetNode<TestEnginesEditor>("Tabs/TestEnginesEditor");
 
 		foreach (var kind in Kinds) _configList.AddItem(kind.ToString());
 		_configList.ItemSelected += OnConfigSelected;
@@ -49,8 +54,10 @@ public partial class PreferencesDialog : AcceptDialog
 		_workingSettings = AppSettingsFile.Load();
 		_selectedIndex = 0;
 		_configList.Select(0);
+		_resourceListEditor.GameConfiguration = GameConfigurations.Get(Kinds[0]);
 		_resourceListEditor.SetResourcePaths(_workingSettings.GetDefaultResources(Kinds[0]));
 		_keybindsEditor.Load(_workingSettings.GetKeyBindingOverrides());
+		_testEnginesEditor.Load(_workingSettings);
 		PopupCentered();
 	}
 
@@ -58,6 +65,7 @@ public partial class PreferencesDialog : AcceptDialog
 	{
 		CaptureCurrentSelection();
 		_selectedIndex = (int)index;
+		_resourceListEditor.GameConfiguration = GameConfigurations.Get(Kinds[_selectedIndex]);
 		_resourceListEditor.SetResourcePaths(_workingSettings.GetDefaultResources(Kinds[_selectedIndex]));
 	}
 
@@ -78,6 +86,8 @@ public partial class PreferencesDialog : AcceptDialog
 		{
 			_workingSettings = _workingSettings.WithKeyBindingOverride(action, binding);
 		}
+
+		_workingSettings = _testEnginesEditor.Apply(_workingSettings);
 
 		AppSettingsFile.Save(_workingSettings);
 

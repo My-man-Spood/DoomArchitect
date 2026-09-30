@@ -6,10 +6,12 @@ namespace DoomArchitect.Core.Configuration;
 /// DoomArchitect's own global, app-wide settings - not tied to any
 /// specific map/WAD (see <see cref="MapSettings"/> for that): a default
 /// resource list per game configuration (so a user only has to point at
-/// their IWAD once rather than for every single map of the same game) and
-/// a user's own keybind overrides (see <see cref="KeyBindingOverrides"/>)
-/// - minus the settings this project doesn't have an equivalent concept
-/// for yet (no UI theme/plugin settings live here).
+/// their IWAD once rather than for every single map of the same game),
+/// that same per-game-configuration keying for a user's own named Test Map
+/// engines (<see cref="TestEngineSettings"/>), and a user's own keybind
+/// overrides (see <see cref="KeyBindingOverrides"/>) - minus the settings
+/// this project doesn't have an equivalent concept for yet (no UI
+/// theme/plugin settings live here).
 /// </summary>
 public sealed class AppSettings
 {
@@ -35,6 +37,25 @@ public sealed class AppSettings
         var gameConfigs = _root.FindBlock("gameconfigs") ?? CfgBlock.Empty("gameconfigs");
         var entry = gameConfigs.FindBlock(kind.ToString()) ?? CfgBlock.Empty(kind.ToString());
         var updatedEntry = entry.WithBlock("resources", OrderedResourceList.Write(paths));
+        var updatedGameConfigs = gameConfigs.WithBlock(kind.ToString(), updatedEntry);
+        return new AppSettings(_root.WithBlock("gameconfigs", updatedGameConfigs));
+    }
+
+    public IReadOnlyList<TestEngine> GetTestEngines(GameConfigurationKind kind) =>
+        TestEngineSettings.Read(_root.FindBlock("gameconfigs")?.FindBlock(kind.ToString())?.FindBlock("testengines"));
+
+    /// <summary>-1 when <paramref name="kind"/> has no configured test engines at all - Test Map's own "nothing configured yet" signal.</summary>
+    public int GetActiveTestEngineIndex(GameConfigurationKind kind)
+    {
+        var testEngines = _root.FindBlock("gameconfigs")?.FindBlock(kind.ToString())?.FindBlock("testengines");
+        return TestEngineSettings.ReadActiveIndex(testEngines, GetTestEngines(kind).Count);
+    }
+
+    public AppSettings WithTestEngines(GameConfigurationKind kind, IReadOnlyList<TestEngine> engines, int activeIndex)
+    {
+        var gameConfigs = _root.FindBlock("gameconfigs") ?? CfgBlock.Empty("gameconfigs");
+        var entry = gameConfigs.FindBlock(kind.ToString()) ?? CfgBlock.Empty(kind.ToString());
+        var updatedEntry = entry.WithBlock("testengines", TestEngineSettings.Write(engines, activeIndex));
         var updatedGameConfigs = gameConfigs.WithBlock(kind.ToString(), updatedEntry);
         return new AppSettings(_root.WithBlock("gameconfigs", updatedGameConfigs));
     }

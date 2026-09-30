@@ -262,6 +262,13 @@ public partial class MainMenuBar : MenuBar
 		};
 	}
 
+	/// <summary>Launches the current map at the last skill/monsters choice - shared by the toolbar's Test Map button and the F9 keybind.</summary>
+	public void TestMap()
+	{
+		var error = TestMapLauncher.Launch(_openMapMenu, _overlay.LastTestSkill, _overlay.LastTestNoMonsters);
+		if (error != null) ShowError(error);
+	}
+
 	private void OpenPreferences()
 	{
 		_preferencesDialog ??= CreatePreferencesDialog();

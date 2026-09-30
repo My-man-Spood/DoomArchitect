@@ -1091,6 +1091,237 @@ file just tracks what's built and what's next.
       instead of "ammunition"/"obstacles"). UDB's own `lights` category
       isn't represented yet - no light-emitting decoration thing types
       are modeled in the current intentionally partial starter set.
+
+      **Update, live ZScript/DECORATE actor discovery, done (2026-09-27):**
+      the DECORATE/ZScript custom-actor parsing flagged as deferred above
+      is now fully implemented and wired in - full plan at
+      `/home/spood/.claude-personnal/plans/warm-yawning-music.md`, a real
+      port of UDB's actual `ZScriptTokenizer`/`ZDTextParser`/`ZScriptParser`/
+      `ZScriptActorStructure`/`DecorateParser`/`DecorateActorStructure`
+      (verified against the real source, grammar and all - not a lighter
+      approximation), so a mod's own custom actors show up as placeable
+      Things instead of only this project's static `.cfg`-defined ones.
+      Standing rule for this pass, per explicit user direction: nothing UDB
+      does here gets permanently cut for convenience - anything not ported
+      in the current phase is tracked below with why and what triggers
+      picking it back up, not silently dropped.
+      - **Phase 1 done**: `ZScriptTokenizer.cs` ported near-verbatim
+        (genuinely zero UDB-internal coupling, confirmed by reading the
+        file, not just grepping it - see
+        `feedback_grep_coupling_estimates` in memory for why the first,
+        grep-based estimate of a sibling file's coupling was wrong).
+        `ZDTextParser.cs` ported for its real character-level parsing
+        algorithms (`SkipWhitespace`/`ReadToken`/`ReadLine`/`NextTokenIs`/
+        `SkipStructure`, all verbatim) - `src/DoomArchitect.Core/ZDoom/`,
+        37 passing tests.
+      - **Phase 2 done**: the full actor-structure parsing pipeline, both
+        formats - `ActorStructure`/`StateStructure`/`StateGoto`/
+        `DecorateCategoryInfo` (shared foundation, including
+        `ThingTypeInfo.ClassName` and `IGameConfiguration.DecorateGames`
+        additions so inheriting from a static `.cfg` actor resolves);
+        `DecorateParser`/`DecorateActorStructure`/`DecorateStateStructure`/
+        `DecorateStateGoto`; `ZScriptParser`/`ZScriptActorStructure`/
+        `ZScriptStateStructure`/`ZScriptStateGoto`. 76 new tests exercising
+        real snippets end to end (inheritance incl. ZScript's forward-
+        reference support, flags, states/sprite resolution, `#include`
+        resolution via an injected resolver delegate, regions-as-
+        categories, `extend class`, `mixin class`, inheriting from a static
+        engine actor). `$argN` metadata is captured as a reduced
+        `ActorArgumentInfo` (used + title only, see its own doc comment for
+        why the full render-hint richness is deferred, tracked below).
+        Two more genuine UDB quirks caught and pinned as regression tests
+        along the way, on top of Phase 1's own two: a DECORATE property or
+        `Game` value list is silently discarded if its actor's closing `}`
+        lands on the same line as the last value (no property-list ever
+        reaches its own assignment in that case - same bug in real UDB,
+        not this port); a ZScript `#region` name is read with no leading-
+        whitespace skip, so a leading space becomes part of the category
+        string itself. `uservars`/`uservar_defaults` (custom `user_*`
+        ZScript field capture) are the one thing NOT ported from either
+        actor-structure file - see `ActorStructure`'s own doc comment,
+        tracked below alongside the render-hint `ArgumentInfo` richness.
+      - **Phase 3 done**: `MapinfoParser` - a narrow port of UDB's real
+        `MapinfoParser`, enough to find and parse a `DoomEdNums { }` block
+        anywhere in a MAPINFO lump (which is the only reason this project
+        needs MAPINFO at all - giving a ZScript-only actor, which never
+        carries its own editor number, a real DoomEdNum). Every other
+        MAPINFO block (`map`/`defaultmap`/`gameinfo`/`spawnnums`/anything
+        else) is skipped via the already-ported `ZDTextParser.SkipStructure`
+        rather than actually parsed - a full MAPINFO parser (map titles,
+        sky/fog, intermissions, ...) is a substantial, separate feature with
+        no current consumer, tracked below alongside the port's other
+        deferred sub-pieces. 6 new tests.
+      - **Phase 4 done**: `DiscoveredActorThingTypeMerge` - a close port of
+        UDB's real `DataManager.ApplyZDoomThings`, mapped onto this
+        project's own much simpler `ThingTypeInfo` (10 scalar fields vs.
+        UDB's real rendering-property richness - alpha, renderstyle,
+        per-cvar distance checks, wallsprite/flatsprite/rollsprite,
+        dynamic light type, a 5-slot argument array - every field ported
+        faithfully, the rest has nothing to receive it, tracked below).
+        Same real merge order and collision rules: DECORATE wins over
+        ZScript on a classname collision; `replaces` updates the replaced
+        actor's existing `ThingTypeInfo` in place at its own DoomEdNum, not
+        as a new entry; a new positive DoomEdNum inherits defaults from the
+        static entry matching `InheritsClass`, when one exists; MAPINFO
+        `DoomEdNums` overrides run last and can delete an entry entirely
+        (`"none"`). `DiscoveredActorGameConfiguration.Load(...)` wraps a
+        static `IGameConfiguration` with the merged result - only
+        `GetThingType`/`GetThingTypes` differ, everything else delegates
+        straight through - built fresh every time exactly like
+        `TextureSet.Load`, no incremental update. 11 new tests.
+
+        **A real, thread-safety bug found and fixed along the way** (not
+        faithfully reproduced): `ZScriptTokenizer`'s named-token lookup
+        tables were lazily built on first construction with a bare
+        "if null, populate" check - a genuine data race under concurrent
+        construction, latent in UDB's own single-threaded WinForms context
+        but real and reproducible here once tests construct tokenizers in
+        parallel (xUnit's default). Fixed with a static constructor
+        (CLR-guaranteed run-once) instead - this is a pure implementation
+        detail with no user-observable behavior, so fixing it rather than
+        porting it verbatim was the right call, unlike the genuine parser
+        quirks pinned as regression tests elsewhere in this port.
+      - **Phase 5 done - the port is now feature-complete** (modulo the
+        deferred sub-pieces below, all still deliberately tracked, not
+        cut). Two new pieces this phase needed, beyond wiring: a real
+        `IResourceContainer.FindByPath(path)` (WAD: delegates to
+        `FindLump` on a bare title, since a WAD has no path hierarchy at
+        all; PK3: an exact normalized-path match, falling back to a
+        root-level title match) - the one lookup `FindLump` deliberately
+        doesn't cover, needed for resolving a `#include`'s literal nested
+        path; and `ZDoom.ResourceActorScanner.Scan(baseConfiguration,
+        resourceSet)`, the actual entry point tying every earlier phase
+        together - feeds every layered resource's own ZSCRIPT/DECORATE/
+        MAPINFO root entry into one shared parser pair per format (ZScript/
+        DECORATE content is genuinely cumulative across a real resource
+        stack, unlike a texture lookup's highest-priority-wins, so every
+        container contributes, not just the top one), wires
+        `DecorateParser.ZScriptActors` to the ZScript side's own actors so
+        cross-format inheritance actually resolves, then hands the result
+        to `DiscoveredActorGameConfiguration.Load`.
+        `OpenMapMenu.OnMapOptionsConfirmed` now calls this instead of a
+        bare `GameConfigurations.Get(kind)`, so every already-existing
+        consumer downstream (`MapView`'s Thing rendering/sprite seeding,
+        `ThingEditDialog`, `MapOverlay`) picks up discovered actors for
+        free through the same `MapLoaded`/`MapResourcesChanged` events,
+        no signature changes needed anywhere. `ThingTypePicker.CategoryOrder`
+        (a fixed whitelist that silently hid anything else) now falls
+        through to a per-category catch-all afterward - a discovered
+        actor's own `$category`/`#region` string gets its own folder,
+        titled with that raw string, instead of being dropped. 17 new
+        tests (`FindByPath` on both container kinds, and full end-to-end
+        `ResourceActorScanner` scans - multi-file `#include` chains, a
+        ZScript actor only becoming placeable once MAPINFO assigns it a
+        DoomEdNum, DECORATE inheriting a ZScript base class from the same
+        resource, actors contributed by multiple layered resources).
+      - **Deferred sub-pieces, tracked (not cut)**:
+        - A full MAPINFO parser (map titles, sky/fog settings,
+          intermissions, episode/cluster definitions, ...) - `MapinfoParser`
+          here only ever looks for `DoomEdNums { }`, skipping every other
+          block unread. Revisit only if this project ever needs other
+          MAPINFO data (e.g. a map-properties panel reading map titles).
+        - Live-reload/file-watching (UDB's `ScriptResource`, "re-parse when
+          a script file changes on disk") - this project has no file-
+          watching for *any* resource type yet (textures, configs,
+          scripts alike). Revisit only once general resource hot-reload
+          becomes its own feature, not bundled into this port specifically.
+        - Diagnostics UI (UDB's `TextResourceErrorItem`/`ErrorLogger` panel
+          surfacing "MyMod.pk3's ZSCRIPT has an error on line 40") - the
+          ported parsers already track `HasError`/`ErrorDescription`/
+          `ErrorLine` internally, so this is purely a missing UI surface,
+          not a missing capability. Revisit in Phase 5, once Phases 2-4
+          exist and there's real parsed content to report errors about.
+        - Rooted-path resolution for Directory-type resources (UDB's
+          `GetRootedPath`/`CheckInvalidPathChars`, `DirectoryReader`) - this
+          project's `IResourceContainer` only has WAD/PK3 implementations,
+          no loose-folder resource type exists anywhere yet. Not a cut
+          specific to this port - revisit only if directory-based resources
+          themselves ever become a supported resource kind.
+        - `uservars`/`uservar_defaults` (custom `user_*` ZScript field
+          capture, and the `var TYPE user_name;` parsing that would feed
+          it) - no Thing property-editing UI exists to attach custom
+          per-actor fields to yet (same reasoning as the `ArgumentInfo`
+          richness below). Revisit alongside a real property-editing UI.
+        - The full `ArgumentInfo` render-hint richness (enum lists, default
+          values, helper-circle/rectangle rendering, range colors) behind
+          `$argN` metadata - captured today as a reduced
+          `ZDoom.ActorArgumentInfo` (used + title only). Revisit alongside
+          a real Thing-argument-editing UI, same as `uservars` above.
+
+          **Update:** `$color` GZDB-comment parsing (UDB's
+          `ZDTextParser.GetColorFromString`) was folded in as promised -
+          `ZDoom.GzdbColor.TryParse`, hex (`#RGB`/`#RRGGBB`/bare hex) fully
+          supported. Named colors ("red", "dodger blue") take an injectable
+          lookup table instead of a hardcoded one, since resolving them for
+          real means reading gzdoom.pk3's own `x11r6rgb.txt` lump - the
+          exact same lump the required-archive fingerprint check
+          (this item's own original motivation) keys off - which needs a
+          loaded resource this pure string utility has no access to on its
+          own. Revisit once something actually wires up that lookup.
+      - ACS/scripting compilation (Test Map's real source-port launch,
+        `%L`/`%S` placeholders etc., is separately built and working -
+        see the Test Map entry below) is explicitly NOT part of this port
+        and has its own separate deep-dive already done on UDB's real
+        Acc/Bcc/ZtBcc compiler integration, per the user's own explicit
+        call to treat it as its own future initiative once they've had
+        time to digest that research - not a Phase of this item.
+- [x] Test Map (F9 + toolbar split button) - launches the current map in a
+      configured external source port, matching UDB's real `Launcher`/
+      `EngineInfo`/`ConfigurationInfo` architecture (verified against the
+      actual source, not guessed): multiple named test engines per game
+      configuration (`Core.Configuration.TestEngine`, stored in
+      `AppSettings` under a `testengines` block, editable via Preferences'
+      new Test Engines tab, `Scripts/View/TestEnginesEditor.cs`) rather than
+      one engine per config; a combined skill+monsters picker (every skill
+      from the game config's own `skills` block, times with/without
+      monsters, sign-encoded like UDB's own `TestSkill_Click`); a real
+      digit-run `%L1`/`%L2` scanner (`Core.Configuration.
+      TestLaunchCommandBuilder`, unit-tested) rather than an ExMy/MAPxx
+      special case, matching UDB's actual `Launcher.ConvertParameters`
+      algorithm exactly. UI matches UDB's real toolbar split-button shape
+      (`Scripts/View/TestMapToolbar.cs`) rather than a Map-menu item, after
+      the first pass put it in the wrong place - a play button that
+      launches at the last skill/monsters choice, plus a small separate
+      dropdown-arrow button opening a skill popup with the real icon
+      grouping (with-monsters/no-monsters, separated, UDB's own
+      `Monster2`/`Monster3` icons).
+      **Deliberate implementation differences, flagged**: launches via
+      Godot's own `OS.CreateProcess(path, string[] arguments)` (a real
+      argument array) instead of UDB's single shell-escaped command-line
+      string - a genuine improvement this project's process-launch API
+      allows for, not a 1:1 port of that specific mechanical detail.
+      `TestShortPaths` (a Windows short-path workaround for source ports
+      with poor long-path support) is read from the `.cfg` data but not
+      applied - a known, deliberate Windows-only gap, not silently missed.
+      The resource list here has no distinct "which one is the IWAD"
+      concept the way UDB's `DataLocation` does, so the first configured
+      resource is treated as the IWAD by convention (documented in
+      `TestMapLauncher`), everything after it as additional resources.
+      **Update, the gzdoom.pk3 exclusion this was originally blocked on is
+      now done:** `RequiredArchive`/`RequiredArchiveEntry`
+      (`IGameConfiguration.GetRequiredArchives()`) read the already-bundled
+      `requiredarchives` block (`GameConfigurationLoader`, confirmed
+      against the real `GZDoom_common.cfg` data - one entry, `gzdoom.pk3`,
+      `ExcludeFromTesting = true`, a class-named-`Actor` + `x11r6rgb.txt`
+      fingerprint). `ZDoom.RequiredArchiveDetector.Matches` answers "is
+      this specific resource that archive" by real content, using the
+      actual `ZScriptParser`/`DecorateParser` from the port above (checked
+      against `ZScriptParser.DeclaredClassNames` directly - available right
+      after `Parse()`, no `CompleteParsing()` needed, so an unrelated
+      class's own broken inheritance elsewhere in the same resource can
+      never cause a false negative here) - a genuine content fingerprint,
+      not the regex approximation originally planned before the full port
+      existed. `TestMapLauncher` now drops any `%AP` resource that matches
+      an `ExcludeFromTesting` archive (opened fresh via
+      `ResourceContainerFactory`, kept rather than dropped if it can't even
+      be opened, so it still fails normally downstream instead of silently
+      vanishing). `ResourceListEditor` gained the matching "required
+      resource missing" warning (a new `GameConfiguration` property,
+      re-checked via the same detector on every add/remove/game-config
+      change), wired from both `MapOptionsDialog` and `PreferencesDialog`'s
+      own default-resources tab. 11 new Core tests (bundled-data read,
+      detector fingerprint matching including the "don't let an unrelated
+      broken class cause a false negative" case).
 - [x] Multi-resource support (`Core.IO.WadResourceSet`) - a real UDMF PWAD
       with none of its own embedded PLAYPAL/TEXTURE1/sprites (common:
       UDMF maps typically lean on the IWAD for everything) had no way to

@@ -45,6 +45,72 @@ public class AppSettingsTests
     }
 
     [Fact]
+    public void GetTestEngines_NothingSet_ReturnsEmptyAndNoActiveIndex()
+    {
+        var settings = AppSettings.Empty();
+
+        Assert.Empty(settings.GetTestEngines(GameConfigurationKind.Doom));
+        Assert.Equal(-1, settings.GetActiveTestEngineIndex(GameConfigurationKind.Doom));
+    }
+
+    [Fact]
+    public void WithTestEngines_ThenGet_RoundTripsInOrderWithActiveIndex()
+    {
+        var engines = new[]
+        {
+            new TestEngine("GZDoom", "/opt/gzdoom/gzdoom", UseCustomParameters: false, CustomParameters: ""),
+            new TestEngine("GZDoom (software)", "/opt/gzdoom/gzdoom", UseCustomParameters: true, CustomParameters: "-nogl"),
+        };
+        var settings = AppSettings.Empty().WithTestEngines(GameConfigurationKind.GZDoomDoom2UDMF, engines, activeIndex: 1);
+
+        Assert.Equal(engines, settings.GetTestEngines(GameConfigurationKind.GZDoomDoom2UDMF));
+        Assert.Equal(1, settings.GetActiveTestEngineIndex(GameConfigurationKind.GZDoomDoom2UDMF));
+    }
+
+    [Fact]
+    public void WithTestEngines_DifferentGameConfigs_DontOverwriteEachOther()
+    {
+        var doomEngine = new TestEngine("Chocolate Doom", "/usr/bin/chocolate-doom", false, "");
+        var gzdoomEngine = new TestEngine("GZDoom", "/usr/bin/gzdoom", false, "");
+        var settings = AppSettings.Empty()
+            .WithTestEngines(GameConfigurationKind.Doom, new[] { doomEngine }, 0)
+            .WithTestEngines(GameConfigurationKind.GZDoomDoom2UDMF, new[] { gzdoomEngine }, 0);
+
+        Assert.Equal(new[] { doomEngine }, settings.GetTestEngines(GameConfigurationKind.Doom));
+        Assert.Equal(new[] { gzdoomEngine }, settings.GetTestEngines(GameConfigurationKind.GZDoomDoom2UDMF));
+    }
+
+    /// <summary>An out-of-range stored active index (e.g. the active engine was since removed) clamps into range rather than crashing or returning garbage.</summary>
+    [Fact]
+    public void GetActiveTestEngineIndex_StoredIndexOutOfRange_ClampsToLastEngine()
+    {
+        var engines = new[]
+        {
+            new TestEngine("A", "/a", false, ""),
+            new TestEngine("B", "/b", false, ""),
+        };
+        var settings = AppSettings.Empty().WithTestEngines(GameConfigurationKind.Doom, engines, activeIndex: 5);
+
+        Assert.Equal(1, settings.GetActiveTestEngineIndex(GameConfigurationKind.Doom));
+    }
+
+    [Fact]
+    public void TestEngines_ToText_ThenParse_RoundTrips()
+    {
+        var engines = new[]
+        {
+            new TestEngine("GZDoom", "/opt/gzdoom/gzdoom", UseCustomParameters: false, CustomParameters: ""),
+            new TestEngine("Custom", "/opt/engine", UseCustomParameters: true, CustomParameters: "-file \"%AP\" \"%F\""),
+        };
+        var settings = AppSettings.Empty().WithTestEngines(GameConfigurationKind.GZDoomDoom2UDMF, engines, activeIndex: 1);
+
+        var reloaded = AppSettings.Parse(settings.ToText());
+
+        Assert.Equal(engines, reloaded.GetTestEngines(GameConfigurationKind.GZDoomDoom2UDMF));
+        Assert.Equal(1, reloaded.GetActiveTestEngineIndex(GameConfigurationKind.GZDoomDoom2UDMF));
+    }
+
+    [Fact]
     public void GetKeyBindingOverrides_NothingSet_ReturnsEmpty()
     {
         var settings = AppSettings.Empty();

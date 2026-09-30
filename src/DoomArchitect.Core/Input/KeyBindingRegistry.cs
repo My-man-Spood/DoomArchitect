@@ -18,6 +18,7 @@ namespace DoomArchitect.Core.Input;
 /// </summary>
 public static class KeyBindingRegistry
 {
+    private const string CategoryTestMap = "Test Map";
     private const string CategoryEdit = "Edit";
     private const string CategoryModes = "Modes";
     private const string CategoryView = "View";
@@ -30,6 +31,8 @@ public static class KeyBindingRegistry
 
     public static IReadOnlyList<KeyBindingDefinition> All { get; } = new[]
     {
+        new KeyBindingDefinition("test_map", CategoryTestMap, "Test Map", "Launches the current map in the active test engine, at the last skill/monsters setting used from the Map menu.", new KeyBinding("F9")),
+
         new KeyBindingDefinition("undo", CategoryEdit, "Undo", "Undoes the last change.", new KeyBinding("Z", Ctrl: true)),
         new KeyBindingDefinition("redo", CategoryEdit, "Redo", "Redoes the last undone change.", new KeyBinding("Y", Ctrl: true)),
 
