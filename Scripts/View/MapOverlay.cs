@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
@@ -281,6 +282,38 @@ public partial class MapOverlay : Control
 	{
 		Mode = EditMode.Draw;
 		_drawHandler.BeginAt(screenPosition);
+	}
+
+	/// <summary>
+	/// The <c>delete_item</c> keybind - UDB's real per-mode <c>DeleteItem</c>
+	/// action, Vertices/Linedefs/Sectors only (Things/Draw are untouched
+	/// here; see TODO.md). Deletes the current selection for whichever mode
+	/// is active, falling back to the hovered element when nothing is
+	/// selected - matching UDB's own real fallback exactly - as a single
+	/// Undo step regardless of how many elements it touches.
+	/// </summary>
+	internal void DeleteSelection()
+	{
+		switch (_mode)
+		{
+			case EditMode.Vertices:
+				var selectedVertices = Map.GetSelectedVertices().ToList();
+				if (selectedVertices.Count == 0 && _vertexHandler.Hovered != null) selectedVertices.Add(_vertexHandler.Hovered);
+				if (selectedVertices.Count > 0) UndoStack.Execute(new DeleteVerticesCommand(Map, selectedVertices));
+				break;
+
+			case EditMode.Linedefs:
+				var selectedLinedefs = Map.GetSelectedLinedefs().ToList();
+				if (selectedLinedefs.Count == 0 && _linedefHandler.Hovered != null) selectedLinedefs.Add(_linedefHandler.Hovered);
+				if (selectedLinedefs.Count > 0) UndoStack.Execute(new DeleteLinedefsCommand(Map, selectedLinedefs));
+				break;
+
+			case EditMode.Sectors:
+				var selectedSectors = Map.GetSelectedSectors().ToList();
+				if (selectedSectors.Count == 0 && _sectorHandler.Hovered != null) selectedSectors.Add(_sectorHandler.Hovered);
+				if (selectedSectors.Count > 0) UndoStack.Execute(new DeleteSectorsCommand(Map, selectedSectors));
+				break;
+		}
 	}
 
 	public override void _Process(double delta)

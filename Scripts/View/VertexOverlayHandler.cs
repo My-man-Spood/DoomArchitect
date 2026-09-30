@@ -36,6 +36,9 @@ public sealed class VertexOverlayHandler
 	private readonly MapOverlayCamera _camera;
 	private readonly ElementOverlayHandler<Vertex, Vertex> _input;
 
+	/// <summary>The vertex currently under the cursor - only actually updates while Vertices mode is active, same reasoning as <see cref="LinedefOverlayHandler.Hovered"/>'s own remarks.</summary>
+	public Vertex Hovered => _input.Hovered;
+
 	public VertexOverlayHandler(MapOverlay owner, MapOverlayCamera camera, MarqueeSelector marquee)
 	{
 		_owner = owner;

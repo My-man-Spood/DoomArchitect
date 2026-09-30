@@ -126,8 +126,11 @@ public sealed class MapData
         _vertices.Remove(from);
     }
 
-    /// <summary>Trusts every sidedef on this sector has already been detached (via <see cref="RemoveLinedef"/>).</summary>
+    /// <summary>Trusts every sidedef on this sector has already been detached - via <see cref="RemoveLinedef"/> (the sector's own linedef went away too) or a caller detaching a surviving linedef's side directly (<see cref="DoomArchitect.Core.Undo.DeleteSectorsCommand"/>, the sector alone is being removed).</summary>
     public void RemoveSector(Sector sector) => _sectors.Remove(sector);
+
+    /// <summary>Re-inserts a sector removed by <see cref="RemoveSector"/> - undo support, mirroring <see cref="RestoreVertex"/>/<see cref="RestoreLinedef"/>.</summary>
+    public void RestoreSector(Sector sector) => _sectors.Add(sector);
 
     /// <summary>A Thing has no adjacency of its own to detach - the exact reverse of <see cref="CreateThing"/>.</summary>
     public void RemoveThing(Thing thing) => _things.Remove(thing);

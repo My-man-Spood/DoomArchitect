@@ -35,6 +35,7 @@ public static class KeyBindingRegistry
 
         new KeyBindingDefinition("undo", CategoryEdit, "Undo", "Undoes the last change.", new KeyBinding("Z", Ctrl: true)),
         new KeyBindingDefinition("redo", CategoryEdit, "Redo", "Redoes the last undone change.", new KeyBinding("Y", Ctrl: true)),
+        new KeyBindingDefinition("delete_item", CategoryEdit, "Delete", "Deletes the current selection (or the hovered element, if nothing is selected) in Vertices/Linedefs/Sectors mode.", new KeyBinding("Delete")),
 
         new KeyBindingDefinition("mode_vertices", CategoryModes, "Vertices Mode", "Switches to Vertices editing mode.", new KeyBinding("V")),
         new KeyBindingDefinition("mode_linedefs", CategoryModes, "Linedefs Mode", "Switches to Linedefs editing mode.", new KeyBinding("L")),

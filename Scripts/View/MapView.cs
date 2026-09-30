@@ -1239,6 +1239,7 @@ public partial class MapView : Node3D
 		}
 
 		if (key.IsActionPressed("test_map")) { _mainMenuBar.TestMap(); return; }
+		if (!_in3D && key.IsActionPressed("delete_item")) { _overlay.DeleteSelection(); return; }
 		if (key.IsActionPressed("mode_vertices")) { _overlay.Mode = EditMode.Vertices; return; }
 		if (key.IsActionPressed("mode_linedefs")) { _overlay.Mode = EditMode.Linedefs; return; }
 		if (key.IsActionPressed("mode_sectors")) { _overlay.Mode = EditMode.Sectors; return; }
