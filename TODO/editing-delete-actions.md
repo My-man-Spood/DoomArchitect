@@ -1,4 +1,4 @@
-# Delete actions (Vertices/Linedefs/Sectors)
+# Delete actions (Vertices/Linedefs/Sectors/Things)
 
 **Status:** Done  
 **Area:** 2D editing
@@ -46,17 +46,26 @@
       - 18 new tests, including full Undo round-trips for the two-linedef
         vertex merge and the adjacent-sector flip/texture case.
 
+      **Update: Things-mode delete added.** `DeleteThingsCommand` - as
+      trivial as expected, matching UDB's real `ThingsMode.DeleteItem`
+      exactly: a Thing has no adjacency to cascade through, so it's just
+      remove/restore per selected Thing. `ThingOverlayHandler` gained the
+      same `Hovered` accessor as the other three handlers;
+      `MapOverlay.DeleteSelection()` gained an `EditMode.Things` case.
+      Not ported: UDB's own `BaseClassicMode.DeleteThings` "path
+      reconnecting" step (deleting an `InterpolationPoint`/`PathFollower`
+      mid-chain retargets the chain's tag/arg links so it doesn't just
+      break at the gap) - needs typed Thing `Args`/`Tag`, which this
+      project doesn't model yet (raw `UniFields` only, same gap as
+      below). Revisit alongside real typed Thing-argument modeling.
+
       **Deferred, tracked, not cut**:
-      - UDB's own gentler `DissolveItem` action (tries to avoid breaking a
-        sector at a junction vertex, joins the sectors on either side of
-        a dissolved linedef instead of just orphaning the wall, preserves
-        texture alignment across a vertex merge) - a distinct action from
-        Delete in UDB itself, bound to its own separate key. Revisit if a
-        "safer delete" is ever explicitly wanted.
-      - Things-mode delete - the user's own request explicitly scoped to
-        Vertices/Linedefs/Sectors. UDB's own `ThingsMode.DeleteItem` is
-        trivial by comparison (no geometry cascade at all, just remove
-        each selected Thing) - cheap to add once wanted.
+      - UDB's own gentler `DissolveItem` action - a distinct action from
+        Delete in UDB itself, bound to its own separate key. Investigated
+        2026-09-30 and it's genuinely large, not a small addition on top
+        of Delete - see `TODO/editing-dissolve-action.md` for the full
+        scoping writeup (real UDB behavior researched, size assessed,
+        options laid out).
       - `RemoveUnneededTextures`'s real tag/action-aware gating (skip
         clobbering a texture if the line/either sector carries a tag or
         the line an action special, since that combination is sometimes

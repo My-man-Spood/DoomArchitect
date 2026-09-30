@@ -33,6 +33,6 @@ public class KeyBindingRegistryTests
     [Fact]
     public void All_ContainsExactlyTheDesignedActionCount()
     {
-        Assert.Equal(41, KeyBindingRegistry.All.Count);
+        Assert.Equal(42, KeyBindingRegistry.All.Count);
     }
 }

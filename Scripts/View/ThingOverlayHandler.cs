@@ -59,6 +59,9 @@ public sealed class ThingOverlayHandler
 	private readonly MapOverlayCamera _camera;
 	private readonly ElementOverlayHandler<Thing, Thing> _input;
 
+	/// <summary>The thing currently under the cursor - only actually updates while Things mode is active, same reasoning as <see cref="LinedefOverlayHandler.Hovered"/>'s own remarks.</summary>
+	public Thing Hovered => _input.Hovered;
+
 	public ThingOverlayHandler(MapOverlay owner, MapOverlayCamera camera, MarqueeSelector marquee)
 	{
 		_owner = owner;

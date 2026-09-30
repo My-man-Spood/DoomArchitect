@@ -103,7 +103,8 @@ so it isn't lost, not because it belongs in the tables below.
 | [Dynamic grid size](editing-2d-dynamic-grid-size.md) | |
 | [Toolbar UI (mode/grid/status bar)](editing-2d-toolbar-ui.md) | |
 | [Undo/redo command stack](editing-undo-redo-stack.md) | |
-| [Delete actions (Vertices/Linedefs/Sectors)](editing-delete-actions.md) | |
+| [Delete actions (Vertices/Linedefs/Sectors/Things)](editing-delete-actions.md) | |
+| [Dissolve action (Vertices/Linedefs)](editing-dissolve-action.md) | |
 | [2D marquee/box-select](editing-2d-marquee-select.md) | |
 | [2D view panning](editing-2d-view-panning.md) | |
 | [Drawing mode (Draw Lines)](editing-2d-drawing-mode.md) | |

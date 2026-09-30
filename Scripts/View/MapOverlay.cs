@@ -286,11 +286,12 @@ public partial class MapOverlay : Control
 
 	/// <summary>
 	/// The <c>delete_item</c> keybind - UDB's real per-mode <c>DeleteItem</c>
-	/// action, Vertices/Linedefs/Sectors only (Things/Draw are untouched
-	/// here; see TODO/TODO.md). Deletes the current selection for whichever mode
-	/// is active, falling back to the hovered element when nothing is
-	/// selected - matching UDB's own real fallback exactly - as a single
-	/// Undo step regardless of how many elements it touches.
+	/// action, Vertices/Linedefs/Sectors/Things (Draw mode is untouched -
+	/// it has no persistent selection of its own to delete from). Deletes
+	/// the current selection for whichever mode is active, falling back to
+	/// the hovered element when nothing is selected - matching UDB's own
+	/// real fallback exactly - as a single Undo step regardless of how many
+	/// elements it touches.
 	/// </summary>
 	internal void DeleteSelection()
 	{
@@ -306,6 +307,47 @@ public partial class MapOverlay : Control
 				var selectedLinedefs = Map.GetSelectedLinedefs().ToList();
 				if (selectedLinedefs.Count == 0 && _linedefHandler.Hovered != null) selectedLinedefs.Add(_linedefHandler.Hovered);
 				if (selectedLinedefs.Count > 0) UndoStack.Execute(new DeleteLinedefsCommand(Map, selectedLinedefs));
+				break;
+
+			case EditMode.Sectors:
+				var selectedSectors = Map.GetSelectedSectors().ToList();
+				if (selectedSectors.Count == 0 && _sectorHandler.Hovered != null) selectedSectors.Add(_sectorHandler.Hovered);
+				if (selectedSectors.Count > 0) UndoStack.Execute(new DeleteSectorsCommand(Map, selectedSectors));
+				break;
+
+			case EditMode.Things:
+				var selectedThings = Map.GetSelectedThings().ToList();
+				if (selectedThings.Count == 0 && _thingHandler.Hovered != null) selectedThings.Add(_thingHandler.Hovered);
+				if (selectedThings.Count > 0) UndoStack.Execute(new DeleteThingsCommand(Map, selectedThings));
+				break;
+		}
+	}
+
+	/// <summary>
+	/// The <c>dissolve_item</c> keybind - UDB's real per-mode
+	/// <c>DissolveItem</c>, the gentler sibling of <see cref="DeleteSelection"/>
+	/// (avoids tearing sectors open/leaving slivers where it reasonably
+	/// can). Sectors mode has no real Dissolve in UDB itself either -
+	/// <c>SectorsMode.DissolveItem</c> is literally <c>{ DeleteItem(); }</c>
+	/// in the real source - so it reuses <see cref="DeleteSectorsCommand"/>
+	/// directly rather than a separate command that would just duplicate
+	/// it. Things mode has no Dissolve at all in UDB, so it's absent here
+	/// too (falls through, a no-op).
+	/// </summary>
+	internal void DissolveSelection()
+	{
+		switch (_mode)
+		{
+			case EditMode.Vertices:
+				var selectedVertices = Map.GetSelectedVertices().ToList();
+				if (selectedVertices.Count == 0 && _vertexHandler.Hovered != null) selectedVertices.Add(_vertexHandler.Hovered);
+				if (selectedVertices.Count > 0) UndoStack.Execute(new DissolveVerticesCommand(Map, selectedVertices));
+				break;
+
+			case EditMode.Linedefs:
+				var selectedLinedefs = Map.GetSelectedLinedefs().ToList();
+				if (selectedLinedefs.Count == 0 && _linedefHandler.Hovered != null) selectedLinedefs.Add(_linedefHandler.Hovered);
+				if (selectedLinedefs.Count > 0) UndoStack.Execute(new DissolveLinedefsCommand(Map, selectedLinedefs));
 				break;
 
 			case EditMode.Sectors:

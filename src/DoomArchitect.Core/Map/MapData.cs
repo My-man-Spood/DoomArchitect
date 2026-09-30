@@ -135,6 +135,9 @@ public sealed class MapData
     /// <summary>A Thing has no adjacency of its own to detach - the exact reverse of <see cref="CreateThing"/>.</summary>
     public void RemoveThing(Thing thing) => _things.Remove(thing);
 
+    /// <summary>Re-inserts a thing removed by <see cref="RemoveThing"/> - undo support, mirroring <see cref="RestoreVertex"/>/<see cref="RestoreLinedef"/>/<see cref="RestoreSector"/>.</summary>
+    public void RestoreThing(Thing thing) => _things.Add(thing);
+
     /// <summary>
     /// Inserts <paramref name="vertex"/> mid-<paramref name="linedef"/>:
     /// <paramref name="linedef"/> shrinks in place to end at

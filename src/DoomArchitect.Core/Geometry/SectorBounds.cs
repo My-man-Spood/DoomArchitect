@@ -21,6 +21,9 @@ public readonly record struct SectorBounds(Vector2 Min, Vector2 Max)
 {
     public Vector2 Center => (Min + Max) / 2f;
 
+    /// <summary>UDB's own real bounding-box-area comparison (<c>Dissolve</c>'s "keep the bigger of the two sectors" rule) - not the sector's actual floor area, just its bbox's.</summary>
+    public float Area => (Max.X - Min.X) * (Max.Y - Min.Y);
+
     public static SectorBounds Compute(Sector sector)
     {
         Vector2? min = null;

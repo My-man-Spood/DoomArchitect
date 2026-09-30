@@ -325,6 +325,82 @@ public static class GeometryStitcher
         while (joined);
     }
 
+    /// <summary>
+    /// UDB's real <c>Sector.Join</c> - reassigns every one of
+    /// <paramref name="absorbed"/>'s own sidedefs onto <paramref name="into"/>,
+    /// then removes <paramref name="absorbed"/> entirely. Used by both
+    /// <c>DissolveVerticesCommand</c> (its own <c>TryJoinSectors</c> guard)
+    /// and <c>DissolveLinedefsCommand</c> (a dissolved wall with two
+    /// different sectors on either side) - shared here rather than
+    /// duplicated, matching this class's own existing role.
+    /// </summary>
+    public static void JoinSectors(MapData map, Sector absorbed, Sector into, List<Action> undoActions)
+    {
+        var movedSidedefs = absorbed.Sidedefs.ToList();
+        foreach (var sidedef in movedSidedefs)
+        {
+            absorbed.RemoveSidedef(sidedef);
+            sidedef.Sector = into;
+            into.AddSidedef(sidedef);
+            sidedef.Linedef.MarkAdjacentSectorsDirty();
+        }
+
+        map.RemoveSector(absorbed);
+
+        undoActions.Add(() =>
+        {
+            map.RestoreSector(absorbed);
+            foreach (var sidedef in movedSidedefs)
+            {
+                into.RemoveSidedef(sidedef);
+                sidedef.Sector = absorbed;
+                absorbed.AddSidedef(sidedef);
+                sidedef.Linedef.MarkAdjacentSectorsDirty();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Detaches every one of <paramref name="sector"/>'s own sidedefs from
+    /// their linedef (setting that side to null) and from the sector
+    /// itself, then removes the sector - the shared first half of both
+    /// <c>DeleteSectorsCommand</c>'s per-sector loop and
+    /// <c>DissolveLinedefsCommand</c>'s own <c>MergeInvalidSectors</c>
+    /// repair step (UDB's real <c>Sector.Dispose()</c> cascade: "a sidedef
+    /// cannot exist without reference to its sector"). Returns every
+    /// distinct linedef that used to border it, for the caller's own
+    /// follow-up (Delete: orphan-check/flip/texture-fixup each one;
+    /// Dissolve: hand them to a fresh <see cref="SectorMaker.CreateAndPopulateSector"/>
+    /// trace instead).
+    /// </summary>
+    public static List<Linedef> DetachSectorSidedefs(MapData map, Sector sector, List<Action> undoActions)
+    {
+        var formerSidedefs = sector.Sidedefs.ToList();
+        var formerLinedefs = formerSidedefs.Select(sd => sd.Linedef).Distinct().ToList();
+
+        foreach (var sidedef in formerSidedefs)
+        {
+            var linedef = sidedef.Linedef;
+            var wasFront = sidedef.IsFront;
+
+            sector.RemoveSidedef(sidedef);
+            if (wasFront) linedef.Front = null; else linedef.Back = null;
+            linedef.MarkAdjacentSectorsDirty();
+
+            undoActions.Add(() =>
+            {
+                if (wasFront) linedef.Front = sidedef; else linedef.Back = sidedef;
+                sector.AddSidedef(sidedef);
+                linedef.MarkAdjacentSectorsDirty();
+            });
+        }
+
+        map.RemoveSector(sector);
+        undoActions.Add(() => map.RestoreSector(sector));
+
+        return formerLinedefs;
+    }
+
     private static Linedef? FindCoincidentOverlap(Linedef line)
     {
         foreach (var candidate in line.Start.Linedefs)

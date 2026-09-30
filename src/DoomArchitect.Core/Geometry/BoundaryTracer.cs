@@ -53,6 +53,24 @@ public static class BoundaryTracer
     }
 
     /// <summary>
+    /// UDB's real <c>Tools.FindPotentialSectorAt(Vector2D)</c> overload -
+    /// no known starting edge, just an arbitrary point (e.g. an invalid
+    /// sector's own former bounding-box center, mid-repair). Finds the
+    /// single nearest linedef in the whole map and which of its two sides
+    /// <paramref name="point"/> actually sits on, then defers to the
+    /// linedef-based overload from there - exactly UDB's own two-line
+    /// implementation, not an approximation of it.
+    /// </summary>
+    public static IReadOnlyList<LinedefSide>? FindPotentialSectorAt(MapData map, Vector2 point)
+    {
+        var nearest = GeometryStitcher.FindNearestLinedef(map.Linedefs, point);
+        if (nearest == null) return null;
+
+        var front = GeometryMath.SideOfLine(nearest.Start.Position, nearest.End.Position, point) <= 0;
+        return FindPotentialSectorAt(map, nearest, front);
+    }
+
+    /// <summary>
     /// Walks from <paramref name="startLinedef"/>'s own
     /// <paramref name="startFront"/> side until it reaches
     /// <paramref name="endLinedef"/>'s own <paramref name="endFront"/>

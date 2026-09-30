@@ -14,7 +14,10 @@ namespace DoomArchitect.Core.Undo;
 /// sector, in order,
 /// <list type="number">
 /// <item>detach every one of its own sidedefs from their linedef (setting
-/// that side to null) and from the sector itself, then remove the sector;</item>
+/// that side to null) and from the sector itself, then remove the sector
+/// (<see cref="GeometryStitcher.DetachSectorSidedefs"/>, shared with
+/// <c>DissolveLinedefsCommand</c>'s own equally-real
+/// <c>MergeInvalidSectors</c> repair step);</item>
 /// <item>any of those linedefs left with *both* sides now null (it only
 /// ever bordered this sector, on both sides, or bordered nothing else) is
 /// fully removed too - no vertex cleanup, matching
@@ -61,13 +64,7 @@ public sealed class DeleteSectorsCommand : ICommand
         {
             if (!map.Sectors.Contains(sector)) continue;
 
-            var formerSidedefs = sector.Sidedefs.ToList();
-            var formerLinedefs = formerSidedefs.Select(sd => sd.Linedef).Distinct().ToList();
-
-            foreach (var sidedef in formerSidedefs) DetachSidedef(sector, sidedef);
-
-            map.RemoveSector(sector);
-            undoActions.Add(() => map.RestoreSector(sector));
+            var formerLinedefs = GeometryStitcher.DetachSectorSidedefs(map, sector, undoActions);
 
             var surviving = new List<Linedef>();
             foreach (var linedef in formerLinedefs)
@@ -95,23 +92,6 @@ public sealed class DeleteSectorsCommand : ICommand
     public void Undo()
     {
         for (var i = undoActions.Count - 1; i >= 0; i--) undoActions[i]();
-    }
-
-    private void DetachSidedef(Sector sector, Sidedef sidedef)
-    {
-        var linedef = sidedef.Linedef;
-        var wasFront = sidedef.IsFront;
-
-        sector.RemoveSidedef(sidedef);
-        if (wasFront) linedef.Front = null; else linedef.Back = null;
-        linedef.MarkAdjacentSectorsDirty();
-
-        undoActions.Add(() =>
-        {
-            if (wasFront) linedef.Front = sidedef; else linedef.Back = sidedef;
-            sector.AddSidedef(sidedef);
-            linedef.MarkAdjacentSectorsDirty();
-        });
     }
 
     private void FixupOneSidedTextures(Sidedef front)
