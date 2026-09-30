@@ -3,7 +3,7 @@ namespace DoomArchitect.Core.Input;
 /// <summary>
 /// One rebindable action, minus the fields this project has no use for
 /// (<c>allowmouse</c>/<c>allowscroll</c> - this pass is keyboard-only, see
-/// TODO.md; <c>disregardshift</c>/<c>disregardcontrol</c>/<c>disregardalt</c> -
+/// TODO/TODO.md; <c>disregardshift</c>/<c>disregardcontrol</c>/<c>disregardalt</c> -
 /// this project checks modifiers via genuinely separate rebindable
 /// modifier-role actions instead, so there's no single action whose own
 /// key match needs to selectively ignore one).

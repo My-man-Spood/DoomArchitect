@@ -12,7 +12,7 @@ using Godot;
 
 /// <summary>
 /// Linedef properties - the largest of the three main property dialogs
-/// (see <c>TODO.md</c>), almost entirely because of its dynamic
+/// (see <c>TODO/TODO.md</c>), almost entirely because of its dynamic
 /// argument-editing UI. The tab strip has 5 tabs (Properties/Front/Back/
 /// Comment/Custom) - Properties and Front/Back are live, Comment/Custom are
 /// <see cref="SectorEditDialog"/>'s own established "placeholder tab,

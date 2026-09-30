@@ -24,7 +24,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// into world geometry, so it stays crisp at any zoom.
 ///
 /// This class is now a thin orchestrator over several composed pieces
-/// (plain C# classes, not partials - see TODO.md's own "MapOverlay.cs is
+/// (plain C# classes, not partials - see TODO/TODO.md's own "MapOverlay.cs is
 /// a growing god-object" concern, noted back when this file was ~500
 /// lines and still true once it had grown past 1100): <see cref="MapOverlayCamera"/>
 /// (projection math), <see cref="MapOverlayGrid"/> (the background grid),
@@ -195,7 +195,7 @@ public partial class MapOverlay : Control
 	/// wired in <c>MainMenuBar</c>) - a plain in-memory session value that
 	/// naturally outlives a single map load/unload since this
 	/// <see cref="MapOverlay"/> instance itself does; there's no
-	/// settings-file persistence to hook into yet (see TODO.md's
+	/// settings-file persistence to hook into yet (see TODO/TODO.md's
 	/// "Keybinding management" entry on that same gap).
 	/// </summary>
 	internal int LastUsedThingType { get; set; } = CreateThingCommand.DefaultType;
@@ -241,7 +241,7 @@ public partial class MapOverlay : Control
 	/// genuinely does leave Draw mode - this toggle only changes what a
 	/// drawn polyline's own finish/cancel do, not every way to leave the mode).
 	/// Session-only, like every other toolbar toggle here - no
-	/// settings-persistence layer exists yet (see TODO.md).
+	/// settings-persistence layer exists yet (see TODO/TODO.md).
 	/// </summary>
 	public bool ContinuousDrawing { get; set; }
 
@@ -275,7 +275,7 @@ public partial class MapOverlay : Control
 	/// <c>onEmptyRightClick</c> delegate on each of those three handlers'
 	/// own <see cref="ElementOverlayHandler{TSelectable,TDraggable}"/>.
 	/// Not wired for Things mode - the equivalent there would be "insert a
-	/// new Thing", a distinct, larger, not-yet-built feature (see TODO.md's
+	/// new Thing", a distinct, larger, not-yet-built feature (see TODO/TODO.md's
 	/// "Adding things" entry), not this one.
 	/// </summary>
 	internal void StartDrawingAt(Vector2 screenPosition)
@@ -287,7 +287,7 @@ public partial class MapOverlay : Control
 	/// <summary>
 	/// The <c>delete_item</c> keybind - UDB's real per-mode <c>DeleteItem</c>
 	/// action, Vertices/Linedefs/Sectors only (Things/Draw are untouched
-	/// here; see TODO.md). Deletes the current selection for whichever mode
+	/// here; see TODO/TODO.md). Deletes the current selection for whichever mode
 	/// is active, falling back to the hovered element when nothing is
 	/// selected - matching UDB's own real fallback exactly - as a single
 	/// Undo step regardless of how many elements it touches.

@@ -82,7 +82,7 @@ public partial class MainMenuBar : MenuBar
 		var preferencesMenu = GetNode<PopupMenu>("Preferences");
 		// "Preferences..." (not "Resources...") since PreferencesDialog now
 		// covers more than just game-configuration resources - it gained a
-		// Keybinds tab (see TODO.md's "Keybinding management" entry).
+		// Keybinds tab (see TODO/TODO.md's "Keybinding management" entry).
 		preferencesMenu.AddItem("Preferences...", 0);
 		preferencesMenu.IdPressed += id =>
 		{

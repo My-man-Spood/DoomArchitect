@@ -15,7 +15,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// and this project's own added left-double-click convenience) correctly
 /// end up no-ops as a result. UDB's right-click *does* open a vertex
 /// properties dialog there; this project has no <c>VertexEditDialog</c>
-/// yet (see TODO.md), not something intentionally skipped.
+/// yet (see TODO/TODO.md), not something intentionally skipped.
 ///
 /// Right-click gets one more layer ahead of the shared engine: a
 /// highlighted vertex still drags/edits via the engine as normal; failing

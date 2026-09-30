@@ -36,7 +36,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// vertex-backed mode, <c>MapData.MoveThing</c>/<c>MoveThingCommand</c>
 /// for Thing)</item>
 /// <item>whether opening a properties dialog even exists for this mode at
-/// all (Vertex mode has none yet - see TODO.md) and, when it does, which
+/// all (Vertex mode has none yet - see TODO/TODO.md) and, when it does, which
 /// <see cref="MapOverlay"/> event it fires</item>
 /// </list>
 /// Every other line of logic - the exact case-by-case shape of

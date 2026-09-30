@@ -8,7 +8,7 @@ namespace DoomArchitect.Core.Undo;
 /// Sectors mode's Delete action - UDB's real <c>SectorsMode.DeleteItem</c>
 /// (<c>ClassicModes/SectorsMode.cs</c>, minus its own optional "also delete
 /// things inside the sector" step, which is gated behind a UDB preference
-/// this project has no settings surface for yet - see TODO.md), ported one
+/// this project has no settings surface for yet - see TODO/TODO.md), ported one
 /// sector at a time exactly as UDB's own sequential loop does (not a single
 /// batched pass over every sector's geometry at once): for each selected
 /// sector, in order,
@@ -32,7 +32,7 @@ namespace DoomArchitect.Core.Undo;
 /// an action special (its own way of not clobbering a scripted texture
 /// swap) - not ported, since this project has no typed action/tag model
 /// to check against yet (only the raw <see cref="UniFields"/> bag) - see
-/// TODO.md.</item>
+/// TODO/TODO.md.</item>
 /// </list>
 /// Processing sectors one at a time, immediately fixing up their own
 /// former linedefs before moving to the next selected sector, is what

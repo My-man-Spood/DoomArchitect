@@ -791,7 +791,7 @@ metadata/_tab_index = 3
 
 [node name="Label" type="Label" parent="Container/Tabs/Comment" unique_id=2106899557]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [node name="Custom" type="CenterContainer" parent="Container/Tabs" unique_id=1938323236]
 visible = false
@@ -800,7 +800,7 @@ metadata/_tab_index = 4
 
 [node name="Label" type="Label" parent="Container/Tabs/Custom" unique_id=698924676]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [editable path="Container/Tabs/Properties/VboxContainer/FlagsBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/ActionBox"]

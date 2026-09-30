@@ -510,7 +510,7 @@ metadata/_tab_index = 2
 
 [node name="Label" type="Label" parent="Container/Tabs/Colors" unique_id=1832831645]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [node name="SlopesPortals" type="CenterContainer" parent="Container/Tabs" unique_id=1896356578]
 visible = false
@@ -519,7 +519,7 @@ metadata/_tab_index = 3
 
 [node name="Label" type="Label" parent="Container/Tabs/SlopesPortals" unique_id=643214817]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [node name="Comment" type="CenterContainer" parent="Container/Tabs" unique_id=91693792]
 visible = false
@@ -528,7 +528,7 @@ metadata/_tab_index = 4
 
 [node name="Label" type="Label" parent="Container/Tabs/Comment" unique_id=639033906]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [node name="Custom" type="CenterContainer" parent="Container/Tabs" unique_id=1753872745]
 visible = false
@@ -537,7 +537,7 @@ metadata/_tab_index = 5
 
 [node name="Label" type="Label" parent="Container/Tabs/Custom" unique_id=1738332260]
 layout_mode = 2
-text = "Not yet implemented - see TODO.md"
+text = "Not yet implemented - see TODO/TODO.md"
 
 [editable path="Container/Tabs/Properties/VboxContainer/FlagsBox"]
 [editable path="Container/Tabs/Properties/VboxContainer/HBoxContainer/HeightsBox"]

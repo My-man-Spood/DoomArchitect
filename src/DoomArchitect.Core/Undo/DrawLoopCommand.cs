@@ -89,7 +89,7 @@ public readonly struct DrawPoint
 /// <see cref="DefaultWallTexture"/> rather than copying a neighboring
 /// sidedef's own specific texture name first (UDB's own
 /// <c>TakeSidedefSettings</c> tries that before falling back to the
-/// default) - flagged in TODO.md as a known gap, not silently dropped. A
+/// default) - flagged in TODO/TODO.md as a known gap, not silently dropped. A
 /// freshly created sidedef that's *becoming* two-sided (the opposite
 /// side already has a real sidedef) gets <c>"-"</c> instead - a plain
 /// two-sided wall's middle texture has nothing to mean on either face
@@ -121,7 +121,7 @@ public sealed class DrawLoopCommand : ICommand
     /// false for a plain commit elsewhere - a deliberate simplification
     /// of UDB's own geometric detection (<c>firstline.Start ==
     /// lastline.End</c> after resolution/stitching, with no gesture
-    /// involved at all), flagged in TODO.md as a known gap: this
+    /// involved at all), flagged in TODO/TODO.md as a known gap: this
     /// project's Draw mode never adds a literal duplicate closing point
     /// the way UDB's <c>DrawPointAt</c> does, so there is no
     /// vertex-identity signal to detect closure from after the fact -
@@ -450,7 +450,7 @@ public sealed class DrawLoopCommand : ICommand
     /// trace-based property search; and a split that leaves the
     /// *original* sector with fewer than 3 sides of its own (genuinely
     /// degenerate) isn't specially disposed of here - narrower than UDB's
-    /// own <c>SectorWasInvalid</c> cleanup, a real gap flagged in TODO.md
+    /// own <c>SectorWasInvalid</c> cleanup, a real gap flagged in TODO/TODO.md
     /// rather than silently dropped.
     /// </summary>
     private void SplitOuterSectors(IReadOnlyList<Linedef> drawnLinedefs)

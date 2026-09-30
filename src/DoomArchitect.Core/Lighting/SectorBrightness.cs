@@ -11,7 +11,7 @@ namespace DoomArchitect.Core.Lighting;
 ///   the banding of vanilla Doom's 32-entry COLORMAP lookup table rather
 ///   than a literal linear dimmer. Every vanilla game config has this on
 ///   by default - hardcoded on here too, since there's no
-///   game-configuration system yet to make it selectable (see TODO.md).
+///   game-configuration system yet to make it selectable (see TODO/TODO.md).
 /// - "Fake contrast": a wall's own light level gets nudged +-16 purely
 ///   based on whether it runs exactly north-south or east-west on the map
 ///   - a vanilla Doom engine trick for depth perception, nothing to do

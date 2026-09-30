@@ -11,7 +11,7 @@ namespace DoomArchitect.Core.ZDoom;
 /// distance checks, wallsprite/flatsprite/rollsprite, dynamic light type,
 /// a 5-slot argument array). Every field this project's own
 /// <see cref="ThingTypeInfo"/> actually has is extracted faithfully; the
-/// rest has nothing to receive it and is dropped - tracked in TODO.md,
+/// rest has nothing to receive it and is dropped - tracked in TODO/TODO.md,
 /// not silently lost, and consistent with this project's own established,
 /// much simpler Thing-rendering scope.
 ///
@@ -96,7 +96,7 @@ public static class DiscoveredActorThingTypeMerge
                 }
                 // Else: no matching actor found anywhere - real UDB logs a
                 // warning here; no diagnostics surface exists yet to show
-                // one (tracked in TODO.md), so this silently no-ops.
+                // one (tracked in TODO/TODO.md), so this silently no-ops.
             }
         }
 

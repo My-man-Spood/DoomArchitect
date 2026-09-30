@@ -11,7 +11,7 @@ namespace DoomArchitect.Core.ZDoom;
 /// yet, so it's fine to omit - falls back to this state's own first sprite,
 /// same as when the goto target genuinely isn't found. Phase 4 (the merge
 /// step) is expected to supply a real lookup once the merged actor
-/// dictionary exists - tracked in TODO.md, not a silent gap.
+/// dictionary exists - tracked in TODO/TODO.md, not a silent gap.
 /// </summary>
 public class StateStructure
 {

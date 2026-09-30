@@ -8,8 +8,8 @@ namespace DoomArchitect.Core.Configuration;
 /// tree. Reorganized around a small cursor instead of one large
 /// character-dispatch loop with mutable <c>ref</c> parameters, matching how
 /// <see cref="IO.UdmfTreeParser"/> was already reworked - but kept as its
-/// own independent parser rather than sharing a base with it (see this
-/// project's TODO.md architecture notes: the <c>.cfg</c> and UDMF grammars
+/// own independent parser rather than sharing a base with it (see
+/// <c>TODO/architecture-notes.md</c>: the <c>.cfg</c> and UDMF grammars
 /// are both curly-brace/assignment grammars, but the two really do differ -
 /// see remarks below).
 ///

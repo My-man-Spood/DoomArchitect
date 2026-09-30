@@ -35,7 +35,7 @@ public sealed class TagIndicatorOverlayHandler
 	private readonly LinedefOverlayHandler _linedefHandler;
 	private readonly SectorOverlayHandler _sectorHandler;
 
-	/// <summary>Combines what are two independent settings in UDB (<c>GZShowEventLines</c>/<c>ViewSelectionEffects</c>) into one toggle here - narrower, flagged in TODO.md rather than silently matched.</summary>
+	/// <summary>Combines what are two independent settings in UDB (<c>GZShowEventLines</c>/<c>ViewSelectionEffects</c>) into one toggle here - narrower, flagged in TODO/TODO.md rather than silently matched.</summary>
 	public bool Enabled { get; set; } = true;
 
 	public TagIndicatorOverlayHandler(MapOverlay owner, MapOverlayCamera camera, LinedefOverlayHandler linedefHandler, SectorOverlayHandler sectorHandler)

@@ -45,7 +45,7 @@ using Godot;
 /// because a plain typed rotation field covers the same data with no
 /// exotic custom widget, the rest because they need real infrastructure (a
 /// render-style enum, terrain game-config schema) this project doesn't
-/// have yet. See <c>TODO.md</c> for what else is deliberately deferred.
+/// have yet. See <c>TODO/TODO.md</c> for what else is deliberately deferred.
 ///
 /// Height/texture/brightness/height-offset fields apply live to the
 /// selected sectors as you type and revert completely on Cancel, since

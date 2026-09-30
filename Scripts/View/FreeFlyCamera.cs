@@ -7,7 +7,7 @@ using Godot;
 //
 // Movement is driven by the real, independently rebindable camera_forward/
 // backward/strafe_left/strafe_right/fly_up/fly_down actions (see
-// TODO.md's "Keybinding management" writeup) - Escape-releases-the-mouse
+// TODO/TODO.md's "Keybinding management" writeup) - Escape-releases-the-mouse
 // below deliberately stays a plain hardcoded Key.Escape check, not an
 // action: it's a universal "get my cursor back" safety hatch, the kind of
 // thing most editors/games keep non-rebindable on purpose, not an

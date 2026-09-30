@@ -10,7 +10,7 @@ namespace DoomArchitect.Core.Configuration;
 /// files (<c>Doom_DoomDoom.cfg</c>/<c>Doom_Doom2Doom.cfg</c>/
 /// <c>GZDoom_DoomUDMF.cfg</c> and their own full <c>include()</c> chain,
 /// unmodified apart from renaming the three top-level files), not a
-/// hand-authored subset - see TODO.md for why this project didn't start
+/// hand-authored subset - see TODO/TODO.md for why this project didn't start
 /// out this way (the GPLv3/MIT license mismatch that no longer applies).
 /// A user-supplied external <c>.cfg</c> file is a separate, not-yet-built
 /// entry point that would use the same <see cref="CfgLoader"/>/

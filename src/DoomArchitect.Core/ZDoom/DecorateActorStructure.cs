@@ -379,7 +379,7 @@ public sealed class DecorateActorStructure : ActorStructure
             if (BaseClass == null)
             {
                 // parser.LogWarning would go here once a real diagnostics
-                // surface exists to show it (tracked in TODO.md) - silently
+                // surface exists to show it (tracked in TODO/TODO.md) - silently
                 // skipping this inheritance step is the correct behavior
                 // either way, just without the notification for now.
             }

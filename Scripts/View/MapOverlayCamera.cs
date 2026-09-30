@@ -5,7 +5,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// <summary>
 /// Screen/map-space projection math for <see cref="MapOverlay"/> - split out
 /// as its own plain (non-Node) class during the "MapOverlay.cs is a
-/// growing god-object" cleanup flagged in TODO.md: everything here is pure
+/// growing god-object" cleanup flagged in TODO/TODO.md: everything here is pure
 /// coordinate math with no drawing and no input handling, and every other
 /// piece of <see cref="MapOverlay"/> (grid, marquee, all four per-element
 /// handlers) needs it, so it's the one dependency every other split-out

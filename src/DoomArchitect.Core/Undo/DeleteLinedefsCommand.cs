@@ -10,7 +10,7 @@ namespace DoomArchitect.Core.Undo;
 /// walls is repaired - both are simply left as-is, exactly like real UDB
 /// (its own gentler <c>DissolveItem</c>, which does try to join the
 /// sectors on either side back together, is a distinct, not-yet-ported
-/// action - see TODO.md).
+/// action - see TODO/TODO.md).
 /// </summary>
 public sealed class DeleteLinedefsCommand : ICommand
 {

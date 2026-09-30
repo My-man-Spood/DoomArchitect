@@ -8,7 +8,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// <summary>
 /// Draw Lines mode - Phase 3 (cardinal-direction snap, auto-close across
 /// existing geometry, continuous drawing, and the rest) is done; see
-/// TODO.md for the full writeup. Left-click places new points; clicking
+/// TODO/TODO.md for the full writeup. Left-click places new points; clicking
 /// back near the first one closes and commits a ring, same as right-click
 /// - but right-click (or too few points to close) commits whatever's
 /// drawn as a genuinely open polyline instead (<see cref="DrawLoopCommand"/>'s
@@ -189,7 +189,7 @@ public sealed class DrawOverlayHandler
 	/// (<see cref="CardinalSnapper"/>) - a live poll of the independently
 	/// rebindable <c>draw_cardinal_lock_modifier</c> action (default Alt,
 	/// with Shift as an additional qualifier on that same bound event -
-	/// see TODO.md's "Keybinding management" writeup for why a single
+	/// see TODO/TODO.md's "Keybinding management" writeup for why a single
 	/// action rather than two).
 	/// </summary>
 	private static bool CardinalSnapEnabled => Input.IsActionPressed("draw_cardinal_lock_modifier");
@@ -346,7 +346,7 @@ public sealed class DrawOverlayHandler
 	/// version of this method did (every placed segment plain red, the
 	/// rubber-band always plain orange regardless of what it would
 	/// actually snap onto). Solid, not dashed - see this file's own class
-	/// remarks on the "dashed" premise in TODO.md having been wrong.
+	/// remarks on the "dashed" premise in TODO/TODO.md having been wrong.
 	/// </summary>
 	private void DrawSegment(CanvasItem target, MapVector2 start, MapVector2 end, Color color)
 	{

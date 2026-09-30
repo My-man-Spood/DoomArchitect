@@ -179,7 +179,7 @@ public sealed class WadFile : IResourceContainer
     /// text - per the UDMF spec, this must be the very first lump after
     /// the map marker. Throws if the map exists but isn't in UDMF format;
     /// classic binary-format maps (as shipped in the original id Software
-    /// WADs) aren't supported yet - see TODO.md.
+    /// WADs) aren't supported yet - see TODO/TODO.md.
     /// </summary>
     public string ReadMapTextMap(string mapName)
     {

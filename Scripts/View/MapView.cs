@@ -613,7 +613,7 @@ public partial class MapView : Node3D
 	/// Swaps in a freshly loaded map: tears down every existing sector's
 	/// meshes and rebuilds from scratch, resets undo history (the old
 	/// stack's commands still close over the discarded MapData, so they'd
-	/// be pointless - see TODO.md), and refits the top-down camera since a
+	/// be pointless - see TODO/TODO.md), and refits the top-down camera since a
 	/// real loaded map is very unlikely to sit in the same 256x256 area
 	/// the sample room did.
 	/// </summary>
@@ -1071,7 +1071,7 @@ public partial class MapView : Node3D
 
 	/// <summary>
 	/// Every keyboard action here is a real, independently rebindable
-	/// <see cref="KeyBindingRegistry"/> entry (see TODO.md's "Keybinding
+	/// <see cref="KeyBindingRegistry"/> entry (see TODO/TODO.md's "Keybinding
 	/// management" writeup) - <see cref="KeyBindings.Bootstrap"/> registers
 	/// each one's default binding (or a saved user override) with Godot's
 	/// own <see cref="InputMap"/> before this method can ever run.

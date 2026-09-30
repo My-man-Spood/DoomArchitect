@@ -5,7 +5,7 @@ namespace DoomArchitect.Core.ZDoom;
 /// <summary>
 /// Parses a DECORATE lump/file into a set of <see cref="ActorStructure"/>s -
 /// ported from UDB's real <c>DecorateParser</c>. Real adaptations from the
-/// original, each tracked in TODO.md rather than silently dropped:
+/// original, each tracked in TODO/TODO.md rather than silently dropped:
 /// <see cref="OnInclude"/> is a plain resolver delegate the caller supplies
 /// (this project has no <c>DataReader</c>/<c>DataLocation</c> to reach
 /// through) instead of one wired to an ambient resource stack;

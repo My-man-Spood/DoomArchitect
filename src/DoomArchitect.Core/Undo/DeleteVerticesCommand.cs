@@ -15,7 +15,7 @@ namespace DoomArchitect.Core.Undo;
 /// junction vertex. That bluntness is UDB's real "Delete" behavior, not a
 /// bug; UDB's own gentler <c>DissolveItem</c> (tries to avoid breaking
 /// sectors, preserves texture alignment across the merge) is a distinct,
-/// not-yet-ported action - see TODO.md.
+/// not-yet-ported action - see TODO/TODO.md.
 ///
 /// One command regardless of how many vertices are deleted, matching this
 /// project's "single Undo step for a whole gesture" convention - not a

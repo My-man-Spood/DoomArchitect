@@ -6,7 +6,7 @@ using MapVector2 = System.Numerics.Vector2;
 /// The 2D view's background grid - state (<see cref="GridSize"/>,
 /// <see cref="DynamicGridSizeEnabled"/>) plus drawing, split out of
 /// <see cref="MapOverlay"/> during its "growing god-object" cleanup
-/// (flagged in TODO.md). Genuinely self-contained: needs only
+/// (flagged in TODO/TODO.md). Genuinely self-contained: needs only
 /// <see cref="MapOverlayCamera"/> (for screen-pixel sizing and the
 /// current viewport's map-space bounds) and a <see cref="CanvasItem"/> to
 /// draw into, passed to <see cref="Draw"/> rather than held - this class

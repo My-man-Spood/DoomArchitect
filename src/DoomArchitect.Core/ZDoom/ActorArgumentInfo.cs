@@ -10,7 +10,7 @@ namespace DoomArchitect.Core.ZDoom;
 /// editing UI at all yet (confirmed: the equivalent linedef/sector action
 /// arguments are parsed and tested but not wired into any editor either),
 /// so building that richness now would have nothing to attach to - tracked
-/// in TODO.md as a deferred sub-piece of the ZScript/DECORATE actor
+/// in TODO/TODO.md as a deferred sub-piece of the ZScript/DECORATE actor
 /// discovery port, not silently dropped.
 /// </summary>
 public sealed record ActorArgumentInfo(bool Used, string Title);
