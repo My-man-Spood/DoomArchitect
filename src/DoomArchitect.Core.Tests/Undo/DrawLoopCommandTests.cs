@@ -317,6 +317,39 @@ public class DrawLoopCommandTests
     }
 
     /// <summary>
+    /// Regression: undoing a loop drawn as a hole inside another sector
+    /// left the surrounding sector's own mesh stale - its boundary really
+    /// does change (the hole's sidedef, joined onto it as the loop's own
+    /// exterior side via <c>AttachOrRetargetSidedefTracked</c>, goes away),
+    /// but that undo closure never marked it dirty. A user reported this as
+    /// "the 2D overlay looks right but the 3D mesh still shows the hole"
+    /// after drawing a hole, deleting it, undoing the delete, then undoing
+    /// the original draw - the delete/undo round-trip in between was a red
+    /// herring (byte-for-byte reversible on its own, and this reproduces
+    /// with no delete involved at all): plain undo of this draw alone
+    /// already failed to mark the surrounding sector dirty.
+    /// </summary>
+    [Fact]
+    public void Undo_LoopEntirelyInsideAnotherSector_MarksTheSurroundingSectorDirty()
+    {
+        var map = new MapData();
+        var (originalSector, _) = map.CreateClosedSector(0, 128,
+            new Vector2(0, 0), new Vector2(0, 200), new Vector2(200, 200), new Vector2(200, 0));
+
+        var innerSquare = new[]
+        {
+            new Vector2(50, 50), new Vector2(50, 100), new Vector2(100, 100), new Vector2(100, 50),
+        };
+        var command = StandaloneCommand(map, innerSquare);
+        command.Do();
+        map.ClearDirty(originalSector);
+
+        command.Undo();
+
+        Assert.True(originalSector.NeedsRebuild);
+    }
+
+    /// <summary>
     /// The user's exact follow-up report: a pillar drawn (as its own,
     /// separate draw session) inside a room, then a second, bigger
     /// standalone loop drawn *around* that pillar (also fully inside the

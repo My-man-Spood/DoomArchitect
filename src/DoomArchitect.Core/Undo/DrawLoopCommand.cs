@@ -689,6 +689,12 @@ public sealed class DrawLoopCommand : ICommand
                 sector.RemoveSidedef(created);
                 if (front) linedef.Front = null; else linedef.Back = null;
                 if (opposite != null) opposite.MiddleTexture = originalOppositeMiddle!;
+                // Mirrors MapData.AttachOrRetargetSidedef's own forward-direction
+                // dirty-marking, reversed: this linedef losing a whole side changes
+                // both its own wall mesh and (when it had one) the opposite side's
+                // sector's floor/ceiling boundary.
+                sector.NeedsRebuild = true;
+                if (opposite != null) opposite.Sector.NeedsRebuild = true;
             });
         }
         else
@@ -701,6 +707,8 @@ public sealed class DrawLoopCommand : ICommand
                 sector.RemoveSidedef(existing);
                 existing.Sector = originalSector;
                 originalSector.AddSidedef(existing);
+                sector.NeedsRebuild = true;
+                originalSector.NeedsRebuild = true;
             });
         }
     }
