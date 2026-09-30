@@ -36,7 +36,7 @@ title = "Add Resource"
 initial_position = 1
 size = Vector2i(640, 480)
 exclusive = false
-file_mode = 0
+file_mode = 3
 access = 2
 filters = PackedStringArray("*.wad ; Doom WAD files", "*.pk3 ; PK3 archives")
 

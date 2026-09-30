@@ -25,7 +25,8 @@ public interface IResourceContainer
     /// deliberately doesn't cover, since that one is root/namespace-only by
     /// design. A WAD has no real path hierarchy at all, so it treats
     /// <paramref name="path"/> as a bare lump name (its own real ZScript
-    /// include convention); a PK3 resolves the full nested path.
+    /// include convention); a PK3 or a directory resource resolves the
+    /// full nested path.
     /// </summary>
     byte[]? FindByPath(string path);
 }

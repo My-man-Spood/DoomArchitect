@@ -9,10 +9,12 @@ using Godot;
 
 /// <summary>
 /// A reusable "ordered list of resources" editor - an <see cref="ItemList"/>
-/// plus Add.../Remove-selected buttons and a nested "add" <see cref="FileDialog"/>,
-/// wrapping the actual loaded <see cref="IResourceContainer"/>s (a WAD or a
-/// PK3 - see <see cref="ResourceContainerFactory"/>) so callers never touch
-/// raw paths without also having the parsed resource ready to use. The same
+/// plus Add.../Remove-selected buttons and a nested "add" <see cref="FileDialog"/>
+/// (<c>FileModeEnum.OpenAny</c>, so a WAD/PK3 file or a loose folder can be
+/// picked in the same dialog), wrapping the actual loaded
+/// <see cref="IResourceContainer"/>s - see <see cref="ResourceContainerFactory"/> -
+/// so callers never touch raw paths without also having the parsed resource
+/// ready to use. The same
 /// widget is embedded in both <c>MapOptionsDialog</c> (a map's own
 /// resources) and <c>PreferencesDialog</c> (a game configuration's app-
 /// wide default resources).
@@ -63,6 +65,7 @@ public partial class ResourceListEditor : VBoxContainer
 		addButton.Pressed += () => _addFileDialog.PopupCentered();
 		removeButton.Pressed += OnRemovePressed;
 		_addFileDialog.FileSelected += OnFileSelected;
+		_addFileDialog.DirSelected += OnFileSelected;
 	}
 
 	/// <summary>Replaces the whole list, loading each path via <see cref="ResourceContainerFactory"/> (a WAD or a PK3) - one that fails to load (e.g. moved on disk) is skipped and reported, not fatal to the rest.</summary>

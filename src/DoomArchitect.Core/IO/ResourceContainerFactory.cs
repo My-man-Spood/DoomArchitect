@@ -1,10 +1,12 @@
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
-/// The one place that decides "does this path need a <see cref="WadFile"/>
-/// or a <see cref="Pk3File"/>" - shared by the resource-list UI's Add flow
-/// and by reloading a previously saved resource path list, so that logic
-/// only lives once. Sniffs the first 4 bytes rather than trusting the
+/// The one place that decides "does this path need a <see cref="WadFile"/>,
+/// a <see cref="Pk3File"/>, or a <see cref="DirectoryResource"/>" - shared
+/// by the resource-list UI's Add flow and by reloading a previously saved
+/// resource path list, so that logic only lives once. A directory is
+/// checked first (nothing to sniff - it either exists as a folder or it
+/// doesn't); otherwise sniffs the first 4 bytes rather than trusting the
 /// extension alone (a real WAD always starts with <c>IWAD</c>/<c>PWAD</c>;
 /// a real zip/PK3 always starts with the <c>PK</c> signature bytes), only
 /// falling back to the extension if neither signature matches - e.g. an
@@ -14,6 +16,8 @@ public static class ResourceContainerFactory
 {
     public static IResourceContainer Open(string path)
     {
+        if (Directory.Exists(path)) return DirectoryResource.Open(path);
+
         var header = new byte[4];
         using (var probe = File.OpenRead(path))
         {

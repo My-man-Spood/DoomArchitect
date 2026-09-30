@@ -1237,6 +1237,37 @@ file just tracks what's built and what's next.
           no loose-folder resource type exists anywhere yet. Not a cut
           specific to this port - revisit only if directory-based resources
           themselves ever become a supported resource kind.
+
+          **Update:** directory-based resources are now a real, supported
+          resource kind - `IO.DirectoryResource`, a loose-folder
+          `IResourceContainer` mirroring `Pk3File`'s exact lookup rules
+          (same fallback-namespace order, same first-entry-wins-on-
+          duplicate rule) but reading straight off disk instead of a zip
+          archive - no separate handle to dispose, content is re-read via
+          `File.ReadAllBytes` per lookup. `ResourceContainerFactory.Open`
+          checks `Directory.Exists` first; `ResourceListEditor`'s Add
+          dialog is `FileModeEnum.OpenAny` (wired to both `FileSelected`
+          and `DirSelected`) so a folder can be picked the same way as a
+          WAD/PK3. This was surfaced by a real user report: custom
+          ZScript monster actors kept in a loose folder (not zipped into
+          a PK3) never reached `ResourceActorScanner` at all, since no
+          container type existed for them - they're discovered
+          automatically now, no scanner changes needed (it only ever
+          talked to `IResourceContainer`). **Still deferred, tracked**:
+          UDB's own per-resource "roottextures"/"rootflats" checkboxes
+          (`ResourceOptionsForm`'s `dir_textures`/`dir_flats`, whether
+          loose images directly in the folder root - not inside a
+          `textures/`/`flats/` subfolder - should also count) - this
+          project's `ResourceListEditor` has no per-resource options UI
+          of any kind yet (every resource is just a bare path), so
+          there's nowhere to surface a checkbox for this even for WAD's
+          own `strictpatches` option. Revisit if/when a per-resource
+          options UI gets built for any resource kind, not directories
+          specifically. Also deferred: UDB's own
+          "load loose WAD files inside a directory root as its own
+          sub-resources" quirk (`DirectoryReader.Initialize`) - a real
+          but narrow behavior; revisit only if someone actually relies on
+          mixing loose WADs inside a folder resource.
         - `uservars`/`uservar_defaults` (custom `user_*` ZScript field
           capture, and the `var TYPE user_name;` parsing that would feed
           it) - no Thing property-editing UI exists to attach custom
