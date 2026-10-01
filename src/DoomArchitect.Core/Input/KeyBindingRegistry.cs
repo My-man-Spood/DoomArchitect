@@ -37,6 +37,7 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("redo", CategoryEdit, "Redo", "Redoes the last undone change.", new KeyBinding("Y", Ctrl: true)),
         new KeyBindingDefinition("delete_item", CategoryEdit, "Delete", "Deletes the current selection (or the hovered element, if nothing is selected) in Vertices/Linedefs/Sectors/Things mode.", new KeyBinding("Delete")),
         new KeyBindingDefinition("dissolve_item", CategoryEdit, "Dissolve", "Deletes the current selection (or the hovered element, if nothing is selected) in Vertices/Linedefs mode, trying to preserve the rest of the map geometry intact. Sectors mode has no separate Dissolve in UDB either - it's the same as Delete there.", new KeyBinding("Backspace")),
+        new KeyBindingDefinition("save_document", CategoryEdit, "Save Document", "Saves the active script tab's file to disk.", new KeyBinding("S", Ctrl: true)),
 
         new KeyBindingDefinition("mode_vertices", CategoryModes, "Vertices Mode", "Switches to Vertices editing mode.", new KeyBinding("V")),
         new KeyBindingDefinition("mode_linedefs", CategoryModes, "Linedefs Mode", "Switches to Linedefs editing mode.", new KeyBinding("L")),

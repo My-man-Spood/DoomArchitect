@@ -188,3 +188,9 @@ so it isn't lost, not because it belongs in the tables below.
 | Item | Note |
 |---|---|
 | [MapOverlay.cs god-object cleanup](architecture-mapoverlay-god-object-cleanup.md) | |
+
+### UI / App shell
+
+| Item | Note |
+|---|---|
+| [Document tabs (map editor + script tabs)](documents-and-tabs.md) | |

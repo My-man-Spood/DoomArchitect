@@ -1,0 +1,27 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/ScriptDocument.cs" id="1"]
+[ext_resource type="Theme" uid="uid://cj2ixmf56srbg" path="res://Assets/BaseTheme.tres" id="2"]
+
+[node name="ScriptDocument" type="VBoxContainer"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2")
+theme_override_constants/separation = 0
+script = ExtResource("1")
+
+[node name="Header" type="PanelContainer" parent="."]
+layout_mode = 2
+theme_type_variation = &"TopBarPanel"
+
+[node name="PathLabel" type="Label" parent="Header"]
+layout_mode = 2
+text = "untitled"
+
+[node name="CodeEdit" type="CodeEdit" parent="."]
+layout_mode = 2
+size_flags_vertical = 3
+gutters_draw_line_numbers = true

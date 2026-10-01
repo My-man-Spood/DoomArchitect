@@ -35,6 +35,8 @@ public partial class MapView : Node3D
 
 	private Camera3D _topDownCamera;
 	private Camera3D _perspectiveCamera;
+	private CanvasLayer _overlayLayer;
+	private Control _toolbarContainer;
 	private MapOverlay _overlay;
 	private ModeToolbar _modeToolbar;
 	private GridToolbar _gridToolbar;
@@ -42,6 +44,29 @@ public partial class MapView : Node3D
 	private StatusBar _statusBar;
 	private OpenMapMenu _openMapMenu;
 	private MainMenuBar _mainMenuBar;
+
+	/// <summary>
+	/// Set once by <c>AppShell</c> right after instancing this document -
+	/// the menu bar is app-level chrome now (see <c>AppShell</c>'s own
+	/// remarks on why), not a child of this scene, so it has to be pushed
+	/// in from outside rather than resolved via <c>GetNode</c>. The setter
+	/// (not just the field) also forwards it to <see cref="_testMapToolbar"/>,
+	/// which needs it too but is resolved in <see cref="_Ready"/> - before
+	/// <c>AppShell</c> ever gets a chance to assign this property.
+	/// </summary>
+	public MainMenuBar MainMenuBar
+	{
+		get => _mainMenuBar;
+		set
+		{
+			_mainMenuBar = value;
+			_testMapToolbar.MainMenuBar = value;
+		}
+	}
+
+	public OpenMapMenu OpenMapMenu => _openMapMenu;
+	public MapOverlay Overlay => _overlay;
+
 	private MapData _map;
 	private TextureCache _textureCache;
 	private TextureSet _textureSet;
@@ -52,6 +77,7 @@ public partial class MapView : Node3D
 	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
 	private UndoStack _undoStack = new();
 	private bool _in3D;
+	private bool _isActive = true;
 
 	// Matches the sample room's own baked-in starting transform (floor 0,
 	// camera Y 48 in Scenes/Main.tscn) - reused here rather than a new,
@@ -92,6 +118,8 @@ public partial class MapView : Node3D
 
 		_topDownCamera = GetNode<Camera3D>("TopDownCamera");
 		_perspectiveCamera = GetNode<Camera3D>("PerspectiveCamera");
+		_overlayLayer = GetNode<CanvasLayer>("Overlay");
+		_toolbarContainer = GetNode<Control>("UI/TopBar/ToolbarMargin");
 		_overlay = GetNode<MapOverlay>("Overlay/MapOverlay");
 		_modeToolbar = GetNode<ModeToolbar>("UI/TopBar/ToolbarMargin/TopToolbar");
 		_modeToolbar.Overlay = _overlay;
@@ -103,12 +131,9 @@ public partial class MapView : Node3D
 		_openMapMenu = GetNode<OpenMapMenu>("UI/OpenMapMenu");
 		_openMapMenu.MapLoaded += LoadMap;
 		_openMapMenu.MapResourcesChanged += RefreshResources;
-		_mainMenuBar = GetNode<MainMenuBar>("UI/TopBar/MenuBarPanel/MenuBar");
-		_mainMenuBar.Initialize(_openMapMenu, _overlay);
 
 		_testMapToolbar = GetNode<TestMapToolbar>("UI/TopBar/ToolbarMargin/TopToolbar/TestMapToolbar");
 		_testMapToolbar.Overlay = _overlay;
-		_testMapToolbar.MainMenuBar = _mainMenuBar;
 
 		// No WAD is open yet - every texture/flat lookup just resolves to
 		// the shared placeholder until a real map is loaded.
@@ -164,6 +189,49 @@ public partial class MapView : Node3D
 			_openMapMenu.LoadFromCommandLine(cliFilePath, cliMapName);
 		}
 	}
+
+	/// <summary>
+	/// Called by the app shell's tab host when this map document's own tab
+	/// becomes (in)active - <c>MapDocument.tscn</c>'s root (a <c>Node3D</c>,
+	/// so it can't be hosted as a plain <see cref="Control"/>-managed
+	/// <c>TabContainer</c> page) keeps rendering/processing regardless of
+	/// which tab is actually showing unless told otherwise: only one
+	/// <see cref="Camera3D"/> can be <see cref="Camera3D.Current"/> across
+	/// the whole viewport at a time, and <c>CanvasLayer</c> content (the 2D
+	/// overlay, the toolbar, the status bar - the menu bar no longer lives
+	/// here at all, see <see cref="MainMenuBar"/>'s own remarks) renders
+	/// independently of normal 3D scene-tree visibility. Restores whichever
+	/// of the 2D/3D views this tab was last actually in on reactivation -
+	/// matches the same camera/overlay/mouse-mode set <c>toggle_2d_3d</c>
+	/// itself flips, just both at once rather than swapping between them.
+	/// </summary>
+	public void SetTabActive(bool active)
+	{
+		_isActive = active;
+
+		// Visible = false on this root Node3D first: an inactive tab's own
+		// cameras get Current = false right below, but a Viewport with no
+		// explicitly-current camera anywhere falls back to auto-selecting
+		// *some* Camera3D still in the tree rather than rendering nothing -
+		// hiding the whole subtree first takes both of this tab's own
+		// cameras out of contention for that fallback, not just out of
+		// "current" status.
+		Visible = active;
+		_overlayLayer.Visible = active;
+		_toolbarContainer.Visible = active;
+		UpdateStatusBarVisibility();
+		_topDownCamera.Current = active && !_in3D;
+		_perspectiveCamera.Current = active && _in3D;
+		ProcessMode = active ? ProcessModeEnum.Inherit : ProcessModeEnum.Disabled;
+		Input.MouseMode = active && _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
+	}
+
+	/// <summary>
+	/// Shared by <see cref="SetTabActive"/> and <c>toggle_2d_3d</c> - the
+	/// status bar needs to stay hidden for either reason independently
+	/// (inactive tab, or 3D mode) without one clobbering the other's call.
+	/// </summary>
+	private void UpdateStatusBarVisibility() => _statusBar.Visible = _isActive && !_in3D;
 
 	public override void _Process(double delta)
 	{
@@ -1204,7 +1272,7 @@ public partial class MapView : Node3D
 			_perspectiveCamera.Current = _in3D;
 			_overlay.Visible = !_in3D;
 			_modeToolbar.Visible = !_in3D;
-			_statusBar.Visible = !_in3D;
+			UpdateStatusBarVisibility();
 			_crosshair.Visible = _in3D;
 			Input.MouseMode = _in3D ? Input.MouseModeEnum.Captured : Input.MouseModeEnum.Visible;
 			if (_in3D)

@@ -8,10 +8,16 @@ using Godot;
 /// The conventional top menu bar (File / Edit / Map / Preferences) - a
 /// native Godot 4.4+ <see cref="MenuBar"/>, whose children are the
 /// <see cref="PopupMenu"/>s shown as its top-level entries (each child's
-/// node name is its label). <see cref="Initialize"/> is called by
-/// <c>MapView</c> once it has resolved <see cref="OpenMapMenu"/> itself,
-/// keeping node-path lookups centralized there rather than duplicated
-/// here.
+/// node name is its label). Lives in <c>Main.tscn</c> as app-level chrome
+/// rather than inside <c>MapDocument.tscn</c> - there's only ever one map
+/// open at a time, and actions here ("Save Map", "Open Script...") should
+/// stay reachable no matter which tab is currently showing, which a menu
+/// bar living inside the map document's own tab couldn't do (a real,
+/// reported bug: it disappeared along with the rest of that tab's content
+/// whenever a Script tab was active). <see cref="Initialize"/> is called
+/// by <c>AppShell</c> once it has resolved <see cref="OpenMapMenu"/> and
+/// <c>MapOverlay</c> off the one Map tab, keeping node-path lookups
+/// centralized there rather than duplicated here.
 /// </summary>
 public partial class MainMenuBar : MenuBar
 {
@@ -28,6 +34,15 @@ public partial class MainMenuBar : MenuBar
 	// actually perform once confirmed - set right before showing it.
 	private Action _pendingDiscardAction;
 
+	/// <summary>
+	/// Set by <c>AppShell</c> right after instancing this map's own tab -
+	/// "File &gt; Open Script..." has to reach the shared tab strip, which
+	/// lives a level above this menu bar's own content (see
+	/// <c>AppShell</c>'s own remarks on why that's not wired the other way
+	/// around). Null-safe: a no-op if nothing's listening yet.
+	/// </summary>
+	public Action OpenScriptRequested { get; set; }
+
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
 	{
 		_openMapMenu = openMapMenu;
@@ -40,6 +55,8 @@ public partial class MainMenuBar : MenuBar
 		fileMenu.AddItem("Save Map", 2);
 		fileMenu.AddItem("Save Map As...", 3);
 		fileMenu.AddItem("Save Map Into...", 4);
+		fileMenu.AddSeparator();
+		fileMenu.AddItem("Open Script...", 5);
 		fileMenu.IdPressed += id =>
 		{
 			switch (id)
@@ -58,6 +75,9 @@ public partial class MainMenuBar : MenuBar
 					break;
 				case 4:
 					_openMapMenu.SaveMapInto();
+					break;
+				case 5:
+					OpenScriptRequested?.Invoke();
 					break;
 			}
 		};
