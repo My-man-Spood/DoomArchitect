@@ -194,3 +194,9 @@ so it isn't lost, not because it belongs in the tables below.
 | Item | Note |
 |---|---|
 | [Document tabs (map editor + script tabs)](documents-and-tabs.md) | |
+
+### Scripting / LSP
+
+| Item | Note |
+|---|---|
+| [BCS tokenizer + parser + minimal LSP server](bcs-lsp-foundation.md) | |
