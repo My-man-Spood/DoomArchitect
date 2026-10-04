@@ -1,3 +1,4 @@
+using System.Linq;
 using Godot;
 
 /// <summary>
@@ -114,6 +115,21 @@ public partial class AppShell : Control
 
 	private void OnScriptFileSelected(string path)
 	{
+		OpenScriptTab(path);
+		SwitchTo(_tabContents.Count - 1);
+	}
+
+	/// <summary>
+	/// The shared tab-creation body <see cref="OnScriptFileSelected"/>
+	/// already had, extracted so <see cref="OnScriptNavigationRequested"/>
+	/// (a cross-file go-to-definition jump - see
+	/// <see cref="ScriptDocument.NavigateToFileRequested"/>) can open a
+	/// tab for a file the user never explicitly opened via the file
+	/// dialog, the exact same way. Does not switch to it or navigate
+	/// anywhere - callers decide that part themselves.
+	/// </summary>
+	private ScriptDocument OpenScriptTab(string path)
+	{
 		var scriptDocument = GD.Load<PackedScene>(ScriptDocumentScenePath).Instantiate<ScriptDocument>();
 		scriptDocument.Visible = false;
 		// AddChild before LoadFile - Instantiate() doesn't run _Ready() until
@@ -121,11 +137,28 @@ public partial class AppShell : Control
 		// _codeEdit, which _Ready() is what resolves.
 		_contentArea.AddChild(scriptDocument);
 		scriptDocument.LoadFile(path);
+		scriptDocument.NavigateToFileRequested += OnScriptNavigationRequested;
 		_tabContents.Add(scriptDocument);
 
 		_tabBar.AddTab(scriptDocument.DisplayName, GD.Load<Texture2D>("res://Assets/Icons/document_script.svg"));
 
-		SwitchTo(_tabContents.Count - 1);
+		return scriptDocument;
+	}
+
+	/// <summary>
+	/// A go-to-definition jump into a different file than the one it
+	/// came from (<see cref="ScriptDocument.NavigateToFileRequested"/>) -
+	/// focuses that file's own tab if it's already open, otherwise opens
+	/// a new one for it, then jumps to the resolved position either way.
+	/// </summary>
+	private void OnScriptNavigationRequested(string path, int line, int column)
+	{
+		var existing = _tabContents.OfType<ScriptDocument>()
+			.FirstOrDefault(d => string.Equals(d.FilePath, path, System.StringComparison.OrdinalIgnoreCase));
+		var target = existing ?? OpenScriptTab(path);
+
+		SwitchTo(_tabContents.IndexOf(target));
+		target.NavigateTo(line, column);
 	}
 
 	private void OnTabChanged(long tab) => SwitchTo((int)tab);

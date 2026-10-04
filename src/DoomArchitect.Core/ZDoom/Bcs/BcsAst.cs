@@ -11,6 +11,20 @@ public abstract class BcsNode
 {
     public int Line { get; init; }
     public int Column { get; init; }
+
+    /// <summary>
+    /// Comment text found directly, contiguously above this declaration's
+    /// own first line (a single <c>/* ... */</c>, or a run of <c>//</c>
+    /// lines with no blank line between them or between the last one and
+    /// the declaration) - empty if there were none. See
+    /// <see cref="BcsParser"/>'s own <c>ExtractDocComment</c> for exactly
+    /// how "directly above" is recognized. Only ever populated for a
+    /// top-level declaration's own node (function/script/enum/special/
+    /// variable/define) - left empty everywhere else (directives,
+    /// parameters, body locals, enum members), since those don't have
+    /// their own separate leading-comment slot in this pass.
+    /// </summary>
+    public string DocComment { get; init; } = string.Empty;
 }
 
 /// <summary>What a <see cref="BcsSymbol"/> actually is - just enough to pick a sensible completion-item icon on either consumer (Godot's <c>CodeCompletionKind</c>, LSP's <c>CompletionItemKind</c>), not a real type system.</summary>
@@ -38,8 +52,49 @@ public enum BcsSymbolKind
 /// <see cref="BcsCompilationUnit.CollectSymbols"/>'s own dedup no longer
 /// collapses same-named duplicates for free - callers that want a
 /// name-unique completion list dedupe explicitly by <c>(Name, Kind)</c>.
+/// <see cref="SourcePath"/> is empty for a symbol declared in the file
+/// currently being parsed (every existing call site) - only a
+/// <c>BcsProgram</c> ever sets it, when pulling in an included/imported
+/// file's own file-scope symbols, since <see cref="Line"/>/<see cref="Column"/>
+/// alone can't say which *file* a cross-file go-to-definition should
+/// jump to.
 /// </summary>
-public readonly record struct BcsSymbol(string Name, BcsSymbolKind Kind, int Line, int Column);
+public readonly record struct BcsSymbol(string Name, BcsSymbolKind Kind, int Line, int Column, string Type = "", string Signature = "", string DocComment = "", string SourcePath = "")
+{
+    /// <summary>
+    /// A short, human-readable description for hover - e.g. "int x" for a
+    /// typed variable/parameter, or a full
+    /// "function int Add(int a, int b)" signature for a function.
+    /// Shared by both the in-app editor
+    /// (<c>ScriptDocument.GetBcsTooltip</c>) and the LSP server
+    /// (<c>BcsHoverHandler</c>) so hovering a declared name describes it
+    /// identically either way. <see cref="Signature"/> (only ever set for
+    /// a <see cref="BcsSymbolKind.Function"/> - the full parenthesized
+    /// signature text, built once when the symbol itself is created,
+    /// since only then is the owning <see cref="BcsFunctionDeclaration"/>/
+    /// <see cref="BcsScriptDeclaration"/> node - and its parameter list -
+    /// still at hand) wins when present; otherwise falls back to
+    /// <see cref="Type"/> (set for a <see cref="BcsSymbolKind.Variable"/>
+    /// - the real declared type keyword, e.g. "int"/"str") plus
+    /// <see cref="Name"/>, or finally a bare kind label for anything with
+    /// neither (enum types/members, macros, or a malformed declaration
+    /// this pass couldn't resolve a type for). Deliberately does NOT fold
+    /// <see cref="DocComment"/> in here - that's plain English prose, not
+    /// code, and this string gets re-tokenized for BBCode coloring
+    /// in-app/wrapped in a Markdown code fence over LSP; callers combine
+    /// the two themselves (see <c>ScriptDocument.GetBcsTooltip</c>/
+    /// <c>BcsHoverHandler</c>).
+    /// </summary>
+    public string Describe() => Kind switch
+    {
+        BcsSymbolKind.Function => string.IsNullOrEmpty(Signature) ? $"function {Name}" : Signature,
+        BcsSymbolKind.Variable => string.IsNullOrEmpty(Type) ? $"variable {Name}" : $"{Type} {Name}",
+        BcsSymbolKind.EnumType => $"enum {Name}",
+        BcsSymbolKind.EnumMember => $"enum member {Name}",
+        BcsSymbolKind.Macro => $"macro {Name}",
+        _ => Name,
+    };
+}
 
 /// <summary>The whole parsed file - an ordered top-level node list, exactly as encountered (directives and declarations can interleave in real BCS source).</summary>
 public sealed class BcsCompilationUnit : BcsNode
@@ -66,30 +121,58 @@ public sealed class BcsCompilationUnit : BcsNode
             {
                 case BcsFunctionDeclaration function:
                     if (!string.IsNullOrEmpty(function.Name))
-                        yield return new BcsSymbol(function.Name, BcsSymbolKind.Function, function.NameLine, function.NameColumn);
+                        yield return new BcsSymbol(function.Name, BcsSymbolKind.Function, function.NameLine, function.NameColumn,
+                            Signature: $"function {function.ReturnType} {function.Name}({FormatParameterList(function.ParameterNames)})",
+                            DocComment: function.DocComment);
                     break;
                 case BcsSpecialDeclaration special:
-                    foreach (var name in special.Names) yield return name;
+                    // One 'special' statement can declare several, comma-separated entries - a leading doc comment documents the whole statement, so every one of them shares it.
+                    foreach (var name in special.Names) yield return name with { DocComment = special.DocComment };
                     break;
                 case BcsScriptDeclaration script:
                     if (script.IsNamedScript)
-                        yield return new BcsSymbol(script.Number, BcsSymbolKind.Function, script.NumberLine, script.NumberColumn);
+                        yield return new BcsSymbol(script.Number, BcsSymbolKind.Function, script.NumberLine, script.NumberColumn,
+                            Signature: $"script {script.Number}({FormatParameterList(script.ParameterNames)})",
+                            DocComment: script.DocComment);
                     break;
                 case BcsEnumDeclaration @enum:
                     if (!string.IsNullOrEmpty(@enum.Name))
-                        yield return new BcsSymbol(@enum.Name, BcsSymbolKind.EnumType, @enum.Line, @enum.Column);
+                        yield return new BcsSymbol(@enum.Name, BcsSymbolKind.EnumType, @enum.Line, @enum.Column, DocComment: @enum.DocComment);
                     foreach (var enumMember in @enum.MemberNames) yield return enumMember;
                     break;
                 case BcsVariableDeclaration variable:
-                    foreach (var name in variable.DeclaratorNames) yield return name;
+                    // Same reasoning as 'special' above - one declaration statement, possibly several comma-separated declarators, one shared leading comment.
+                    foreach (var name in variable.DeclaratorNames) yield return name with { DocComment = variable.DocComment };
                     break;
                 case BcsDefineDirective define:
                     if (!string.IsNullOrEmpty(define.Name))
-                        yield return new BcsSymbol(define.Name, BcsSymbolKind.Macro, define.Line, define.Column);
+                        yield return new BcsSymbol(define.Name, BcsSymbolKind.Macro, define.Line, define.Column, DocComment: define.DocComment);
                     break;
             }
         }
     }
+
+    /// <summary>
+    /// Public wrapper over <see cref="FileScopeSymbols"/> - a
+    /// <c>BcsProgram</c> uses this (and only this, never a function/
+    /// script's own parameters/body locals) to pull in an included/
+    /// imported file's symbols: only what that file declares at file
+    /// scope makes sense to a *different* file including it - its own
+    /// locals are scoped to a position within its own body, which
+    /// doesn't mean anything relative to a different file's lines.
+    /// </summary>
+    public IReadOnlyList<BcsSymbol> CollectFileScopeSymbols() => FileScopeSymbols().ToList();
+
+    /// <summary>
+    /// "int a, int b" from a parameter list - each parameter's own
+    /// <see cref="BcsSymbol.Type"/>, falling back to just its name if a
+    /// malformed/unrecognized parameter has none (e.g. an array/
+    /// reference parameter, where the type keyword isn't immediately
+    /// adjacent to the name - see <see cref="BcsParser.DeclarationScanner"/>'s
+    /// own remarks on that limitation).
+    /// </summary>
+    private static string FormatParameterList(IEnumerable<BcsSymbol> parameters) =>
+        string.Join(", ", parameters.Select(p => string.IsNullOrEmpty(p.Type) ? p.Name : $"{p.Type} {p.Name}"));
 
     /// <summary>
     /// Every declared name in the file, flattened - the simple, no-cursor-
@@ -215,12 +298,11 @@ public sealed class BcsDefineDirective : BcsNode
 }
 
 /// <summary>
-/// <c>#library "name"</c>/<c>library "name";</c> - this pass accepts
-/// either a <c>#</c>-prefixed or bare keyword spelling defensively, since
-/// exactly where this attaches in the real grammar wasn't pinned down
-/// during planning (it's absent from the confirmed <c>#</c>-directive
-/// table in <c>dirc.c</c> - verify against <c>src/parse/stmt.c</c> before
-/// treating this node's shape as authoritative).
+/// <c>#library ["name"]</c> - confirmed from <c>zt-bcc</c>'s own
+/// <c>src/parse/library.c</c> to always be <c>#</c>-prefixed (there is
+/// no bare <c>library</c> keyword form at module scope at all); the name
+/// itself is optional - a bare <c>#library</c> just uses the default
+/// name, so <see cref="Name"/> can legitimately be empty.
 /// </summary>
 public sealed class BcsLibraryDirective : BcsNode
 {
@@ -311,6 +393,8 @@ public sealed class BcsSpecialDeclaration : BcsNode
 public sealed class BcsFunctionDeclaration : BcsNode
 {
     public List<string> HeaderTokens { get; } = new();
+    /// <summary>The header's very first token's text - confirmed from <c>zt-bcc</c>'s own <c>dec.c</c> (<c>read_object</c>): a function's return type always comes immediately after the <c>function</c> keyword, before its name.</summary>
+    public string ReturnType { get; init; } = string.Empty;
     public string? Name { get; init; }
     public int NameLine { get; init; }
     public int NameColumn { get; init; }

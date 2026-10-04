@@ -321,27 +321,362 @@ it."
   user's own manual confirmation in the running app (no automated
   coverage exists for `Scripts/View/*`, same existing precedent).
 
+## Hover-on-identifier (new)
+
+A diagnostic message on the hovered line still always wins (unchanged);
+otherwise hovering a declared name now shows what it is, e.g.
+`function Add`, `variable sum`, `enum member Red`, `macro MAX_HEALTH` -
+driven entirely by the `FindDeclaration` resolver already built for
+go-to-definition.
+
+- New `BcsSymbol.Describe()` (in `BcsAst.cs`) - the one place this wording
+  lives, shared by both consumers so hovering a name describes it
+  identically in-app and over LSP.
+- **In-app**: `ScriptDocument.GetBcsTooltip` finally uses its own `word`
+  parameter (previously ignored - the tooltip callback was diagnostic-
+  only before this) to call `FindDeclaration` when there's no diagnostic
+  on the line.
+- **LSP**: `BcsHoverHandler` gets the same fallback, using a new shared
+  `BcsWordScanner.WordAt` (factored out of `BcsDefinitionHandler`, which
+  already needed the identical "find the word under this position"
+  logic LSP requests always need but Godot's `CodeEdit` never does -
+  it hands the word over directly via its own `select_word`).
+- Verified end-to-end against the real running LSP process: hovering a
+  function's own name, a local, a parameter, a macro name, an enum type
+  name, and an enum member all resolved to the right description;
+  hovering a position with no diagnostic and no resolvable word still
+  returns nothing.
+
+## `#library`/wadauthor-family pragma grammar, confirmed (new)
+
+Previously an open item ("exactly where `#library`/`wadauthor`-family
+pragmas attach grammatically wasn't pinned down"), accepted both a
+`#`-prefixed and bare-keyword spelling defensively. Confirmed from
+`zt-bcc`'s own `src/parse/library.c` (not `src/parse/stmt.c`, the
+original guess) - the real finding is cleaner than expected: **every one
+of these is always `#`-prefixed**, with no bare-keyword form at module
+scope at all (`read_module_item` dispatches purely on whether the
+current token is `#`). This uncovered two real bugs, now fixed:
+
+- `#libdefine` was being dispatched to the same parsing as `#library`
+  (expects an optional string) - wrong; it actually shares `#define`'s
+  exact grammar (both go through the real compiler's own `read_define`).
+  A real `#libdefine NAME value` would previously have produced a bogus
+  diagnostic. Moved to share `#define`'s case instead - it's now also
+  tracked as a completable macro name, same as `#define`.
+- `#library` with no name at all was treated as a missing-argument
+  error - wrong; a bare `#library` is valid real BCS and just means "use
+  the default name." The diagnostic is gone; `BcsLibraryDirective.Name`
+  can legitimately be empty now.
+
+Also added proper (tolerant, not-modeled-as-a-node) recognition for
+`#linklibrary "name"` (required string argument), `#encryptstrings`,
+`#nocompact`, `#wadauthor`, `#nowadauthor` (no arguments at all) - these
+previously fell through to "unknown directive," so a real file using any
+of them got a bogus diagnostic.
+
+Removed the bare (non-`#`) acceptance of `library`/`wadauthor`/
+`nowadauthor`/`nocompact`/`encryptstrings` entirely, since none of them
+have a real bare form - a bare occurrence is now correctly flagged as an
+unexpected token. `strict` alone is *not* part of this cleanup - it's
+genuinely valid bare (a namespace qualifier, confirmed from that same
+source's `is_namespace`), not a pragma; namespaces still aren't modeled
+by this pass at all, so it's still tolerated and skipped, just no longer
+miscategorized in the code as one of the pragma-family words.
+
+## Hover signatures/types (new)
+
+Hovering a declared name now shows its real type (`int x`) or, for a
+function/named script, its full signature (`function int Add(int a, int b)`,
+`script main(int a, int b)`) - not just a bare kind label as before.
+
+- **`DeclarationScanner`** now tracks each matched trigger token's own
+  *text*, not just its type, and threads it through as each `BcsSymbol`'s
+  new `Type` field - correctly reusing the list's starting type for a
+  comma-continuation (`int a, b, c;` - one shared type, confirmed real
+  grammar) while letting rule A re-fire independently per parameter
+  (`int a, int b` - BCS requires every parameter to restate its own
+  type, confirmed from `dec.c`'s `read_param`), which happens for free
+  since each parameter's own type keyword immediately precedes it.
+- New `BcsFunctionDeclaration.ReturnType` - confirmed from `dec.c`'s
+  `read_object`: a function's return type is always the header's very
+  first token, immediately after `function`.
+- `BcsSymbol.Signature` (new, only ever set for a `Function`-kind
+  symbol) - the full parenthesized signature text, built once in
+  `FileScopeSymbols()` while the owning `BcsFunctionDeclaration`/
+  `BcsScriptDeclaration` node (and its now-typed parameter list) is
+  still at hand; `Describe()` prefers it over the plain kind label.
+- Verified end-to-end against the real running LSP process: hovering a
+  function's own name shows its full signature, hovering a parameter
+  use inside its body shows that parameter's own type, hovering a
+  global shows its type.
+- Known limitation, not fixed here (pre-existing, not introduced by this
+  pass): an array/reference parameter (`int& a`, confirmed real grammar
+  via `dec.c`'s `read_param_ref`) isn't picked up at all, since its name
+  isn't immediately adjacent to its type keyword the way
+  `DeclarationScanner`'s rule A requires - same limitation that already
+  existed for plain name collection, now also missing from signatures.
+  `special` declarations still show just a bare name - their real
+  parameters are type-only, never named (confirmed earlier), so there's
+  nothing meaningful to add to their signature anyway.
+
+## Colored hover text (new)
+
+A flat, single-color signature like `function int Add(int a, int b)` was
+hard to read - hover is now colored the same way the live editor buffer
+already is.
+
+- **`Scripts/View/Bcs/BcsColors.cs`** (new) - the color palette and the
+  `ColorFor(type, previousSignificant)` lookup, extracted out of
+  `BcsSyntaxHighlighter` so it's one shared source of truth rather than
+  two copies that could drift apart.
+- **`Scripts/View/Bcs/BcsBbcodeFormatter.cs`** (new) - two deliberately
+  separate paths, since they need different handling and can't be told
+  apart from the string alone: `ColorizeCode` re-tokenizes a
+  `BcsSymbol.Describe()` result (real, well-formed BCS-ish syntax) and
+  wraps each colorable token in a `[color=#rrggbb]` tag using
+  `BcsColors`; `EscapePlainText` just escapes `[`/`]` for a diagnostic's
+  own English message, *without* tokenizing it - confirmed live that
+  tokenizing prose is actually unsafe: a diagnostic quoting punctuation
+  (`"expected ']', got '{'"`) re-tokenizes its quoted `']'` down to a bare
+  `]`, silently dropping the surrounding quotes, since a token's `Value`
+  is a literal's *decoded content*, not its original source text.
+  `ColorizeCode` also had to use `RawValue` (not `Value`) for an
+  Identifier/TypeName token - confirmed live too: naively using `Value`
+  silently re-lowercased a declared name's casing right back (`Add` →
+  `add`) on every hover, the exact bug `RawValue` already exists to
+  prevent elsewhere in this codebase.
+- **`Scripts/View/Bcs/BcsCodeEdit.cs`** (new) - a `CodeEdit` subclass
+  overriding `_MakeCustomTooltip` (confirmed from Godot's own
+  `scene/main/viewport.cpp`: `_gui_show_tooltip_at` calls `get_tooltip`
+  for the text, then `make_custom_tooltip(text)` to let a subclass
+  supply its own `Control` instead of the default plain-text `Label` -
+  Godot wraps whatever is returned in its own themed tooltip panel
+  regardless) to show a BBCode-enabled `RichTextLabel` instead. Attached
+  to `Scenes/UI/ScriptDocument.tscn`'s `CodeEdit` node in place of a bare
+  `CodeEdit`. Deliberately dumb - `ScriptDocument.GetBcsTooltip` is the
+  one place that already knows which of the two formatter paths applies
+  (a diagnostic vs. a resolved declaration), so it decides and hands over
+  already-BBCode-ready text; this control only displays it.
+- **LSP**: `BcsHoverHandler`'s declaration-description branch upgraded
+  from `MarkupKind.PlainText` to `MarkupKind.Markdown` with a fenced code
+  block, so a real editor applies its own syntax highlighting to the
+  signature. The diagnostic-message branch is unchanged (still
+  `PlainText`) - plain English prose doesn't belong in a code fence.
+- Verified end-to-end: a standalone script confirmed `ColorizeCode`'s
+  exact BBCode output (correct casing, correct coloring, no quote loss)
+  before wiring it in; the real running LSP process confirmed the
+  Markdown-fenced hover output. In-app visual rendering (does the
+  `RichTextLabel` tooltip actually look right, sized right, positioned
+  right) needs the user's own confirmation in the running app - no
+  automated coverage exists for `Scripts/View/*`, same existing
+  precedent.
+- **Follow-up fix, user-reported**: the tooltip first rendered one
+  letter per line, stacked tall. Confirmed from Godot's own
+  `rich_text_label.cpp` (`get_minimum_size`): with `AutowrapMode` at its
+  default (anything other than `Off`) and no explicit max width set,
+  `FitContent`'s own computed width is discarded entirely in favor of a
+  hardcoded 1px - `FitContent` alone was never enough. Fixed by also
+  setting `AutowrapMode = TextServer.AutowrapMode.Off` on the
+  `RichTextLabel`, which is what actually lets it size to the text's own
+  natural (unwrapped) width.
+
+## Leading doc comments in hover (new)
+
+User-requested: a comment block written directly above a declaration -
+either one `/* ... */`, or a run of `//` lines with no blank line between
+them - now shows up in that declaration's hover, above its
+signature/type. Deliberately no special markup (no `/// <summary>`-style
+convention) - just whatever comment text is actually there.
+
+- **`BcsTokenizer.NextSignificantToken`** got a new overload
+  (`out List<BcsToken> skippedComments`) alongside the existing one
+  (unchanged, still calls the new one and discards the list) - comments
+  were previously discarded with no trace while skipping to the next
+  real token; now a caller can see exactly what was skipped to reach it.
+- **`BcsParser`** tracks `_currentLeadingComments` (whatever the most
+  recent `Advance()` call skipped) and has a new `ExtractDocComment`
+  helper: walks backward from the comment closest to a declaration,
+  keeping a contiguous, gap-free run by comparing real line numbers (a
+  multi-line block comment's own last line is computed by counting its
+  embedded newlines) - no need to track newline tokens separately at
+  all. A blank line anywhere breaks the chain. This is also what
+  correctly tells an unrelated *trailing* comment on a previous
+  declaration's own last line apart from a genuine leading comment on
+  the next one, as long as a blank line separates them (a known,
+  accepted ambiguity if it doesn't - the same one every other "leading
+  doc comment" convention has).
+- Wired into every top-level declaration kind this parser already
+  tracks a hover-worthy name for: function, script, special, enum,
+  variable, `#define`/`#libdefine`. **Not** wired into body locals,
+  parameters, or enum members - a doc comment documents the *statement*
+  (and, for `special`/a multi-declarator variable statement, is shared
+  across every name that statement declares), not each individual part
+  of it; extending this to body-locals would need the same tracking
+  threaded into `SkipBracedBlock`'s loop too, not requested here.
+- New `BcsNode.DocComment` (the raw text, empty if none) and
+  `BcsSymbol.DocComment` (threaded through from the owning node, or
+  shared via a `with` expression for `special`/multi-declarator
+  variables). Deliberately kept **separate** from `BcsSymbol.Describe()`'s
+  own signature text, not folded into it - a doc comment is plain
+  English prose, and `Describe()`'s result gets re-tokenized by
+  `BcsBbcodeFormatter.ColorizeCode` for in-app coloring / wrapped in a
+  Markdown code fence over LSP; mixing prose into that string would
+  revive the exact "tokenizing prose can silently lose quote characters"
+  bug already fixed once this session. Callers (`ScriptDocument.GetBcsTooltip`,
+  `BcsHoverHandler`) combine the two themselves: the doc comment through
+  `BcsBbcodeFormatter.EscapePlainText`/plain Markdown prose, the
+  signature through its own existing path, joined with a blank line.
+- Verified end-to-end against the real running LSP process: a two-line
+  leading `//` doc comment on a function showed up correctly, joined,
+  above its signature; a comment separated from the next declaration by
+  a blank line correctly did not attach.
+
+## Multi-file `#include`/`#import` resolution (new)
+
+Completion/hover/go-to-definition now see across the whole include
+graph, not just the one open buffer - a function/global/macro declared
+in a file pulled in via `#include`/`#import` shows up everywhere the
+same names declared locally already did, and go-to-definition can jump
+into a different file when that's where the real declaration lives.
+
+- Confirmed real resolution algorithm directly from `zt-bcc`'s own
+  `src/task.c` (`identify_file_relative`), not guessed: a relative path
+  resolves against the *including* file's own directory first; an
+  absolute path is used as-is. (Not modeled: that function's further
+  fallbacks - compiler `-i` include directories and a bundled default
+  lib dir - this project has no equivalent configuration surface for
+  either; an unresolvable `#include "zcommon.acs"` with no local copy
+  simply contributes nothing, same failure a real project missing that
+  file would have without `-i` configured.)
+- New `BcsParser.ParseProgram(source, sourcePath, readFile)` → new
+  `BcsProgram` (main unit + every transitively-included unit, each
+  stamped with its own resolved path). Mirrors `DecorateParser`/
+  `ZScriptParser`'s own existing `OnInclude` caller-injected-resolver
+  pattern rather than reinventing one - `BcsParser` itself stays
+  filesystem-agnostic, trivially testable against real temp files
+  (`BcsProgramTests.cs`, real disk I/O, no mocking). Resolved paths are
+  deduped (case-insensitive, normalized) so a diamond-shaped or
+  circular include graph - including one that cycles back to the file
+  being edited - is parsed at most once per file, never infinitely;
+  this is also what makes a true self-`#import` safe without needing
+  the real compiler's own dedicated diagnostic for it.
+- New `BcsSymbol.SourcePath` (empty = "this file," every pre-existing
+  call site) - only a `BcsProgram` ever sets it, when folding in an
+  included file's own *file-scope* symbols only (never its locals/
+  parameters - those are positions within its own body, meaningless
+  relative to a different file's lines).
+- **In-app**: `ScriptDocument` parses via `ParseProgram` now (reading
+  included files via `Godot.FileAccess`); a cross-file go-to-definition
+  jump can't be handled by the tab itself (no project/sibling-tab
+  awareness), so it raises a new `NavigateToFileRequested` event instead
+  - `AppShell` (refactored to share one `OpenScriptTab` helper between
+  the file-dialog path and this one) focuses that file's tab if it's
+  already open, otherwise opens it, then jumps to the position either
+  way.
+- **LSP**: `BcsDocumentStore.GetProgram(uri)` resolves the document's
+  own real filesystem path via `DocumentUri.GetFileSystemPath()` (confirmed
+  exact API via reflection against the installed package) and reads
+  included files via plain `System.IO.File`, always fresh from real
+  disk - never from this store, even if that file happens to also be
+  open as its own document, matching the in-app side's same choice (an
+  unsaved tab's in-memory edits to an included file are deliberately
+  not reflected until saved - the same thing a real compiler would do,
+  and consistent on both sides rather than solved two different ways).
+  `BcsDefinitionHandler`'s returned `Location` now points at the
+  resolved file when the match isn't local - a real editor already
+  knows how to open a `Location` in a different file.
+- **Deliberately out of scope**: an included file's own syntax errors
+  never surface into the including file's diagnostics - `BcsDiagnostic`
+  has no file field, and this pass only ever needed *symbols* out of an
+  included file, not a second opinion on whether it's well-formed.
+- **An unresolvable `#include`/`#import` is now a real diagnostic**
+  (user-reported gap, fixed same day) - a `Warning`, at the directive's
+  own position, distinguishing a relative path with nowhere to resolve
+  against ("save this file first") from a path that resolved but
+  couldn't be read ("included file not found"). Deliberately only for a
+  directive written directly in the file being edited, never one found
+  deep inside an already-included file - same reasoning as the
+  "included file's own syntax errors" scope limit just above: that
+  line number belongs to a different file, and surfacing it here would
+  mislead, not help. `BcsTextDocumentHandler` (the LSP handler that
+  actually publishes diagnostics) had to switch from plain
+  `BcsParser.Parse` to `BcsDocumentStore.GetProgram` for this to reach
+  `textDocument/publishDiagnostics` at all - previously it never
+  resolved includes, so this diagnostic class would have existed but
+  never actually been sent to a real editor. In-app picks it up for
+  free - `ScriptDocument`'s existing diagnostic-line-tinting loop
+  already consumes whatever's in `_bcsProgram.Diagnostics` generically.
+- Verified end-to-end against the real running LSP process with two
+  real temp files (one `#include`-ing the other): completion and hover
+  inside the including file surfaced the included file's function
+  (doc comment included) and global; `textDocument/definition` on a use
+  of that function returned a `Location` whose `uri` pointed at the
+  included file, not the requesting one. In-app cross-file tab-opening/
+  focusing needs the user's own manual confirmation (no automated
+  coverage exists for `Scripts/View/*`, same existing precedent).
+
+## Real expression grammar for declaration initializers (new)
+
+`int x = ;` (and similar) is now a real diagnostic - confirmed live via
+the LSP smoke test, not assumed. Applies to both top-level and
+body-local variable declaration initializers/array sizes; does **not**
+add real statement/control-flow grammar (`if`/`while`/`for`/standalone
+assignment or call statements) - a script/function body's
+non-declaration statements remain exactly as opaque to this pass as
+they always were. Confirmed the entire motivation for this is
+diagnostics, nothing else: completion/hover/go-to-definition are built
+entirely on `DeclarationScanner`'s declaration-shaped pattern matching
+and `BcsWordScanner`'s word-under-cursor matching, neither of which
+needed this at all.
+
+- New `BcsParser.Expressions.cs` (a `partial class BcsParser`) - a real
+  precedence-climbing grammar confirmed against `zt-bcc`'s own
+  `src/parse/expr.c` line by line (the real chain: assignment → ternary
+  `?:`, with a confirmed-real optional middle operand (`a ?: b`,
+  "Elvis" form) → `||` → `&&` → `|` → `^` → `&` → `==`/`!=` →
+  relational → shift → additive → multiplicative → prefix unary →
+  postfix (`[]`/`.`/call/`++`/`--`) → primary). Validating-only, no
+  expression-AST node types at all - nothing downstream reads an
+  expression's structure, only "does it parse," so every method just
+  consumes tokens and reports a diagnostic on a real problem.
+  Deliberately excluded, documented not hidden (each narrow/rare, each
+  one skipped avoids chasing most of `expr.c`'s remaining ~1000 lines
+  for very little real payoff): `lengthof`/`strcpy`/`memcpy` builtins;
+  `::`-qualified names, `upmost`, `namespace` as primaries; compound/
+  func literals; postfix `!` ("sure" operator, distinct from prefix
+  logical-not, which is supported); the parenthesized 3-argument
+  array-field form of the `a:` format cast.
+- **A real ambiguity that had to be handled, not just excluded:** a
+  call argument can start `identifier ':'` - confirmed from `expr.c`'s
+  own `peek_format_cast`, used by every `print`/`log`/`hudmessage`-style
+  call (`print(s:"text", d:value)`). `BcsTokenizer` has no forward
+  lookahead at all (confirmed elsewhere in this parser), so this is
+  handled as a post-hoc reinterpretation instead of a peek: the tag is
+  parsed as an ordinary expression first (harmless for a bare
+  identifier), and a leftover `:` right after means "that was actually
+  a tag" rather than a real ambiguity to resolve.
+- `ParseVariableDeclaration` rewritten (replacing its blind brace/paren-
+  depth-counting loop) around a new shared `ParseDeclarator()` - also
+  used by a new local-declaration hand-off inside `SkipBracedBlock`,
+  gated behind a real `atStatementStart` tracking flag. That gate is
+  the fix for a real risk, not a theoretical one: a type-conversion
+  *expression* mid-statement (`x = int(y);` - confirmed real grammar
+  from `expr.c`'s own `read_conversion`) must never be misdetected as a
+  *new* local declaration just because a type keyword appears - it
+  only ever arrives with the flag already false (preceded by `=`, never
+  a statement boundary). Covered by a dedicated regression test.
+  `DeclarationScanner` itself is unchanged and still serves `Parameter`/
+  `EnumMember` modes exactly as before - this only replaces its
+  heuristic lookback for the one shape (`VariableDeclaration` mode) that
+  now gets real structured parsing instead.
+- Verified end-to-end against the real running LSP process: a clean
+  function body, a clean call-expression initializer, and a malformed
+  initializer in the same file - exactly one diagnostic published, at
+  the malformed one's own position, nothing else flagged.
+
 ## Deferred, tracked, not cut
 
-- **Hover-on-identifier** ("what is this token") - hover is still
-  diagnostic-message-only. The symbol-resolution layer `FindDeclaration`
-  now provides could drive this too (hover a name → show what it
-  resolves to), but that's a new UI surface, not built yet.
-- **Multi-file `#include`/`#import` resolution** - this pass parses only
-  the one open buffer; a real project's shared headers aren't resolved.
-- **Expression-level grammar inside variable declarations/script
-  bodies** - `BcsParser` deliberately just captures raw declarator
-  tokens up to the terminating `;`/brace-balanced body rather than
-  really parsing expressions, so a malformed initializer (e.g.
-  `int x = ;`) is *not* caught by this pass - confirmed directly via the
-  LSP smoke test, not assumed. Real syntax errors it *does* catch today:
-  an unclosed block, an unexpected top-level token, a missing directive
-  argument.
-- **Exact grammar position for `#library`/`#import`/`#libdefine`/
-  `wadauthor`-family pragmas** - absent from the real compiler's
-  confirmed `#`-directive table; this pass accepts both a `#`-prefixed
-  and bare-keyword spelling defensively. Read `zt-bcc`'s own
-  `src/parse/stmt.c` before treating either as authoritative.
 - **Macro/preprocessor expansion** (`#define`'s *value*/parameter list,
   `##`, `TK_TYPENAME`-adjacent macro-only pseudo-tokens, conditional
   compilation) - not modeled at all. A `#define`'s *name* is tracked

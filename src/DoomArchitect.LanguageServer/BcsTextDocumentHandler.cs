@@ -14,16 +14,17 @@ namespace DoomArchitect.LanguageServer;
 /// Full-document sync (no incremental ranges - a real BCS script is small
 /// enough that re-tokenizing/re-parsing the whole buffer on every
 /// keystroke is cheap, and it keeps this first pass simple) for
-/// <c>.bcs</c> files: re-runs <see cref="BcsParser"/> on open/change and
-/// publishes its collected <see cref="BcsDiagnostic"/>s as real LSP
-/// <see cref="PublishDiagnosticsParams"/>. Also the sole writer of
+/// <c>.bcs</c> files: re-runs <see cref="BcsDocumentStore.GetProgram"/>
+/// on open/change and publishes its collected <see cref="BcsDiagnostic"/>s
+/// as real LSP <see cref="PublishDiagnosticsParams"/> - this now includes
+/// an unresolvable <c>#include</c>/<c>#import</c> written directly in
+/// this document (a warning, reported at the directive's own position;
+/// see <c>BcsParser.ParseProgram</c>'s own remarks), not just this
+/// file's own syntax errors. Also the sole writer of
 /// <see cref="BcsDocumentStore"/> - <see cref="BcsHoverHandler"/>/
 /// <see cref="BcsCompletionHandler"/> need the open document's current
 /// text too, but requests like <c>textDocument/hover</c> only ever carry
-/// a URI and a position, never the text itself. Go-to-definition,
-/// multi-file <c>#include</c> resolution, and any semantic analysis
-/// beyond raw syntax diagnostics are still explicitly out of scope for
-/// this pass - see TODO/TODO.md.
+/// a URI and a position, never the text itself.
 /// </summary>
 internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
 {
@@ -45,7 +46,7 @@ internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
     public override Task<Unit> Handle(DidOpenTextDocumentParams notification, CancellationToken token)
     {
         _documentStore.Set(notification.TextDocument.Uri, notification.TextDocument.Text);
-        PublishDiagnosticsFor(notification.TextDocument.Uri, notification.TextDocument.Text);
+        PublishDiagnosticsFor(notification.TextDocument.Uri);
         return Unit.Task;
     }
 
@@ -55,7 +56,7 @@ internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
         if (text != null)
         {
             _documentStore.Set(notification.TextDocument.Uri, text);
-            PublishDiagnosticsFor(notification.TextDocument.Uri, text);
+            PublishDiagnosticsFor(notification.TextDocument.Uri);
         }
 
         return Unit.Task;
@@ -70,9 +71,16 @@ internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidSaveTextDocumentParams notification, CancellationToken token) => Unit.Task;
 
-    private void PublishDiagnosticsFor(DocumentUri uri, string text)
+    /// <summary>
+    /// Reads back via <see cref="BcsDocumentStore.GetProgram"/> rather
+    /// than taking the text as its own parameter - by the time this
+    /// runs, <c>Set</c> has already written it (both call sites above
+    /// do that first), so <c>GetProgram</c> sees the current text either
+    /// way, and this is the one path that also resolves includes.
+    /// </summary>
+    private void PublishDiagnosticsFor(DocumentUri uri)
     {
-        var (_, diagnostics) = BcsParser.Parse(text);
+        var diagnostics = _documentStore.GetProgram(uri)?.Diagnostics ?? new List<BcsDiagnostic>();
 
         _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {

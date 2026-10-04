@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" path="res://Scripts/View/ScriptDocument.cs" id="1"]
 [ext_resource type="Theme" uid="uid://cj2ixmf56srbg" path="res://Assets/BaseTheme.tres" id="2"]
+[ext_resource type="Script" path="res://Scripts/View/Bcs/BcsCodeEdit.cs" id="3"]
 
 [node name="ScriptDocument" type="VBoxContainer"]
 anchors_preset = 15
@@ -25,3 +26,4 @@ text = "untitled"
 layout_mode = 2
 size_flags_vertical = 3
 gutters_draw_line_numbers = true
+script = ExtResource("3")

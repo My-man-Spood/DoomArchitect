@@ -32,16 +32,26 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// declaration's argument counts, or anything else semantic is explicitly
 /// out of scope for this pass (see TODO/TODO.md).
 ///
-/// One open item, not resolved here: exactly where `#library`/`#import`/
-/// `#libdefine`/`wadauthor`/`nowadauthor`/`nocompact`/`encryptstrings`
-/// attach grammatically wasn't pinned down while planning this (they're
-/// absent from the real compiler's confirmed `#`-directive table, which
-/// only covers `#define`/`#include`/`#if...`/`#region`/`#endregion`) -
-/// this parser accepts both a `#`-prefixed and a bare-keyword spelling of
-/// `library`/`libdefine` defensively, and silently skips the pragma-like
-/// words to their terminating `;` without modeling them as their own node
-/// yet. Read `zt-bcc`'s own `src/parse/stmt.c` before treating either
-/// choice as authoritative.
+/// Confirmed from `zt-bcc`'s own `src/parse/library.c` (not
+/// `src/parse/stmt.c`, the original guess before this was pinned down):
+/// `#library`/`#import`/`#libdefine`/`#linklibrary`/`#encryptstrings`/
+/// `#nocompact`/`#wadauthor`/`#nowadauthor` are *always* `#`-prefixed in
+/// the real grammar - `read_module_item` dispatches purely on whether the
+/// current token is `#`, so there is no bare-keyword form for any of
+/// these at module scope at all. `#libdefine` shares `#define`'s exact
+/// grammar (both go through the same `read_define`); the rest take
+/// either no argument at all (`#encryptstrings`/`#nocompact`/
+/// `#wadauthor`/`#nowadauthor`) or one string literal (`#library`,
+/// optional - a bare `#library` with no name is valid and just means
+/// "use the default name"; `#linklibrary`, required). None of their
+/// semantic effects (string encryption, compaction format, author
+/// detection, link dependencies) are modeled here - this pass only needs
+/// to recognize and correctly consume them so a real file using one
+/// doesn't get a bogus "unknown directive" diagnostic. `strict`, by
+/// contrast, genuinely is valid bare (no `#`) - it's a namespace
+/// qualifier (`strict namespace Foo { ... }`, confirmed from that same
+/// source's `is_namespace`), not a pragma; namespaces aren't modeled by
+/// this pass at all, so it's tolerated and skipped rather than flagged.
 /// </summary>
 /// <summary>
 /// Which kind of declaration-shaped token run <see cref="BcsParser.DeclarationScanner"/>
@@ -53,7 +63,7 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// </summary>
 internal enum DeclarationScanMode { VariableDeclaration, Parameter, EnumMember }
 
-public sealed class BcsParser
+public sealed partial class BcsParser
 {
     /// <summary>
     /// Recognizes declaration-shaped token patterns while a caller walks
@@ -95,11 +105,29 @@ public sealed class BcsParser
             BcsTokenType.Raw, BcsTokenType.Fixed, BcsTokenType.Auto, BcsTokenType.Char,
         };
 
+        /// <summary>A nested type's own private members aren't visible to its containing type in C# (only the reverse) - this is the one accessor <see cref="BcsParser.SkipBracedBlock"/> needs to recognize where a local declaration statement may start.</summary>
+        public static bool IsTypeKeyword(BcsTokenType type) => TypeKeywords.Contains(type);
+
         private readonly DeclarationScanMode _mode;
         private readonly List<BcsSymbol> _names = new();
         private BcsTokenType? _prev1, _prev2, _prev3;
+        // The actual text of the token behind _prev1/_prev3 respectively -
+        // needed because the trigger token IS the declared name's own type
+        // (confirmed from zt-bcc's dec.c: a variable/parameter's type
+        // keyword always sits immediately before its name, or before the
+        // ':' index in the indexed form), but _prev1/_prev3 only remember
+        // its *kind*, not its text.
+        private string? _prevText1, _prevText2, _prevText3;
         private bool _listActive;
         private int _listDepth;
+        // Remembered so a comma-continuation (rule B/D) can reuse the type
+        // the list started with - confirmed real grammar for a plain
+        // variable declarator list (`int a, b, c;` - one shared type), but
+        // NOT for parameters, where BCS requires each one to restate its
+        // own type (`int a, int b`, confirmed from dec.c's read_param) -
+        // rule A simply re-fires for each parameter in that case instead,
+        // so this is only ever actually read back by rule B/D.
+        private string _listType = string.Empty;
 
         public DeclarationScanner(DeclarationScanMode mode) => _mode = mode;
 
@@ -120,26 +148,31 @@ public sealed class BcsParser
             {
                 var allowIndexed = _mode == DeclarationScanMode.VariableDeclaration;
                 var kind = KindFor(_mode);
+                // EnumMember mode's "trigger" is punctuation ('{'/','), not
+                // a real type keyword - there is no type to surface there.
+                var trackType = _mode != DeclarationScanMode.EnumMember;
 
                 if (IsTrigger(_prev1)) // rule A
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column));
+                    _listType = trackType ? _prevText1 ?? string.Empty : string.Empty;
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
                     _listActive = true;
                     _listDepth = depth;
                 }
                 else if (_prev1 == BcsTokenType.Comma && _listActive && depth == _listDepth) // rule B
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
                 }
                 else if (allowIndexed && _prev1 == BcsTokenType.Colon && _prev2 == BcsTokenType.LitDecimal && IsTrigger(_prev3)) // rule C
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column));
+                    _listType = trackType ? _prevText3 ?? string.Empty : string.Empty;
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
                     _listActive = true;
                     _listDepth = depth;
                 }
                 else if (allowIndexed && _prev1 == BcsTokenType.Colon && _prev2 == BcsTokenType.LitDecimal && _prev3 == BcsTokenType.Comma && _listActive && depth == _listDepth) // rule D
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
                 }
             }
             else if (token.Type == BcsTokenType.Semicolon && depth == _listDepth)
@@ -150,18 +183,23 @@ public sealed class BcsParser
             _prev3 = _prev2;
             _prev2 = _prev1;
             _prev1 = token.Type;
+            _prevText3 = _prevText2;
+            _prevText2 = _prevText1;
+            _prevText1 = token.Value;
         }
     }
 
     private readonly BcsTokenizer _tokenizer;
     private readonly List<BcsDiagnostic> _diagnostics;
     private BcsToken _current;
+    /// <summary>Every comment token skipped by the most recent <see cref="Advance"/> call to reach <see cref="_current"/> - see <see cref="ExtractDocComment"/>.</summary>
+    private List<BcsToken> _currentLeadingComments = new();
 
     public BcsParser(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
     {
         _tokenizer = tokenizer;
         _diagnostics = diagnostics;
-        _current = _tokenizer.NextSignificantToken();
+        _current = _tokenizer.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
     }
 
     /// <summary>Convenience one-shot entry point - wraps <paramref name="source"/> as a <see cref="MemoryStream"/> (never real file I/O), used by both the language server (re-parsing the open buffer on every change) and tests.</summary>
@@ -173,13 +211,141 @@ public sealed class BcsParser
         return (unit, diagnostics);
     }
 
-    private void Advance() => _current = _tokenizer.NextSignificantToken();
+    /// <summary>
+    /// Like <see cref="Parse"/>, but also resolves and recursively parses
+    /// every <c>#include</c>/<c>#import</c> this file references (and
+    /// transitively, theirs too) into a <see cref="BcsProgram"/>. Stays
+    /// filesystem-agnostic itself - <paramref name="readFile"/> is the
+    /// caller's own way to turn a resolved path into text (or
+    /// <c>null</c> if it can't), the same caller-injected-resolver shape
+    /// <c>DecorateParser</c>/<c>ZScriptParser</c>'s own <c>OnInclude</c>
+    /// already uses for their (lump-path, not real-filesystem) includes -
+    /// so this stays trivially testable against real temp files without
+    /// needing Godot's <c>FileAccess</c> or any particular I/O API baked
+    /// in. <paramref name="sourcePath"/> is this file's own resolved
+    /// path (null for an unsaved buffer with nowhere to resolve a
+    /// relative include against - those are just skipped, not an error).
+    ///
+    /// Path resolution confirmed from the real compiler's own
+    /// <c>src/task.c</c> (<c>identify_file_relative</c>): an absolute
+    /// path is used as-is; a relative one resolves against the
+    /// *including* file's own directory. (Not modeled: that same
+    /// function's further fallbacks - compiler <c>-i</c> include
+    /// directories and a bundled default lib dir - this project has no
+    /// equivalent configuration surface for either yet.) Resolved paths
+    /// are deduped (case-insensitively, normalized via
+    /// <see cref="Path.GetFullPath"/>) so a diamond-shaped or circular
+    /// include graph - including one that eventually cycles back to
+    /// this very file - is parsed at most once per file, never
+    /// infinitely; this is also what makes true self-<c>#import</c> safe
+    /// without needing the real compiler's own dedicated diagnostic for
+    /// it.
+    ///
+    /// An include/import that can't be resolved or read reports a
+    /// warning - but only when it's written directly in <paramref name="source"/>
+    /// itself, never for one found deep inside an already-included
+    /// file: that second case isn't actionable from here (its line
+    /// number belongs to a different file entirely, and
+    /// <see cref="BcsDiagnostic"/> has no file field to say which one),
+    /// and surfacing it would be actively misleading, not helpful.
+    /// </summary>
+    public static BcsProgram ParseProgram(string source, string? sourcePath, Func<string, string?> readFile)
+    {
+        var (mainUnit, diagnostics) = Parse(source);
+
+        var included = new List<(string Path, BcsCompilationUnit Unit)>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (sourcePath != null) visited.Add(Path.GetFullPath(sourcePath));
+
+        void ResolveIncludes(BcsCompilationUnit unit, string? baseDir, bool reportDiagnostics)
+        {
+            foreach (var member in unit.Members)
+            {
+                var rawPath = member switch
+                {
+                    BcsIncludeDirective include => include.Path,
+                    BcsImportDirective import => import.Path,
+                    _ => null,
+                };
+                if (string.IsNullOrEmpty(rawPath)) continue;
+
+                var resolved = ResolveIncludePath(rawPath, baseDir);
+                if (resolved == null)
+                {
+                    if (reportDiagnostics)
+                        diagnostics.Add(new BcsDiagnostic($"cannot resolve relative path '{rawPath}' - save this file first", member.Line, member.Column, BcsDiagnosticSeverity.Warning));
+                    continue;
+                }
+
+                var normalized = Path.GetFullPath(resolved);
+                if (!visited.Add(normalized)) continue;
+
+                var text = readFile(resolved);
+                if (text == null)
+                {
+                    if (reportDiagnostics)
+                        diagnostics.Add(new BcsDiagnostic($"included file not found: '{rawPath}'", member.Line, member.Column, BcsDiagnosticSeverity.Warning));
+                    continue;
+                }
+
+                var (includedUnit, _) = Parse(text); // the included file's own diagnostics are intentionally discarded - see BcsProgram's own remarks
+                included.Add((resolved, includedUnit));
+                ResolveIncludes(includedUnit, Path.GetDirectoryName(resolved), reportDiagnostics: false);
+            }
+        }
+
+        ResolveIncludes(mainUnit, sourcePath != null ? Path.GetDirectoryName(sourcePath) : null, reportDiagnostics: true);
+        return new BcsProgram(mainUnit, included, diagnostics);
+    }
+
+    private static string? ResolveIncludePath(string rawPath, string? baseDir)
+    {
+        if (Path.IsPathRooted(rawPath)) return rawPath;
+        return baseDir == null ? null : Path.Combine(baseDir, rawPath);
+    }
+
+    private void Advance() => _current = _tokenizer.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
 
     private void AddDiagnostic(string message, BcsToken token) =>
         _diagnostics.Add(new BcsDiagnostic(message, token.Line, token.Column));
 
-    private static bool IsContextualKeyword(BcsToken token, string text) =>
-        token.Type == BcsTokenType.Identifier && token.Value == text;
+    /// <summary>
+    /// Builds a declaration's leading doc comment text out of
+    /// <paramref name="leadingComments"/> (whatever <see cref="Advance"/>
+    /// most recently skipped to reach this declaration's own first
+    /// token) - walks backward from the one closest to
+    /// <paramref name="declarationStartLine"/>, keeping a contiguous,
+    /// gap-free run (no blank line, confirmed by comparing real line
+    /// numbers rather than tracking newline tokens separately - a
+    /// skipped comment's own <see cref="BcsToken.Line"/>, plus however
+    /// many embedded newlines a multi-line block comment's <see cref="BcsToken.Value"/>
+    /// contains, gives its real last line directly). A blank line (or
+    /// anything else) breaks the chain - the same heuristic every other
+    /// "leading doc comment" convention uses, and the same one that
+    /// correctly excludes an unrelated *trailing* comment left dangling
+    /// on a previous declaration's own last line, as long as there's a
+    /// blank line separating it from this one (a known, accepted
+    /// ambiguity if there isn't).
+    /// </summary>
+    private static string ExtractDocComment(IReadOnlyList<BcsToken> leadingComments, int declarationStartLine)
+    {
+        if (leadingComments.Count == 0) return string.Empty;
+
+        var kept = new List<BcsToken>();
+        var expectedEndLine = declarationStartLine - 1;
+
+        for (var i = leadingComments.Count - 1; i >= 0; i--)
+        {
+            var comment = leadingComments[i];
+            var endLine = comment.Line + comment.Value.Count(c => c == '\n');
+            if (endLine != expectedEndLine) break;
+
+            kept.Insert(0, comment);
+            expectedEndLine = comment.Line - 1;
+        }
+
+        return kept.Count == 0 ? string.Empty : string.Join("\n", kept.Select(c => c.Value.Trim())).Trim();
+    }
 
     public BcsCompilationUnit Parse()
     {
@@ -197,7 +363,6 @@ public sealed class BcsParser
         var start = _current;
 
         if (_current.Type == BcsTokenType.Hash) return ParseHashDirective();
-        if (IsContextualKeyword(_current, "library")) return ParseBareLibrary();
         if (_current.Type == BcsTokenType.Script) return ParseScript();
         if (_current.Type == BcsTokenType.Special) return ParseSpecial();
         if (_current.Type == BcsTokenType.Function) return ParseFunction();
@@ -210,10 +375,10 @@ public sealed class BcsParser
             return ParseVariableDeclaration();
         }
 
-        // Pragma-like top-level words this pass tolerates without modeling as their own node - see this class's own remarks on the unresolved #library/wadauthor-family grammar question.
-        if (_current.Type == BcsTokenType.Strict ||
-            IsContextualKeyword(_current, "wadauthor") || IsContextualKeyword(_current, "nowadauthor") ||
-            IsContextualKeyword(_current, "nocompact") || IsContextualKeyword(_current, "encryptstrings"))
+        // 'strict' alone (bare, no '#') is real grammar - a namespace
+        // qualifier, not a pragma (see this class's own remarks) -
+        // tolerated and skipped since namespaces aren't modeled here.
+        if (_current.Type == BcsTokenType.Strict)
         {
             Advance();
             SkipToSemicolon();
@@ -227,6 +392,7 @@ public sealed class BcsParser
     private BcsNode? ParseHashDirective()
     {
         var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // '#'
 
         if (_current.Type != BcsTokenType.Identifier)
@@ -242,20 +408,43 @@ public sealed class BcsParser
         {
             case "include": return ParseStringArgDirective(start, isImport: false);
             case "import": return ParseStringArgDirective(start, isImport: true);
-            case "library":
-            case "libdefine": return ParseLibraryDirective(start);
+            case "library": return ParseLibraryDirective(start);
+            case "linklibrary":
+                // #linklibrary "name" - a build-time link dependency,
+                // confirmed from library.c's read_linklibrary; not
+                // modeled as its own node (this pass doesn't track link
+                // dependencies), just consumed correctly so it isn't
+                // mistaken for an unknown directive.
+                if (_current.Type == BcsTokenType.LitString) Advance();
+                else AddDiagnostic("expected a string literal after '#linklibrary'", _current);
+                return null;
             case "define":
+            case "libdefine":
             {
-                // Only the name is extracted (so it's offered by completion) -
-                // the value/parameter list still isn't modeled at all, same
-                // deliberate scope limit as "region"/"endregion" below: this
-                // is not macro-expansion support, just enough to know a name
-                // was declared here.
+                // #libdefine shares #define's exact grammar in the real
+                // compiler (both go through read_define) - only
+                // visibility differs (library-private vs. exported),
+                // which this pass doesn't model anyway. Only the name is
+                // extracted (so it's offered by completion) - the
+                // value/parameter list still isn't modeled at all, same
+                // deliberate scope limit as "region"/"endregion" below:
+                // this is not macro-expansion support, just enough to
+                // know a name was declared here.
                 string? macroName = _current.Type == BcsTokenType.Identifier ? _current.RawValue : null;
                 while (_tokenizer.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
                 Advance();
-                return macroName != null ? new BcsDefineDirective { Name = macroName, Line = start.Line, Column = start.Column } : null;
+                return macroName != null ? new BcsDefineDirective { Name = macroName, DocComment = docComment, Line = start.Line, Column = start.Column } : null;
             }
+            case "encryptstrings":
+            case "nocompact":
+            case "wadauthor":
+            case "nowadauthor":
+                // No arguments at all in the real grammar (library.c) -
+                // the directive word itself (already consumed above) is
+                // the whole directive. Not modeled as their own node -
+                // this pass doesn't track string-encryption/compaction-
+                // format/author-detection semantics.
+                return null;
             case "region":
             case "endregion":
                 // Not modeled as their own node at all - skip to end of line, which NextSignificantToken's default (not including newlines) would otherwise swallow, so ask for it explicitly here.
@@ -283,22 +472,19 @@ public sealed class BcsParser
             : new BcsIncludeDirective { Path = path, Line = start.Line, Column = start.Column };
     }
 
+    /// <summary>
+    /// <c>#library ["name"]</c> - confirmed from <c>library.c</c>'s
+    /// <c>read_library</c>: the string literal is optional, not required
+    /// - a bare <c>#library</c> with no name at all is valid real BCS and
+    /// just means "use the default name" (previously, incorrectly,
+    /// treated as a missing-argument error here).
+    /// </summary>
     private BcsNode ParseLibraryDirective(BcsToken start)
     {
         var name = string.Empty;
         if (_current.Type == BcsTokenType.LitString) { name = _current.Value; Advance(); }
-        else AddDiagnostic("expected a string literal after the library directive", _current);
 
         return new BcsLibraryDirective { Name = name, Line = start.Line, Column = start.Column };
-    }
-
-    private BcsNode ParseBareLibrary()
-    {
-        var start = _current;
-        Advance(); // 'library'
-        var node = ParseLibraryDirective(start);
-        if (_current.Type == BcsTokenType.Semicolon) Advance();
-        return node;
     }
 
     /// <summary>
@@ -314,6 +500,7 @@ public sealed class BcsParser
     private BcsNode ParseScript()
     {
         var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // 'script'
 
         var number = _current.Type == BcsTokenType.Identifier ? _current.RawValue : _current.Value;
@@ -347,6 +534,7 @@ public sealed class BcsParser
             BodyColumn = bodyColumn,
             BodyEndLine = bodyEndLine,
             BodyEndColumn = bodyEndColumn,
+            DocComment = docComment,
             Line = start.Line,
             Column = start.Column,
         };
@@ -371,6 +559,7 @@ public sealed class BcsParser
     private BcsNode ParseSpecial()
     {
         var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // 'special'
 
         var headerTokens = new List<string>();
@@ -396,7 +585,7 @@ public sealed class BcsParser
         if (_current.Type == BcsTokenType.Semicolon) Advance();
         else AddDiagnostic("expected ';'", _current);
 
-        var node = new BcsSpecialDeclaration { Line = start.Line, Column = start.Column };
+        var node = new BcsSpecialDeclaration { DocComment = docComment, Line = start.Line, Column = start.Column };
         node.HeaderTokens.AddRange(headerTokens);
         node.Names.AddRange(names);
         return node;
@@ -416,7 +605,14 @@ public sealed class BcsParser
     private BcsNode ParseFunction()
     {
         var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // 'function'
+
+        // The return type is always the very first token of the header,
+        // immediately after 'function' - confirmed from dec.c's
+        // read_object: a function's type specifier always comes right
+        // after the (optional) function keyword, before its name.
+        var returnType = _current.Value;
 
         var headerTokens = new List<string>();
         string? name = null;
@@ -463,6 +659,8 @@ public sealed class BcsParser
 
         var node = new BcsFunctionDeclaration
         {
+            ReturnType = returnType,
+            DocComment = docComment,
             Name = name,
             NameLine = nameLine,
             NameColumn = nameColumn,
@@ -482,6 +680,7 @@ public sealed class BcsParser
     private BcsNode ParseEnum()
     {
         var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // 'enum'
 
         string? name = null;
@@ -490,7 +689,7 @@ public sealed class BcsParser
         var (members, _, _, _, _) = SkipBracedBlock(DeclarationScanMode.EnumMember);
         if (_current.Type == BcsTokenType.Semicolon) Advance();
 
-        var node = new BcsEnumDeclaration { Name = name, Line = start.Line, Column = start.Column };
+        var node = new BcsEnumDeclaration { Name = name, DocComment = docComment, Line = start.Line, Column = start.Column };
         node.MemberNames.AddRange(members);
         return node;
     }
@@ -500,41 +699,113 @@ public sealed class BcsParser
     /// `const`, whichever token actually started this declaration - see
     /// <see cref="ParseTopLevelMember"/>'s dispatch) plus one or more
     /// comma-separated declarators, each optionally indexed
-    /// (`global int 0:a, 1:b;`). <see cref="DeclarationScanner"/> is fed
-    /// the real starting token too (observed once, before it's consumed
-    /// by the initial <see cref="Advance"/> below) so rule C still fires
-    /// correctly for the no-modifier form (`int 0:myvar;`, this parser's
-    /// own existing test fixture) where the type keyword itself is never
-    /// seen again inside the declarator loop that follows.
+    /// (`global int 0:a, 1:b;`), each with a real, validated initializer
+    /// expression now (<see cref="ParseDeclarator"/>) - this is what
+    /// finally catches something like `int x = ;` as a real diagnostic,
+    /// which the old purely-heuristic <see cref="DeclarationScanner"/>-
+    /// based version of this method never could (it only ever looked
+    /// *backward* for declaration-shaped patterns, never forward into
+    /// what followed a name at all).
+    ///
+    /// The leading modifier (`global`/`world`/`static`/`const`), if
+    /// present, is skipped *before* capturing <c>typeKeyword</c> -
+    /// confirmed real grammar from <c>dec.c</c>'s <c>read_storage</c>/
+    /// <c>read_object</c>: at most one such modifier, always
+    /// immediately followed by the real type specifier - so
+    /// <c>typeKeyword</c> (surfaced as every declarator's own
+    /// <see cref="BcsSymbol.Type"/>, e.g. in hover) is always the real
+    /// type ("int"), never the modifier ("global").
     /// </summary>
     private BcsNode ParseVariableDeclaration()
     {
         var start = _current;
-        var typeKeyword = _current.Value;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
 
-        var scanner = new DeclarationScanner(DeclarationScanMode.VariableDeclaration);
-        scanner.Observe(start, 0);
+        if (_current.Type is BcsTokenType.Global or BcsTokenType.World or BcsTokenType.Static or BcsTokenType.Const) Advance();
+
+        var typeKeyword = _current.Value;
         Advance();
 
-        var declarators = new List<string>();
-        var depth = 0;
-        while (_current.Type != BcsTokenType.EndOfInput && !(depth == 0 && _current.Type == BcsTokenType.Semicolon))
-        {
-            if (_current.Type is BcsTokenType.OpenCurly or BcsTokenType.OpenParen or BcsTokenType.OpenSquare) depth++;
-            else if (_current.Type is BcsTokenType.CloseCurly or BcsTokenType.CloseParen or BcsTokenType.CloseSquare) depth--;
+        var declaratorTokens = new List<string>();
+        var declaratorNames = new List<BcsSymbol>();
 
-            if (depth >= 0) scanner.Observe(_current, depth);
-            declarators.Add(_current.Value);
-            Advance();
+        while (true)
+        {
+            var declarator = ParseDeclarator(typeKeyword, declaratorTokens);
+            if (declarator is { } found) declaratorNames.Add(found);
+            else RecoverExpression();
+
+            if (_current.Type == BcsTokenType.Comma) { declaratorTokens.Add(_current.Value); Advance(); continue; }
+            break;
         }
 
         if (_current.Type == BcsTokenType.Semicolon) Advance();
         else AddDiagnostic("expected ';'", _current);
 
-        var node = new BcsVariableDeclaration { TypeKeyword = typeKeyword, Line = start.Line, Column = start.Column };
-        node.DeclaratorTokens.AddRange(declarators);
-        node.DeclaratorNames.AddRange(scanner.Names);
+        var node = new BcsVariableDeclaration { TypeKeyword = typeKeyword, DocComment = docComment, Line = start.Line, Column = start.Column };
+        node.DeclaratorTokens.AddRange(declaratorTokens);
+        node.DeclaratorNames.AddRange(declaratorNames);
         return node;
+    }
+
+    /// <summary>
+    /// One declarator: an optional indexed-storage prefix (`0:`,
+    /// confirmed real grammar from <c>dec.c</c>'s <c>read_instance</c>/
+    /// <c>read_storage_index</c>), the name, an optional array size
+    /// (`[expr]` - real expression parsing; a bare `[]` is tolerated
+    /// without error, deliberately lenient rather than risk a false
+    /// positive on a real-but-unconfirmed "size can be omitted" case),
+    /// and an optional initializer (`= expr`). Shared by both
+    /// <see cref="ParseVariableDeclaration"/> (top-level) and
+    /// <see cref="SkipBracedBlock"/>'s own local-declaration hand-off.
+    ///
+    /// <paramref name="rawTokens"/>, when supplied, only collects the
+    /// declarator's own *name-shaped* tokens (the indexed prefix, the
+    /// name, the array brackets) - never an initializer's own tokens,
+    /// since those are now really parsed/validated rather than just
+    /// recorded; nothing ever consumed <see cref="BcsVariableDeclaration.DeclaratorTokens"/>
+    /// for initializer text specifically, so this is a deliberate,
+    /// harmless narrowing, not a regression.
+    ///
+    /// Returns <c>null</c> only when no name could be found at all
+    /// (the caller decides how to recover from that).
+    /// </summary>
+    private BcsSymbol? ParseDeclarator(string typeKeyword, List<string>? rawTokens = null)
+    {
+        void Consume() { rawTokens?.Add(_current.Value); Advance(); }
+
+        if (_current.Type == BcsTokenType.LitDecimal)
+        {
+            Consume();
+            if (_current.Type == BcsTokenType.Colon) Consume();
+            else { AddDiagnostic("expected ':' after an indexed declarator's index", _current); return null; }
+        }
+
+        if (_current.Type != BcsTokenType.Identifier)
+        {
+            AddDiagnostic("expected a declarator name", _current);
+            return null;
+        }
+
+        var nameToken = _current;
+        Consume();
+        var symbol = new BcsSymbol(nameToken.RawValue, BcsSymbolKind.Variable, nameToken.Line, nameToken.Column, Type: typeKeyword);
+
+        if (_current.Type == BcsTokenType.OpenSquare)
+        {
+            Consume();
+            if (_current.Type != BcsTokenType.CloseSquare && !ParseExpression()) RecoverExpression();
+            if (_current.Type == BcsTokenType.CloseSquare) Consume();
+            else AddDiagnostic("expected ']'", _current);
+        }
+
+        if (_current.Type == BcsTokenType.OpAssign)
+        {
+            Advance(); // the initializer's own tokens are real expression content now, not raw-captured - see this method's own remarks
+            if (!ParseExpression()) RecoverExpression();
+        }
+
+        return symbol;
     }
 
     /// <summary>
@@ -558,6 +829,25 @@ public sealed class BcsParser
     /// callers thread these into their node's own body-span fields so
     /// <see cref="BcsCompilationUnit.CollectSymbolsVisibleAt"/> can later
     /// tell whether a cursor line falls inside this specific body.
+    ///
+    /// In <see cref="DeclarationScanMode.VariableDeclaration"/> mode
+    /// only, a local declaration statement now gets the same real,
+    /// validated parsing a top-level one does
+    /// (<see cref="ParseDeclarator"/>) instead of just being passively
+    /// observed by <paramref name="mode"/>'s <see cref="DeclarationScanner"/> -
+    /// gated behind <c>atStatementStart</c> (true right after the
+    /// opening `{`, a nested block's own opening `{`, a `;`, or a
+    /// nested block's closing `}`; false after anything else), which is
+    /// what stops a type-conversion *expression* mid-statement
+    /// (`x = int(y);` - that `int` is a cast, not a new declaration -
+    /// confirmed real grammar from <c>expr.c</c>'s own
+    /// <c>read_conversion</c>) from ever being misdetected as one: its
+    /// `int` always arrives with the flag already false (preceded by
+    /// `=`, never a statement boundary). Everything else in a body -
+    /// every non-declaration statement (`if`/`while`/assignment/call) -
+    /// remains exactly as opaque to this pass as it always has been;
+    /// real statement/control-flow grammar is a distinct, much larger
+    /// thing this pass deliberately doesn't add.
     /// </summary>
     private (List<BcsSymbol> Locals, int StartLine, int StartColumn, int EndLine, int EndColumn) SkipBracedBlock(DeclarationScanMode mode)
     {
@@ -573,8 +863,10 @@ public sealed class BcsParser
         var startColumn = _current.Column;
         var endLine = startLine;
         var endColumn = startColumn;
+        var locals = new List<BcsSymbol>();
 
         scanner.Observe(_current, 0); // the opening '{' itself - EnumMember mode's trigger, so the very first member (right after it) matches rule A
+        var atStatementStart = true;
         Advance();
         var depth = 1;
         while (depth > 0)
@@ -587,16 +879,42 @@ public sealed class BcsParser
                 break;
             }
 
+            if (mode == DeclarationScanMode.VariableDeclaration && atStatementStart && DeclarationScanner.IsTypeKeyword(_current.Type))
+            {
+                var typeKeyword = _current.Value;
+                Advance();
+
+                while (true)
+                {
+                    var declarator = ParseDeclarator(typeKeyword);
+                    if (declarator is { } found) locals.Add(found);
+                    else RecoverExpression();
+
+                    if (_current.Type == BcsTokenType.Comma) { Advance(); continue; }
+                    break;
+                }
+
+                if (_current.Type == BcsTokenType.Semicolon) Advance();
+                else AddDiagnostic("expected ';'", _current);
+
+                atStatementStart = true;
+                continue; // a declaration statement is depth-neutral - any brackets inside its own initializer(s) were already balanced by the expression parser itself, never touching this block's own depth
+            }
+
             if (_current.Type is BcsTokenType.OpenCurly or BcsTokenType.OpenParen or BcsTokenType.OpenSquare) depth++;
             else if (_current.Type is BcsTokenType.CloseCurly or BcsTokenType.CloseParen or BcsTokenType.CloseSquare) depth--;
 
             if (depth > 0) scanner.Observe(_current, depth);
             else { endLine = _current.Line; endColumn = _current.Column; }
 
+            atStatementStart = _current.Type == BcsTokenType.Semicolon
+                || _current.Type == BcsTokenType.OpenCurly
+                || (_current.Type == BcsTokenType.CloseCurly && depth > 0);
+
             Advance();
         }
 
-        return (scanner.Names.ToList(), startLine, startColumn, endLine, endColumn);
+        return (scanner.Names.Concat(locals).ToList(), startLine, startColumn, endLine, endColumn);
     }
 
     /// <summary>

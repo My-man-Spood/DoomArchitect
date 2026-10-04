@@ -10,14 +10,13 @@ namespace DoomArchitect.LanguageServer;
 /// Keywords (the real 53-entry reserved-word list,
 /// <see cref="BcsTokenizer.ReservedWordTexts"/>) plus every name visible
 /// from the request's own cursor position - via
-/// <see cref="BcsCompilationUnit.CollectSymbolsVisibleAt"/>, not the
-/// older flat <c>CollectSymbols()</c>: a local declared inside one
-/// script/function body is only offered while the cursor is inside that
-/// same body - everything else (functions, script names, globals, enum
-/// types/members, macros) is still offered everywhere. Needs
-/// <see cref="BcsDocumentStore"/> since the declared-name half of the
-/// list depends on the specific document (and now cursor position)
-/// being completed in, not just a static table.
+/// <see cref="BcsDocumentStore.GetProgram"/>'s
+/// <c>BcsProgram.CollectSymbolsVisibleAt</c>, which also reaches across
+/// whatever this document <c>#include</c>s/<c>#import</c>s: a local
+/// declared inside one script/function body is only offered while the
+/// cursor is inside that same body - everything else (functions, script
+/// names, globals, enum types/members, macros), from this file *and*
+/// anything it pulls in, is offered everywhere.
 /// </summary>
 internal sealed class BcsCompletionHandler : CompletionHandlerBase
 {
@@ -44,12 +43,11 @@ internal sealed class BcsCompletionHandler : CompletionHandlerBase
 
     public override Task<CompletionList> Handle(CompletionParams request, CancellationToken token)
     {
-        var text = _documentStore.Get(request.TextDocument.Uri);
-        if (text == null) return Task.FromResult(new CompletionList(KeywordItems, isIncomplete: false));
+        var program = _documentStore.GetProgram(request.TextDocument.Uri);
+        if (program == null) return Task.FromResult(new CompletionList(KeywordItems, isIncomplete: false));
 
-        var (unit, _) = BcsParser.Parse(text);
         var line = request.Position.Line + 1; // LSP's 0-based line -> this parser's 1-based lines
-        var symbolItems = unit.CollectSymbolsVisibleAt(line)
+        var symbolItems = program.CollectSymbolsVisibleAt(line)
             // BcsSymbol now carries its own declaration position, so two distinct
             // declarations sharing a name (e.g. the same local reused across two
             // different scripts) no longer collapse for free - dedupe explicitly,

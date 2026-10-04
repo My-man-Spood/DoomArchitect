@@ -8,15 +8,17 @@ using Range = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range; // disa
 namespace DoomArchitect.LanguageServer;
 
 /// <summary>
-/// <c>textDocument/definition</c> - unlike Godot's own <c>CodeEdit</c>
-/// (whose <c>symbol_lookup</c> signal hands the in-app editor the hovered
-/// word directly), LSP's request only ever carries a cursor *position* -
-/// the server has to work out which word sits under it itself
-/// (<see cref="WordAt"/>), then resolve that word the same way the
-/// in-app side does, via <see cref="BcsCompilationUnit.FindDeclaration"/>.
-/// Re-parses <see cref="BcsDocumentStore"/>'s tracked text on every
-/// request, same "small file, cheap to redo from scratch" posture every
-/// other handler here already uses.
+/// <c>textDocument/definition</c> - finds the word under the request's
+/// cursor position via <see cref="BcsWordScanner"/>, then resolves it the
+/// same way the in-app side does, via <c>BcsProgram.FindDeclaration</c>
+/// - which also reaches across whatever this document <c>#include</c>s/
+/// <c>#import</c>s. When the match's own <see cref="BcsSymbol.SourcePath"/>
+/// is non-empty, the returned <see cref="Location"/> points at *that*
+/// file instead of the requesting one - a real editor already knows how
+/// to open a <c>Location</c> in a different file, so that's the entire
+/// cross-file story here. Re-parses <see cref="BcsDocumentStore"/>'s
+/// tracked text on every request, same "small file, cheap to redo from
+/// scratch" posture every other handler here already uses.
 /// </summary>
 internal sealed class BcsDefinitionHandler : DefinitionHandlerBase
 {
@@ -43,41 +45,17 @@ internal sealed class BcsDefinitionHandler : DefinitionHandlerBase
         var requestedLine = request.Position.Line;
         if (requestedLine < 0 || requestedLine >= lines.Length) return Task.FromResult<LocationOrLocationLinks?>(null);
 
-        var word = WordAt(lines[requestedLine], request.Position.Character);
+        var word = BcsWordScanner.WordAt(lines[requestedLine], request.Position.Character);
         if (word.Length == 0) return Task.FromResult<LocationOrLocationLinks?>(null);
 
-        var (unit, _) = BcsParser.Parse(text);
-        var declaration = unit.FindDeclaration(word, requestedLine + 1);
+        var program = _documentStore.GetProgram(request.TextDocument.Uri);
+        var declaration = program?.FindDeclaration(word, requestedLine + 1);
         if (declaration is not { } found) return Task.FromResult<LocationOrLocationLinks?>(null);
 
+        var targetUri = string.IsNullOrEmpty(found.SourcePath) ? request.TextDocument.Uri : DocumentUri.FromFileSystemPath(found.SourcePath);
         var position = new Position(found.Line - 1, found.Column - 1);
-        var location = new Location { Uri = request.TextDocument.Uri, Range = new Range(position, position) };
+        var location = new Location { Uri = targetUri, Range = new Range(position, position) };
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(new LocationOrLocationLink[] { location }));
-    }
-
-    /// <summary>
-    /// The identifier/keyword touching <paramref name="character"/> on
-    /// <paramref name="lineText"/>, or <see cref="string.Empty"/> if
-    /// <paramref name="character"/> isn't inside a word at all - scans
-    /// both directions from that column over the same word-character
-    /// class <c>ScriptDocument.RequestBcsCodeCompletionIfWordLongEnough</c>
-    /// already uses on the in-app side. Only needed here: Godot's own
-    /// <c>CodeEdit</c> already does the equivalent of this internally
-    /// (<c>select_word</c>) before ever emitting <c>symbol_lookup</c>.
-    /// </summary>
-    private static string WordAt(string lineText, int character)
-    {
-        if (character < 0 || character > lineText.Length) return string.Empty;
-
-        bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
-
-        var start = character;
-        while (start > 0 && IsWordChar(lineText[start - 1])) start--;
-
-        var end = character;
-        while (end < lineText.Length && IsWordChar(lineText[end])) end++;
-
-        return start == end ? string.Empty : lineText[start..end];
     }
 
     protected override DefinitionRegistrationOptions CreateRegistrationOptions(DefinitionCapability capability, ClientCapabilities clientCapabilities) =>

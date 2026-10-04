@@ -26,7 +26,7 @@ public partial class ScriptDocument : VBoxContainer
 	private BcsSyntaxHighlighter _bcsHighlighter;
 	private readonly HashSet<int> _diagnosticLines = new();
 	private List<BcsDiagnostic> _diagnostics = new();
-	private BcsCompilationUnit _bcsUnit;
+	private BcsProgram _bcsProgram;
 
 	private static readonly Color ErrorLineColor = new(1, 0, 0, 0.15f);
 	private static readonly Color WarningLineColor = new(1, 1, 0, 0.12f);
@@ -36,6 +36,24 @@ public partial class ScriptDocument : VBoxContainer
 
 	/// <summary>The tab title - just the file's own name, matching how every other editor names an open-file tab.</summary>
 	public string DisplayName => _filePath == null ? "untitled" : System.IO.Path.GetFileName(_filePath);
+
+	/// <summary>
+	/// Raised when go-to-definition (<see cref="OnBcsSymbolLookup"/>)
+	/// resolves to a declaration in a *different* file (reached via
+	/// <c>#include</c>/<c>#import</c> - see <see cref="BcsProgram"/>) -
+	/// this tab has no way to open another one itself (confirmed: no
+	/// project/sibling-tab awareness at all), so <c>AppShell</c> - which
+	/// owns the tab strip - handles it instead.
+	/// </summary>
+	public event Action<string, int, int> NavigateToFileRequested;
+
+	/// <summary>Moves the caret to a declaration's own position and centers the viewport on it - the same thing <see cref="OnBcsSymbolLookup"/> already does for a same-file match, extracted so <c>AppShell</c> can also call it once it's switched to (or just opened) this tab for a cross-file jump.</summary>
+	public void NavigateTo(int line, int column)
+	{
+		_codeEdit.SetCaretLine(line - 1);
+		_codeEdit.SetCaretColumn(column - 1);
+		_codeEdit.CenterViewportToCaret();
+	}
 
 	public override void _Ready()
 	{
@@ -90,22 +108,48 @@ public partial class ScriptDocument : VBoxContainer
 	/// <summary>
 	/// Confirmed from Godot's own text_edit.cpp: this callback only fires
 	/// when the mouse is over a recognized "word" (TextEdit's own
-	/// select_word) and is handed that word's text, not a position - so
-	/// the word argument is ignored entirely, and the real line is
-	/// derived independently via <see cref="TextEdit.GetLineColumnAtPos"/>.
-	/// Known, accepted limitation: hovering blank columns on a diagnostic
-	/// line (trailing whitespace, a line that's just an unmatched brace)
-	/// won't show anything, since <c>select_word</c> never calls this
-	/// callback for a position with no word at all - not worth a custom
-	/// popup/mouse-motion workaround for what this feature needs today.
+	/// select_word) and is handed that word's text directly - the real
+	/// line still has to be derived independently via
+	/// <see cref="TextEdit.GetLineColumnAtPos"/> (the callback gives no
+	/// position), but the word itself is exactly what
+	/// <see cref="BcsCompilationUnit.FindDeclaration"/> needs to resolve
+	/// "what is this identifier." A diagnostic on the hovered line always
+	/// wins (same priority as before this existed); if there isn't one,
+	/// falls back to resolving the word to a declaration. Known, accepted
+	/// limitation: hovering blank columns (trailing whitespace, a line
+	/// that's just an unmatched brace) won't show anything, since
+	/// <c>select_word</c> never calls this callback for a position with no
+	/// word at all - not worth a custom popup/mouse-motion workaround for
+	/// what this feature needs today.
+	///
+	/// The returned text is already BBCode-ready for
+	/// <see cref="BcsCodeEdit"/>'s custom tooltip to display as-is - which
+	/// of <see cref="BcsBbcodeFormatter"/>'s two paths applies depends on
+	/// which of these two cases produced it (a diagnostic's own English
+	/// message vs. a real declaration's description), so the choice is
+	/// made here, not inside the formatter or the tooltip control.
 	/// </summary>
-	private string GetBcsTooltip(string _)
+	private string GetBcsTooltip(string word)
 	{
 		var mousePos = (Vector2I)_codeEdit.GetLocalMousePosition();
 		var line = _codeEdit.GetLineColumnAtPos(mousePos).Y;
 
 		var messages = _diagnostics.Where(d => d.Line - 1 == line).Select(d => d.Message).ToList();
-		return messages.Count == 0 ? "" : string.Join("\n", messages);
+		if (messages.Count > 0) return BcsBbcodeFormatter.EscapePlainText(string.Join("\n", messages));
+
+		var declaration = _bcsProgram?.FindDeclaration(word, line + 1);
+		if (declaration is not { } found) return "";
+
+		var signature = BcsBbcodeFormatter.ColorizeCode(found.Describe());
+		if (string.IsNullOrEmpty(found.DocComment)) return signature;
+
+		// DocComment is plain prose (a leading // or /* */ block, see
+		// BcsParser.ExtractDocComment) - escaped, not colorized, same
+		// reasoning as a diagnostic message: it isn't code, and
+		// re-tokenizing arbitrary prose with the BCS lexer is what
+		// silently dropped quote characters around quoted punctuation
+		// before (see BcsBbcodeFormatter's own remarks).
+		return $"{BcsBbcodeFormatter.EscapePlainText(found.DocComment)}\n\n{signature}";
 	}
 
 	private const int MinCompletionPrefixLength = 2;
@@ -159,7 +203,7 @@ public partial class ScriptDocument : VBoxContainer
 		}
 
 		var line = _codeEdit.GetCaretLine() + 1; // 0-based caret line -> this parser's 1-based lines
-		var symbols = _bcsUnit?.CollectSymbolsVisibleAt(line) ?? Array.Empty<BcsSymbol>();
+		var symbols = _bcsProgram?.CollectSymbolsVisibleAt(line) ?? Array.Empty<BcsSymbol>();
 		foreach (var symbol in symbols.DistinctBy(s => (s.Name.ToLowerInvariant(), s.Kind)))
 		{
 			_codeEdit.AddCodeCompletionOption(ToCodeCompletionKind(symbol.Kind), symbol.Name, symbol.Name);
@@ -180,7 +224,7 @@ public partial class ScriptDocument : VBoxContainer
 	{
 		var mousePos = (Vector2I)_codeEdit.GetLocalMousePosition();
 		var line = _codeEdit.GetLineColumnAtPos(mousePos).Y;
-		_codeEdit.SetSymbolLookupWordAsValid(_bcsUnit?.FindDeclaration(symbol, line + 1) != null);
+		_codeEdit.SetSymbolLookupWordAsValid(_bcsProgram?.FindDeclaration(symbol, line + 1) != null);
 	}
 
 	/// <summary>
@@ -189,18 +233,25 @@ public partial class ScriptDocument : VBoxContainer
 	/// <paramref name="column"/> here are the click's own 0-based position
 	/// (confirmed from source), used only to re-resolve the symbol at the
 	/// moment of the click rather than trusting whatever was last
-	/// validated during hover. Moves the caret to the resolved
-	/// declaration and centers the viewport on it - this project's own
-	/// equivalent of a real editor's "go to definition."
+	/// validated during hover. If the match lives in a *different* file
+	/// (reached via <c>#include</c>/<c>#import</c>), this tab can't jump
+	/// there itself - raises <see cref="NavigateToFileRequested"/> for
+	/// <c>AppShell</c> to handle instead; otherwise jumps directly via
+	/// <see cref="NavigateTo"/> - this project's own equivalent of a real
+	/// editor's "go to definition."
 	/// </summary>
 	private void OnBcsSymbolLookup(string symbol, long line, long column)
 	{
-		var declaration = _bcsUnit?.FindDeclaration(symbol, (int)line + 1);
+		var declaration = _bcsProgram?.FindDeclaration(symbol, (int)line + 1);
 		if (declaration is not { } found) return;
 
-		_codeEdit.SetCaretLine(found.Line - 1);
-		_codeEdit.SetCaretColumn(found.Column - 1);
-		_codeEdit.CenterViewportToCaret();
+		if (!string.IsNullOrEmpty(found.SourcePath) && found.SourcePath != _filePath)
+		{
+			NavigateToFileRequested?.Invoke(found.SourcePath, found.Line, found.Column);
+			return;
+		}
+
+		NavigateTo(found.Line, found.Column);
 	}
 
 	private static CodeEdit.CodeCompletionKind ToCodeCompletionKind(BcsSymbolKind kind) => kind switch
@@ -243,7 +294,8 @@ public partial class ScriptDocument : VBoxContainer
 		foreach (var line in _diagnosticLines) _codeEdit.SetLineBackgroundColor(line, Colors.Transparent);
 		_diagnosticLines.Clear();
 
-		(_bcsUnit, _diagnostics) = BcsParser.Parse(text);
+		_bcsProgram = BcsParser.ParseProgram(text, _filePath, ReadBcsFileFromDisk);
+		_diagnostics = _bcsProgram.Diagnostics;
 		foreach (var diagnostic in _diagnostics)
 		{
 			var line = Mathf.Clamp(diagnostic.Line - 1, 0, _codeEdit.GetLineCount() - 1);
@@ -253,6 +305,10 @@ public partial class ScriptDocument : VBoxContainer
 
 		_codeEdit.QueueRedraw();
 	}
+
+	/// <summary>The <c>readFile</c> delegate <see cref="BcsParser.ParseProgram"/> needs to resolve an <c>#include</c>/<c>#import</c> - mirrors <see cref="LoadFile"/>'s own existence-check-then-read shape.</summary>
+	private static string ReadBcsFileFromDisk(string path) =>
+		Godot.FileAccess.FileExists(path) ? Godot.FileAccess.GetFileAsString(path) : null;
 
 	public void Save()
 	{

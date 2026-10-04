@@ -22,22 +22,15 @@ using GodotDictionary = Godot.Collections.Dictionary;
 /// entry's column marks where a colored region *starts*; it keeps that
 /// color until the next entry or end of line. So every colored token
 /// needs two entries here, not one: its own start column (the token's
-/// color) and its end column (<see cref="DefaultColor"/>, to stop that
-/// color from bleeding into whatever comes next - whitespace, an
-/// uncolored identifier, or a token of a different color).
+/// color) and its end column (<see cref="BcsColors.Default"/>, to stop
+/// that color from bleeding into whatever comes next - whitespace, an
+/// uncolored identifier, or a token of a different color). Colors
+/// themselves live in <see cref="BcsColors"/>, shared with hover
+/// tooltips' own BBCode coloring (<see cref="BcsBbcodeFormatter"/>) so
+/// both read identically.
 /// </summary>
 public partial class BcsSyntaxHighlighter : SyntaxHighlighter
 {
-    // Chosen to read clearly against this project's existing dark editor
-    // theme (Assets/BaseTheme.tres) - not an attempt to match any one
-    // external editor's exact palette.
-    private static readonly Color KeywordColor = new("#569cd6");
-    private static readonly Color LiteralColor = new("#ce9178");
-    private static readonly Color NumberColor = new("#b5cea8");
-    private static readonly Color CommentColor = new("#6a9955");
-    private static readonly Color PreprocessorColor = new("#c586c0");
-    private static readonly Color DefaultColor = new("#d4d4d4");
-
     private readonly Dictionary<int, GodotDictionary> _lineHighlighting = new();
 
     /// <summary>
@@ -70,7 +63,7 @@ public partial class BcsSyntaxHighlighter : SyntaxHighlighter
             var token = tokenizer.ReadToken();
             if (token.Type == BcsTokenType.EndOfInput) break;
 
-            var color = ColorFor(token.Type, previousSignificant);
+            var color = BcsColors.ColorFor(token.Type, previousSignificant);
             if (color != null) Highlight(token, color.Value);
 
             if (token.Type is not (BcsTokenType.Whitespace or BcsTokenType.Newline)) previousSignificant = token.Type;
@@ -101,7 +94,7 @@ public partial class BcsSyntaxHighlighter : SyntaxHighlighter
         {
             var lineMap = GetOrAddLine(line);
             lineMap[startColumn] = new GodotDictionary { { "color", color } };
-            lineMap[startColumn + token.Length] = new GodotDictionary { { "color", DefaultColor } };
+            lineMap[startColumn + token.Length] = new GodotDictionary { { "color", BcsColors.Default } };
             return;
         }
 
@@ -111,7 +104,7 @@ public partial class BcsSyntaxHighlighter : SyntaxHighlighter
             var column = i == 0 ? startColumn : 0;
             var lineMap = GetOrAddLine(line + i);
             lineMap[column] = new GodotDictionary { { "color", color } };
-            lineMap[column + segments[i].Length] = new GodotDictionary { { "color", DefaultColor } };
+            lineMap[column + segments[i].Length] = new GodotDictionary { { "color", BcsColors.Default } };
         }
     }
 
@@ -122,34 +115,6 @@ public partial class BcsSyntaxHighlighter : SyntaxHighlighter
         _lineHighlighting[line] = created;
         return created;
     }
-
-    /// <summary>
-    /// <see cref="BcsTokenType.Hash"/> always colors as a preprocessor
-    /// directive - BCS has no other use for a bare <c>#</c>. The
-    /// directive's own *name* (<c>define</c>, <c>include</c>, ...) is a
-    /// plain <see cref="BcsTokenType.Identifier"/> at the tokenizer level
-    /// (confirmed: none of these are real reserved words - see
-    /// <see cref="BcsParser"/>'s own remarks), so there's no token type to
-    /// switch on for it the way keywords work - <paramref name="previousSignificant"/>
-    /// (the last non-whitespace/newline token seen, tracked by
-    /// <see cref="Rebuild"/>) is what lets this recognize "the identifier
-    /// immediately after a #" regardless of which directive it actually
-    /// is, known or not - matching a real compiler's own lexical
-    /// position-based recognition rather than a hardcoded directive-name
-    /// list that would just duplicate <see cref="BcsParser"/>'s own.
-    /// </summary>
-    private static Color? ColorFor(BcsTokenType type, BcsTokenType? previousSignificant) => type switch
-    {
-        BcsTokenType.Hash => PreprocessorColor,
-        BcsTokenType.Identifier when previousSignificant == BcsTokenType.Hash => PreprocessorColor,
-        BcsTokenType.LitString or BcsTokenType.LitChar => LiteralColor,
-        BcsTokenType.LitDecimal or BcsTokenType.LitOctal or BcsTokenType.LitHex or
-            BcsTokenType.LitBinary or BcsTokenType.LitFixed or BcsTokenType.LitRadix => NumberColor,
-        BcsTokenType.LineComment or BcsTokenType.BlockComment => CommentColor,
-        BcsTokenType.TypeName => KeywordColor,
-        _ when BcsTokenizer.ReservedWordTypes.Contains(type) => KeywordColor,
-        _ => null,
-    };
 
     public override GodotDictionary _GetLineSyntaxHighlighting(int line) =>
         _lineHighlighting.TryGetValue(line, out var map) ? map : new GodotDictionary();

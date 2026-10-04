@@ -366,13 +366,29 @@ public sealed class BcsTokenizer
         _diagnostics.Add(new BcsDiagnostic(message, line, column, severity));
 
     /// <summary>Skips <see cref="BcsTokenType.Whitespace"/>/<see cref="BcsTokenType.LineComment"/>/<see cref="BcsTokenType.BlockComment"/> always, and <see cref="BcsTokenType.Newline"/> only when <paramref name="includeNewlines"/> is false - mirrors the real compiler's own <c>read_token</c> skip-loop, where newline significance is a per-call-site grammar decision, not a tokenizer-wide one.</summary>
-    public BcsToken NextSignificantToken(bool includeNewlines = false)
+    public BcsToken NextSignificantToken(bool includeNewlines = false) => NextSignificantToken(includeNewlines, out _);
+
+    /// <summary>
+    /// Same as <see cref="NextSignificantToken(bool)"/>, but also hands back
+    /// every comment token it skipped along the way (in source order) via
+    /// <paramref name="skippedComments"/> - <see cref="BcsParser"/> uses this
+    /// to recognize a leading doc comment directly above a declaration,
+    /// which would otherwise be discarded here with no trace. Each call
+    /// only ever sees the comments between the previous significant token
+    /// and this one, so a caller advancing one token at a time gets exactly
+    /// "what was skipped to reach the token I just received," not some
+    /// larger, ambiguous window.
+    /// </summary>
+    public BcsToken NextSignificantToken(bool includeNewlines, out List<BcsToken> skippedComments)
     {
+        var comments = new List<BcsToken>();
         while (true)
         {
             var token = ReadToken();
-            if (token.Type is BcsTokenType.Whitespace or BcsTokenType.LineComment or BcsTokenType.BlockComment) continue;
+            if (token.Type is BcsTokenType.LineComment or BcsTokenType.BlockComment) { comments.Add(token); continue; }
+            if (token.Type == BcsTokenType.Whitespace) continue;
             if (!includeNewlines && token.Type == BcsTokenType.Newline) continue;
+            skippedComments = comments;
             return token;
         }
     }
