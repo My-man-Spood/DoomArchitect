@@ -455,4 +455,45 @@ public class BcsPreprocessorTests
         var (_, diagnostics) = BcsParser.Parse("#define OBJ #foo\n");
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public void Parse_ObjectLikeMacro_HoverDescribeShowsItsRealValue()
+    {
+        var (unit, _) = BcsParser.Parse("#define MAX_HEALTH 100\n");
+
+        var declaration = unit.FindDeclaration("MAX_HEALTH", 1);
+        Assert.NotNull(declaration);
+        Assert.Equal("#define MAX_HEALTH 100", declaration!.Value.Describe());
+    }
+
+    [Fact]
+    public void Parse_FunctionLikeMacro_HoverDescribeShowsItsRealParametersAndBody()
+    {
+        var (unit, _) = BcsParser.Parse("#define MAX(a, b) (a > b ? a : b)\n");
+
+        var declaration = unit.FindDeclaration("MAX", 1);
+        Assert.NotNull(declaration);
+        Assert.Equal("#define MAX(a, b) (a > b ? a : b)", declaration!.Value.Describe());
+    }
+
+    [Fact]
+    public void Parse_VariadicMacro_HoverDescribeShowsEllipsisNotTheInternalParameterName()
+    {
+        // __VA_ARGS__ is the real internal name (confirmed real grammar, dirc.c's own read_param_list) but not what the user actually typed - the hover text should show '...', matching the real source.
+        var (unit, _) = BcsParser.Parse("#define LOG(fmt, ...) fmt\n");
+
+        var declaration = unit.FindDeclaration("LOG", 1);
+        Assert.NotNull(declaration);
+        Assert.Equal("#define LOG(fmt, ...) fmt", declaration!.Value.Describe());
+    }
+
+    [Fact]
+    public void Parse_MacroWithNoValueAtAll_HoverDescribeShowsJustTheName()
+    {
+        var (unit, _) = BcsParser.Parse("#define FEATURE\n");
+
+        var declaration = unit.FindDeclaration("FEATURE", 1);
+        Assert.NotNull(declaration);
+        Assert.Equal("#define FEATURE", declaration!.Value.Describe());
+    }
 }

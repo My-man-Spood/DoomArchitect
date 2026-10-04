@@ -22,12 +22,24 @@ public sealed class BcsDiagnostic
     public int Column { get; }
     public BcsDiagnosticSeverity Severity { get; }
 
-    public BcsDiagnostic(string message, int line, int column, BcsDiagnosticSeverity severity = BcsDiagnosticSeverity.Error)
+    /// <summary>
+    /// Which file this diagnostic belongs to - empty for the file
+    /// originally handed to <c>BcsParser.Parse</c>/<c>ParseProgram</c>
+    /// (same "empty means the main file" convention <see cref="BcsSymbol.SourcePath"/>
+    /// already uses), a real resolved path for one raised while reading
+    /// a file spliced in via <c>#include</c>/<c>#import</c>. Optional,
+    /// defaulting to <c>""</c>, so every pre-existing 4-arg call site
+    /// across this codebase compiles unchanged.
+    /// </summary>
+    public string SourcePath { get; }
+
+    public BcsDiagnostic(string message, int line, int column, BcsDiagnosticSeverity severity = BcsDiagnosticSeverity.Error, string sourcePath = "")
     {
         Message = message;
         Line = line;
         Column = column;
         Severity = severity;
+        SourcePath = sourcePath;
     }
 
     public override string ToString() => $"{Severity} ({Line}:{Column}): {Message}";

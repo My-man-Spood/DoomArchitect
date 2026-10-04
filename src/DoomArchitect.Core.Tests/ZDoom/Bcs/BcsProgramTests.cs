@@ -9,6 +9,12 @@ namespace DoomArchitect.Core.Tests.ZDoom.Bcs;
 /// this BCS pass. xUnit gives each test method its own fresh instance,
 /// so the constructor/<see cref="Dispose"/> pair is per-test setup/teardown,
 /// not shared state.
+///
+/// Phase 5 rewrote this whole file against <see cref="BcsProgram"/>'s new
+/// shape (<c>Unit</c>/<c>IncludedPaths</c> replacing <c>MainUnit</c>/
+/// <c>IncludedUnits</c>) - every real behavior the old file protected is
+/// still covered here, plus new tests for the actual point of Phase 5:
+/// true cross-file macro visibility.
 /// </summary>
 public class BcsProgramTests : IDisposable
 {
@@ -58,13 +64,13 @@ public class BcsProgramTests : IDisposable
 
         var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
 
-        Assert.Contains(program.IncludedUnits, u => string.Equals(u.Path, includedPath, StringComparison.OrdinalIgnoreCase));
+        Assert.Contains(program.IncludedPaths, p => string.Equals(p, includedPath, StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]
     public void ParseProgram_CircularIncludes_TerminatesAndDoesNotDuplicate()
     {
-        // Confirmed real compiler behavior (zt-bcc's own task.c): files are deduped by resolved identity, so a cycle is parsed at most once per file, never infinitely.
+        // Confirmed real compiler behavior (zt-bcc's own task.c): files are deduped by resolved identity, so a cycle is spliced at most once per file, never infinitely.
         var aPath = Path.Combine(_tempDir, "a.acs");
         var bPath = Path.Combine(_tempDir, "b.acs");
         File.WriteAllText(aPath, "#include \"b.acs\"\nfunction int FromA() { }");
@@ -72,8 +78,9 @@ public class BcsProgramTests : IDisposable
 
         var program = BcsParser.ParseProgram(File.ReadAllText(aPath), aPath, ReadFile);
 
-        Assert.Single(program.IncludedUnits); // only b.acs - the cycle back to a.acs itself is caught, not re-added
+        Assert.Single(program.IncludedPaths); // only b.acs - the cycle back to a.acs itself is caught, not re-spliced
         Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "FromB");
+        Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "FromA");
     }
 
     [Fact]
@@ -83,23 +90,24 @@ public class BcsProgramTests : IDisposable
 
         var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
 
-        Assert.Empty(program.IncludedUnits);
+        Assert.Empty(program.IncludedPaths);
         var diagnostic = Assert.Single(program.Diagnostics);
         Assert.Equal(BcsDiagnosticSeverity.Warning, diagnostic.Severity);
         Assert.Contains("doesnotexist.acs", diagnostic.Message);
         Assert.Equal(1, diagnostic.Line); // the '#' itself, on line 1
+        Assert.Equal("", diagnostic.SourcePath); // the main file's own problem
     }
 
     [Fact]
     public void ParseProgram_UnresolvableIncludeDeepInAnAlreadyIncludedFile_ReportsNothing()
     {
-        // Not actionable from here - that line number belongs to a different file entirely, and BcsDiagnostic has no file field to say which one.
+        // Not attributable to the EDITING buffer - it's a real problem now, just correctly scoped to the included file itself, which isn't what this diagnostic class reports on.
         WriteFile("shared.acs", "#include \"alsomissing.acs\"\nfunction int Helper() { }");
         var mainPath = WriteFile("main.acs", "#include \"shared.acs\"\n");
 
         var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
 
-        Assert.Single(program.IncludedUnits);
+        Assert.Single(program.IncludedPaths);
         Assert.Empty(program.Diagnostics);
     }
 
@@ -119,7 +127,7 @@ public class BcsProgramTests : IDisposable
     {
         var program = BcsParser.ParseProgram("#include \"shared.acs\"\n", null, ReadFile);
 
-        Assert.Empty(program.IncludedUnits);
+        Assert.Empty(program.IncludedPaths);
         var diagnostic = Assert.Single(program.Diagnostics);
         Assert.Equal(BcsDiagnosticSeverity.Warning, diagnostic.Severity);
         Assert.Contains("save this file first", diagnostic.Message);
@@ -133,5 +141,70 @@ public class BcsProgramTests : IDisposable
         var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
 
         Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "Local" && s.SourcePath == "");
+    }
+
+    [Fact]
+    public void ParseProgram_MacroDefinedInAnIncludedFile_ExpandsInTheIncludingFile()
+    {
+        // The actual point of Phase 5 - true splicing, not post-hoc symbol merging. Decisive proof, same reasoning as every other macro-expansion test this session: unexpanded, "OPEN 1 + 2 CLOSE" leaves a diagnostic (expected ';'); correctly spliced and expanded, it reads as "( 1 + 2 )" - clean.
+        WriteFile("shared.acs", "#define OPEN (\n#define CLOSE )\n");
+        var mainPath = WriteFile("main.acs", "#include \"shared.acs\"\nint x = OPEN 1 + 2 CLOSE;\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Empty(program.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseProgram_MacroDefinedInTheMainFileBeforeTheInclude_ExpandsInsideTheIncludedFileToo()
+    {
+        // True splice symmetry: a macro defined ABOVE the #include is visible to the spliced-in content too, not just the other direction.
+        WriteFile("shared.acs", "int x = OPEN 1 + 2 CLOSE;\n");
+        var mainPath = WriteFile("main.acs", "#define OPEN (\n#define CLOSE )\n#include \"shared.acs\"\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Empty(program.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseProgram_UndefInsideAnIncludedFile_AffectsTheRestOfTheIncludingFile()
+    {
+        // Order-dependent correctness, not just "macros from both files exist somewhere" - the #undef happens AT a specific point in the splice and must take effect from there on, exactly as if it had been textually written inline.
+        WriteFile("shared.acs", "#undef FEATURE\n");
+        var mainPath = WriteFile("main.acs",
+            "#define FEATURE\n#include \"shared.acs\"\n#ifdef FEATURE\nint excluded = 1;\n#else\nint included = 1;\n#endif\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Empty(program.Diagnostics);
+        Assert.DoesNotContain(program.CollectSymbolsVisibleAt(1), s => s.Name == "excluded");
+        Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "included");
+    }
+
+    [Fact]
+    public void ParseProgram_SyntaxErrorInsideAnIncludedFile_NowSurfacesWithTheRightSourcePath()
+    {
+        // Fixes a previously "deliberately out of scope" limitation: BcsDiagnostic had no file field before Phase 5, so an included file's own real syntax errors could never be attributed correctly and were simply dropped. True splicing makes this correct for free.
+        var includedPath = WriteFile("shared.acs", "int x = ;\n");
+        var mainPath = WriteFile("main.acs", "#include \"shared.acs\"\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Contains(program.Diagnostics, d => d.SourcePath == includedPath);
+    }
+
+    [Fact]
+    public void ParseProgram_UnclosedIfdefInsideAnIncludedFile_IsReportedOnceAgainstThatFile_WithoutCorruptingTheIncludingFile()
+    {
+        var includedPath = WriteFile("shared.acs", "#ifdef SOMETHING\nint insideUnclosedBlock = 1;\n");
+        var mainPath = WriteFile("main.acs", "#include \"shared.acs\"\nint after = 1;\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Contains(program.Diagnostics, d => d.Message.Contains("missing #endif") && d.SourcePath == includedPath);
+        Assert.DoesNotContain(program.CollectSymbolsVisibleAt(1), s => s.Name == "insideUnclosedBlock"); // SOMETHING is undefined - the block's own content is correctly skipped
+        // The including file's own content after the #include must still parse correctly - not swallowed by SkipInactiveRegion incorrectly continuing to hunt for a sibling that no longer exists.
+        Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "after");
     }
 }

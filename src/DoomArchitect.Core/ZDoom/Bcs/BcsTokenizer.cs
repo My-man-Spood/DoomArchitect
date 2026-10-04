@@ -274,6 +274,19 @@ public sealed class BcsToken
     /// </summary>
     public int Length { get; internal set; }
 
+    /// <summary>
+    /// Which file this token actually came from - empty for the file
+    /// originally handed to <see cref="BcsParser.Parse"/>/<see cref="BcsParser.ParseProgram"/>
+    /// (matching <see cref="BcsSymbol.SourcePath"/>'s own "empty means
+    /// the main file" convention), a real resolved path for a token
+    /// spliced in from a genuinely different file via <c>#include</c>/
+    /// <c>#import</c>. <see cref="BcsTokenizer"/> itself never sets this
+    /// (it has no concept of "which file" - that's exactly why it stays
+    /// single-file-oblivious); only <see cref="BcsPreprocessor"/>'s own
+    /// multi-file pull primitives stamp it, generically, in one place.
+    /// </summary>
+    public string SourcePath { get; internal set; } = string.Empty;
+
     public override string ToString() => $"<Token.{Type} ({Value})>";
 }
 
@@ -359,10 +372,19 @@ public sealed class BcsTokenizer
     private int _line = 1;
     private int _column = 1;
 
-    public BcsTokenizer(BinaryReader reader, List<BcsDiagnostic> diagnostics)
+    private readonly string _sourcePath;
+
+    /// <param name="sourcePath">
+    /// Used only to attribute this tokenizer's OWN diagnostics (via
+    /// <see cref="AddDiagnostic"/>) to the right file once more than one
+    /// is ever in play - tokenizing itself is completely unaffected.
+    /// Default empty, matching every existing single-file call site.
+    /// </param>
+    public BcsTokenizer(BinaryReader reader, List<BcsDiagnostic> diagnostics, string sourcePath = "")
     {
         _reader = reader;
         _diagnostics = diagnostics;
+        _sourcePath = sourcePath;
         _current = ReadRaw();
     }
 
@@ -386,7 +408,7 @@ public sealed class BcsTokenizer
     }
 
     private void AddDiagnostic(string message, int line, int column, BcsDiagnosticSeverity severity = BcsDiagnosticSeverity.Error) =>
-        _diagnostics.Add(new BcsDiagnostic(message, line, column, severity));
+        _diagnostics.Add(new BcsDiagnostic(message, line, column, severity, _sourcePath));
 
     /// <summary>Skips <see cref="BcsTokenType.Whitespace"/>/<see cref="BcsTokenType.LineComment"/>/<see cref="BcsTokenType.BlockComment"/> always, and <see cref="BcsTokenType.Newline"/> only when <paramref name="includeNewlines"/> is false - mirrors the real compiler's own <c>read_token</c> skip-loop, where newline significance is a per-call-site grammar decision, not a tokenizer-wide one.</summary>
     public BcsToken NextSignificantToken(bool includeNewlines = false) => NextSignificantToken(includeNewlines, out _);

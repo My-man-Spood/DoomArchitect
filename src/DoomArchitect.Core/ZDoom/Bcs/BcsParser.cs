@@ -155,24 +155,24 @@ public sealed partial class BcsParser
                 if (IsTrigger(_prev1)) // rule A
                 {
                     _listType = trackType ? _prevText1 ?? string.Empty : string.Empty;
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType, SourcePath: token.SourcePath));
                     _listActive = true;
                     _listDepth = depth;
                 }
                 else if (_prev1 == BcsTokenType.Comma && _listActive && depth == _listDepth) // rule B
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType, SourcePath: token.SourcePath));
                 }
                 else if (allowIndexed && _prev1 == BcsTokenType.Colon && _prev2 == BcsTokenType.LitDecimal && IsTrigger(_prev3)) // rule C
                 {
                     _listType = trackType ? _prevText3 ?? string.Empty : string.Empty;
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType, SourcePath: token.SourcePath));
                     _listActive = true;
                     _listDepth = depth;
                 }
                 else if (allowIndexed && _prev1 == BcsTokenType.Colon && _prev2 == BcsTokenType.LitDecimal && _prev3 == BcsTokenType.Comma && _listActive && depth == _listDepth) // rule D
                 {
-                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType));
+                    _names.Add(new BcsSymbol(token.RawValue, kind, token.Line, token.Column, Type: _listType, SourcePath: token.SourcePath));
                 }
             }
             else if (token.Type == BcsTokenType.Semicolon && depth == _listDepth)
@@ -195,12 +195,15 @@ public sealed partial class BcsParser
     /// <summary>Every comment token skipped by the most recent <see cref="Advance"/> call to reach <see cref="_current"/> - see <see cref="ExtractDocComment"/>.</summary>
     private List<BcsToken> _currentLeadingComments = new();
 
-    public BcsParser(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
+    public BcsParser(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics, BcsIncludeResolver? includeResolver = null)
     {
-        _preprocessor = new BcsPreprocessor(tokenizer, diagnostics);
+        _preprocessor = new BcsPreprocessor(tokenizer, diagnostics, includeResolver);
         _diagnostics = diagnostics;
         _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
     }
+
+    /// <summary>Every resolved path actually spliced in via `#include`/`#import` - see <see cref="BcsPreprocessor.IncludedPaths"/>.</summary>
+    public IReadOnlyList<string> IncludedPaths => _preprocessor.IncludedPaths;
 
     /// <summary>Convenience one-shot entry point - wraps <paramref name="source"/> as a <see cref="MemoryStream"/> (never real file I/O), used by both the language server (re-parsing the open buffer on every change) and tests.</summary>
     public static (BcsCompilationUnit Unit, List<BcsDiagnostic> Diagnostics) Parse(string source)
@@ -212,102 +215,47 @@ public sealed partial class BcsParser
     }
 
     /// <summary>
-    /// Like <see cref="Parse"/>, but also resolves and recursively parses
-    /// every <c>#include</c>/<c>#import</c> this file references (and
-    /// transitively, theirs too) into a <see cref="BcsProgram"/>. Stays
-    /// filesystem-agnostic itself - <paramref name="readFile"/> is the
-    /// caller's own way to turn a resolved path into text (or
+    /// Like <see cref="Parse"/>, but also resolves and splices in every
+    /// <c>#include</c>/<c>#import</c> this file references (and
+    /// transitively, theirs too) live, during a single continuous parse -
+    /// true C-style textual splicing (confirmed real architecture:
+    /// `zt-bcc`'s own `source.c` is a genuinely multi-file input stack,
+    /// not a single-stream assumption), not a separate per-file parse
+    /// merged afterward. This is what makes macro visibility (and
+    /// `#undef`/conditional-compilation state) flow correctly across an
+    /// include boundary, in true source order, in both directions - see
+    /// <see cref="BcsPreprocessor"/>'s own remarks for the mechanics.
+    /// Stays filesystem-agnostic itself - <paramref name="readFile"/> is
+    /// the caller's own way to turn a resolved path into text (or
     /// <c>null</c> if it can't), the same caller-injected-resolver shape
     /// <c>DecorateParser</c>/<c>ZScriptParser</c>'s own <c>OnInclude</c>
-    /// already uses for their (lump-path, not real-filesystem) includes -
-    /// so this stays trivially testable against real temp files without
-    /// needing Godot's <c>FileAccess</c> or any particular I/O API baked
-    /// in. <paramref name="sourcePath"/> is this file's own resolved
-    /// path (null for an unsaved buffer with nowhere to resolve a
-    /// relative include against - those are just skipped, not an error).
+    /// already uses - so this stays trivially testable against real temp
+    /// files without needing Godot's <c>FileAccess</c> or any particular
+    /// I/O API baked in. <paramref name="sourcePath"/> is this file's own
+    /// resolved path (null for an unsaved buffer with nowhere to resolve
+    /// a relative include against - those are just skipped, not an
+    /// error).
     ///
-    /// Path resolution confirmed from the real compiler's own
-    /// <c>src/task.c</c> (<c>identify_file_relative</c>): an absolute
-    /// path is used as-is; a relative one resolves against the
-    /// *including* file's own directory. (Not modeled: that same
-    /// function's further fallbacks - compiler <c>-i</c> include
-    /// directories and a bundled default lib dir - this project has no
-    /// equivalent configuration surface for either yet.) Resolved paths
-    /// are deduped (case-insensitively, normalized via
-    /// <see cref="Path.GetFullPath"/>) so a diamond-shaped or circular
-    /// include graph - including one that eventually cycles back to
-    /// this very file - is parsed at most once per file, never
-    /// infinitely; this is also what makes true self-<c>#import</c> safe
-    /// without needing the real compiler's own dedicated diagnostic for
-    /// it.
-    ///
-    /// An include/import that can't be resolved or read reports a
-    /// warning - but only when it's written directly in <paramref name="source"/>
-    /// itself, never for one found deep inside an already-included
-    /// file: that second case isn't actionable from here (its line
-    /// number belongs to a different file entirely, and
-    /// <see cref="BcsDiagnostic"/> has no file field to say which one),
-    /// and surfacing it would be actively misleading, not helpful.
+    /// Path resolution, dedup/cycle-safety, and the "never blame a
+    /// problem found deep inside an already-included file on the editing
+    /// buffer" diagnostic scoping are all unchanged in behavior from
+    /// before - they just live inside <see cref="BcsPreprocessor"/> now
+    /// (<c>ReadIncludeOrImport</c>), since splicing has to happen live,
+    /// not as a separate post-parse walk.
     /// </summary>
     public static BcsProgram ParseProgram(string source, string? sourcePath, Func<string, string?> readFile)
     {
-        var (mainUnit, diagnostics) = Parse(source);
-
-        var included = new List<(string Path, BcsCompilationUnit Unit)>();
-        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        if (sourcePath != null) visited.Add(Path.GetFullPath(sourcePath));
-
-        void ResolveIncludes(BcsCompilationUnit unit, string? baseDir, bool reportDiagnostics)
-        {
-            foreach (var member in unit.Members)
-            {
-                var rawPath = member switch
-                {
-                    BcsIncludeDirective include => include.Path,
-                    BcsImportDirective import => import.Path,
-                    _ => null,
-                };
-                if (string.IsNullOrEmpty(rawPath)) continue;
-
-                var resolved = ResolveIncludePath(rawPath, baseDir);
-                if (resolved == null)
-                {
-                    if (reportDiagnostics)
-                        diagnostics.Add(new BcsDiagnostic($"cannot resolve relative path '{rawPath}' - save this file first", member.Line, member.Column, BcsDiagnosticSeverity.Warning));
-                    continue;
-                }
-
-                var normalized = Path.GetFullPath(resolved);
-                if (!visited.Add(normalized)) continue;
-
-                var text = readFile(resolved);
-                if (text == null)
-                {
-                    if (reportDiagnostics)
-                        diagnostics.Add(new BcsDiagnostic($"included file not found: '{rawPath}'", member.Line, member.Column, BcsDiagnosticSeverity.Warning));
-                    continue;
-                }
-
-                var (includedUnit, _) = Parse(text); // the included file's own diagnostics are intentionally discarded - see BcsProgram's own remarks
-                included.Add((resolved, includedUnit));
-                ResolveIncludes(includedUnit, Path.GetDirectoryName(resolved), reportDiagnostics: false);
-            }
-        }
-
-        ResolveIncludes(mainUnit, sourcePath != null ? Path.GetDirectoryName(sourcePath) : null, reportDiagnostics: true);
-        return new BcsProgram(mainUnit, included, diagnostics);
-    }
-
-    private static string? ResolveIncludePath(string rawPath, string? baseDir)
-    {
-        if (Path.IsPathRooted(rawPath)) return rawPath;
-        return baseDir == null ? null : Path.Combine(baseDir, rawPath);
+        var diagnostics = new List<BcsDiagnostic>();
+        var tokenizer = new BcsTokenizer(new BinaryReader(new MemoryStream(Encoding.UTF8.GetBytes(source))), diagnostics);
+        var parser = new BcsParser(tokenizer, diagnostics, new BcsIncludeResolver(sourcePath, readFile));
+        var unit = parser.Parse();
+        return new BcsProgram(unit, diagnostics, parser.IncludedPaths);
     }
 
     private void Advance() => _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
 
     private void AddDiagnostic(string message, BcsToken token) =>
-        _diagnostics.Add(new BcsDiagnostic(message, token.Line, token.Column));
+        _diagnostics.Add(new BcsDiagnostic(message, token.Line, token.Column, sourcePath: token.SourcePath));
 
     /// <summary>
     /// Builds a declaration's leading doc comment text out of
@@ -365,7 +313,7 @@ public sealed partial class BcsParser
         // case inside ParseHashDirective.
         foreach (var macro in _preprocessor.Macros)
         {
-            unit.Members.Add(new BcsDefineDirective { Name = macro.Name, DocComment = macro.DocComment, Line = macro.Line, Column = macro.Column });
+            unit.Members.Add(new BcsDefineDirective { Name = macro.Name, Signature = macro.BuildSignature(), DocComment = macro.DocComment, Line = macro.Line, Column = macro.Column, SourcePath = macro.SourcePath });
         }
 
         return unit;
@@ -468,8 +416,8 @@ public sealed partial class BcsParser
         var path = _current.Value;
         Advance();
         return isImport
-            ? new BcsImportDirective { Path = path, Line = start.Line, Column = start.Column }
-            : new BcsIncludeDirective { Path = path, Line = start.Line, Column = start.Column };
+            ? new BcsImportDirective { Path = path, Line = start.Line, Column = start.Column, SourcePath = start.SourcePath }
+            : new BcsIncludeDirective { Path = path, Line = start.Line, Column = start.Column, SourcePath = start.SourcePath };
     }
 
     /// <summary>
@@ -537,6 +485,7 @@ public sealed partial class BcsParser
             DocComment = docComment,
             Line = start.Line,
             Column = start.Column,
+            SourcePath = start.SourcePath,
         };
         node.FlagTokens.AddRange(flags);
         node.ParameterNames.AddRange(parameterNames);
@@ -573,7 +522,7 @@ public sealed partial class BcsParser
             else if (_current.Type == BcsTokenType.CloseParen) parenDepth--;
             else if (parenDepth == 0 && _current.Type == BcsTokenType.Identifier && prev1 == BcsTokenType.Colon && prev2 == BcsTokenType.LitDecimal)
             {
-                names.Add(new BcsSymbol(_current.RawValue, BcsSymbolKind.Function, _current.Line, _current.Column));
+                names.Add(new BcsSymbol(_current.RawValue, BcsSymbolKind.Function, _current.Line, _current.Column, SourcePath: _current.SourcePath));
             }
 
             headerTokens.Add(_current.Value);
@@ -585,7 +534,7 @@ public sealed partial class BcsParser
         if (_current.Type == BcsTokenType.Semicolon) Advance();
         else AddDiagnostic("expected ';'", _current);
 
-        var node = new BcsSpecialDeclaration { DocComment = docComment, Line = start.Line, Column = start.Column };
+        var node = new BcsSpecialDeclaration { DocComment = docComment, Line = start.Line, Column = start.Column, SourcePath = start.SourcePath };
         node.HeaderTokens.AddRange(headerTokens);
         node.Names.AddRange(names);
         return node;
@@ -670,6 +619,7 @@ public sealed partial class BcsParser
             BodyEndColumn = bodyEndColumn,
             Line = start.Line,
             Column = start.Column,
+            SourcePath = start.SourcePath,
         };
         node.HeaderTokens.AddRange(headerTokens);
         if (paramScanner != null) node.ParameterNames.AddRange(paramScanner.Names);
@@ -689,7 +639,7 @@ public sealed partial class BcsParser
         var (members, _, _, _, _) = SkipBracedBlock(DeclarationScanMode.EnumMember);
         if (_current.Type == BcsTokenType.Semicolon) Advance();
 
-        var node = new BcsEnumDeclaration { Name = name, DocComment = docComment, Line = start.Line, Column = start.Column };
+        var node = new BcsEnumDeclaration { Name = name, DocComment = docComment, Line = start.Line, Column = start.Column, SourcePath = start.SourcePath };
         node.MemberNames.AddRange(members);
         return node;
     }
@@ -742,7 +692,7 @@ public sealed partial class BcsParser
         if (_current.Type == BcsTokenType.Semicolon) Advance();
         else AddDiagnostic("expected ';'", _current);
 
-        var node = new BcsVariableDeclaration { TypeKeyword = typeKeyword, DocComment = docComment, Line = start.Line, Column = start.Column };
+        var node = new BcsVariableDeclaration { TypeKeyword = typeKeyword, DocComment = docComment, Line = start.Line, Column = start.Column, SourcePath = start.SourcePath };
         node.DeclaratorTokens.AddRange(declaratorTokens);
         node.DeclaratorNames.AddRange(declaratorNames);
         return node;
@@ -789,7 +739,7 @@ public sealed partial class BcsParser
 
         var nameToken = _current;
         Consume();
-        var symbol = new BcsSymbol(nameToken.RawValue, BcsSymbolKind.Variable, nameToken.Line, nameToken.Column, Type: typeKeyword);
+        var symbol = new BcsSymbol(nameToken.RawValue, BcsSymbolKind.Variable, nameToken.Line, nameToken.Column, Type: typeKeyword, SourcePath: nameToken.SourcePath);
 
         if (_current.Type == BcsTokenType.OpenSquare)
         {

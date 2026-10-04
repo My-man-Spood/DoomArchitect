@@ -13,6 +13,18 @@ public abstract class BcsNode
     public int Column { get; init; }
 
     /// <summary>
+    /// Which file this declaration actually came from - empty for one
+    /// declared directly in the file originally handed to
+    /// <c>BcsParser.Parse</c>/<c>ParseProgram</c> (same convention
+    /// <see cref="BcsSymbol.SourcePath"/> already uses), a real resolved
+    /// path for one spliced in from a different file via <c>#include</c>/
+    /// <c>#import</c>. Set once, at construction, from whichever token
+    /// each node already captures <see cref="Line"/>/<see cref="Column"/>
+    /// from.
+    /// </summary>
+    public string SourcePath { get; init; } = string.Empty;
+
+    /// <summary>
     /// Comment text found directly, contiguously above this declaration's
     /// own first line (a single <c>/* ... */</c>, or a run of <c>//</c>
     /// lines with no blank line between them or between the last one and
@@ -91,7 +103,7 @@ public readonly record struct BcsSymbol(string Name, BcsSymbolKind Kind, int Lin
         BcsSymbolKind.Variable => string.IsNullOrEmpty(Type) ? $"variable {Name}" : $"{Type} {Name}",
         BcsSymbolKind.EnumType => $"enum {Name}",
         BcsSymbolKind.EnumMember => $"enum member {Name}",
-        BcsSymbolKind.Macro => $"macro {Name}",
+        BcsSymbolKind.Macro => string.IsNullOrEmpty(Signature) ? $"macro {Name}" : Signature,
         _ => Name,
     };
 }
@@ -123,7 +135,7 @@ public sealed class BcsCompilationUnit : BcsNode
                     if (!string.IsNullOrEmpty(function.Name))
                         yield return new BcsSymbol(function.Name, BcsSymbolKind.Function, function.NameLine, function.NameColumn,
                             Signature: $"function {function.ReturnType} {function.Name}({FormatParameterList(function.ParameterNames)})",
-                            DocComment: function.DocComment);
+                            DocComment: function.DocComment, SourcePath: function.SourcePath);
                     break;
                 case BcsSpecialDeclaration special:
                     // One 'special' statement can declare several, comma-separated entries - a leading doc comment documents the whole statement, so every one of them shares it.
@@ -133,11 +145,11 @@ public sealed class BcsCompilationUnit : BcsNode
                     if (script.IsNamedScript)
                         yield return new BcsSymbol(script.Number, BcsSymbolKind.Function, script.NumberLine, script.NumberColumn,
                             Signature: $"script {script.Number}({FormatParameterList(script.ParameterNames)})",
-                            DocComment: script.DocComment);
+                            DocComment: script.DocComment, SourcePath: script.SourcePath);
                     break;
                 case BcsEnumDeclaration @enum:
                     if (!string.IsNullOrEmpty(@enum.Name))
-                        yield return new BcsSymbol(@enum.Name, BcsSymbolKind.EnumType, @enum.Line, @enum.Column, DocComment: @enum.DocComment);
+                        yield return new BcsSymbol(@enum.Name, BcsSymbolKind.EnumType, @enum.Line, @enum.Column, DocComment: @enum.DocComment, SourcePath: @enum.SourcePath);
                     foreach (var enumMember in @enum.MemberNames) yield return enumMember;
                     break;
                 case BcsVariableDeclaration variable:
@@ -146,22 +158,12 @@ public sealed class BcsCompilationUnit : BcsNode
                     break;
                 case BcsDefineDirective define:
                     if (!string.IsNullOrEmpty(define.Name))
-                        yield return new BcsSymbol(define.Name, BcsSymbolKind.Macro, define.Line, define.Column, DocComment: define.DocComment);
+                        yield return new BcsSymbol(define.Name, BcsSymbolKind.Macro, define.Line, define.Column,
+                            Signature: define.Signature, DocComment: define.DocComment, SourcePath: define.SourcePath);
                     break;
             }
         }
     }
-
-    /// <summary>
-    /// Public wrapper over <see cref="FileScopeSymbols"/> - a
-    /// <c>BcsProgram</c> uses this (and only this, never a function/
-    /// script's own parameters/body locals) to pull in an included/
-    /// imported file's symbols: only what that file declares at file
-    /// scope makes sense to a *different* file including it - its own
-    /// locals are scoped to a position within its own body, which
-    /// doesn't mean anything relative to a different file's lines.
-    /// </summary>
-    public IReadOnlyList<BcsSymbol> CollectFileScopeSymbols() => FileScopeSymbols().ToList();
 
     /// <summary>
     /// "int a, int b" from a parameter list - each parameter's own
@@ -207,25 +209,35 @@ public sealed class BcsCompilationUnit : BcsNode
 
     /// <summary>
     /// Every symbol actually visible from <paramref name="line"/> (1-based,
-    /// matching every other position this parser produces): everything
-    /// from <see cref="FileScopeSymbols"/> plus - only for whichever
-    /// function/script body <paramref name="line"/> falls inside, if any -
-    /// that member's own parameters and body locals. This is the
-    /// scope-aware replacement for <see cref="CollectSymbols"/> that both
-    /// completion providers use.
+    /// matching every other position this parser produces) IN THE FILE
+    /// <paramref name="atPath"/> names (default <c>""</c>, meaning the
+    /// main file - every real caller only ever asks about its own open
+    /// buffer, confirmed via exploration): everything from
+    /// <see cref="FileScopeSymbols"/> (across the WHOLE spliced unit -
+    /// file-scope completion intentionally still spans every file in the
+    /// include graph, unchanged) plus - only for whichever function/
+    /// script body <paramref name="line"/> falls inside AND that's
+    /// actually declared in <paramref name="atPath"/>, if any - that
+    /// member's own parameters and body locals. The <paramref name="atPath"/>
+    /// gate is real, not defensive: once more than one file's content can
+    /// share this single <see cref="Members"/> list (Phase 5's true
+    /// splicing), per-file line numbers restart at 1, so a different
+    /// file's body span could otherwise numerically overlap the file
+    /// actually being queried. This is the scope-aware replacement for
+    /// <see cref="CollectSymbols"/> that both completion providers use.
     /// </summary>
-    public IReadOnlyList<BcsSymbol> CollectSymbolsVisibleAt(int line)
+    public IReadOnlyList<BcsSymbol> CollectSymbolsVisibleAt(int line, string atPath = "")
     {
         var symbols = new List<BcsSymbol>(FileScopeSymbols());
 
         foreach (var member in Members)
         {
-            if (member is BcsFunctionDeclaration function && WithinBody(line, function.BodyLine, function.BodyEndLine))
+            if (member is BcsFunctionDeclaration function && function.SourcePath == atPath && WithinBody(line, function.BodyLine, function.BodyEndLine))
             {
                 symbols.AddRange(function.ParameterNames);
                 symbols.AddRange(function.BodyLocals);
             }
-            else if (member is BcsScriptDeclaration script && WithinBody(line, script.BodyLine, script.BodyEndLine))
+            else if (member is BcsScriptDeclaration script && script.SourcePath == atPath && WithinBody(line, script.BodyLine, script.BodyEndLine))
             {
                 symbols.AddRange(script.ParameterNames);
                 symbols.AddRange(script.BodyLocals);
@@ -238,26 +250,28 @@ public sealed class BcsCompilationUnit : BcsNode
     /// <summary>
     /// Resolves <paramref name="name"/> (matched case-insensitively - BCS
     /// itself is case-insensitive) to the single declaration it refers to
-    /// when used at <paramref name="line"/>, for go-to-definition. Checks
-    /// the enclosing function/script body's own parameters/locals first
-    /// (correct shadowing: a local wins over a same-named global when
-    /// queried from inside that local's own scope), then falls back to
-    /// <see cref="FileScopeSymbols"/>. Returns <c>null</c>, not a default
+    /// when used at <paramref name="line"/> in the file <paramref name="atPath"/>
+    /// names (same default/reasoning as <see cref="CollectSymbolsVisibleAt"/>),
+    /// for go-to-definition. Checks the enclosing function/script body's
+    /// own parameters/locals first (correct shadowing: a local wins over
+    /// a same-named global when queried from inside that local's own
+    /// scope), then falls back to <see cref="FileScopeSymbols"/> (again,
+    /// across the whole spliced unit). Returns <c>null</c>, not a default
     /// struct, when nothing matches.
     /// </summary>
-    public BcsSymbol? FindDeclaration(string name, int line)
+    public BcsSymbol? FindDeclaration(string name, int line, string atPath = "")
     {
         bool NameMatches(BcsSymbol symbol) => string.Equals(symbol.Name, name, StringComparison.OrdinalIgnoreCase);
 
         foreach (var member in Members)
         {
-            if (member is BcsFunctionDeclaration function && WithinBody(line, function.BodyLine, function.BodyEndLine))
+            if (member is BcsFunctionDeclaration function && function.SourcePath == atPath && WithinBody(line, function.BodyLine, function.BodyEndLine))
             {
                 var local = function.ParameterNames.Concat(function.BodyLocals)
                     .Where(NameMatches).Select(s => (BcsSymbol?)s).FirstOrDefault();
                 if (local != null) return local;
             }
-            else if (member is BcsScriptDeclaration script && WithinBody(line, script.BodyLine, script.BodyEndLine))
+            else if (member is BcsScriptDeclaration script && script.SourcePath == atPath && WithinBody(line, script.BodyLine, script.BodyEndLine))
             {
                 var local = script.ParameterNames.Concat(script.BodyLocals)
                     .Where(NameMatches).Select(s => (BcsSymbol?)s).FirstOrDefault();
@@ -285,16 +299,18 @@ public sealed class BcsImportDirective : BcsNode
 }
 
 /// <summary>
-/// <c>#define NAME ...</c> - only <see cref="Name"/> is extracted
-/// (original casing preserved, same as every other declared name); the
-/// macro's value/parameter list is still not modeled at all, deliberate
-/// scope limiting - this exists purely so a `#define`d name can be
-/// offered by completion, not to support macro expansion (which would
-/// need a real preprocessor pass this project doesn't have).
+/// <c>#define NAME ...</c> - <see cref="Name"/> preserves original
+/// casing, same as every other declared name. <see cref="Signature"/>
+/// (new) is the real C-style rendering of the macro's own parameter
+/// list and value, built once by <see cref="BcsMacroDefinition.BuildSignature"/> -
+/// genuinely real now that macro expansion exists (<see cref="BcsPreprocessor"/>),
+/// not a placeholder; before that, there was nothing but the bare name
+/// to show here.
 /// </summary>
 public sealed class BcsDefineDirective : BcsNode
 {
     public string? Name { get; init; }
+    public string Signature { get; init; } = string.Empty;
 }
 
 /// <summary>

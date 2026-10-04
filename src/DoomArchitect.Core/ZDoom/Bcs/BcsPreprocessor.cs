@@ -19,25 +19,73 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// `#endif` conditional compilation) plus Phase 3 (`#` stringizing and
 /// `##` token-pasting - see <see cref="Stringize"/>/<see cref="Paste"/>)
 /// plus Phase 4 (a real `#if`/`#elif` constant-expression evaluator -
-/// see <see cref="EvaluateDirectiveCondition"/>) of a staged port.
-/// Deliberately deferred still: cross-file macro visibility (a
-/// `#define` in an `#include`d file is not yet visible to the
-/// including file - true textual-splice `#include` semantics are a
-/// separate, later reconciliation with the existing post-hoc symbol-
-/// merging <see cref="BcsProgram"/> already does for completion/hover/
-/// go-to-def).
+/// see <see cref="EvaluateDirectiveCondition"/>) plus Phase 5 (true
+/// `#include`/`#import` splicing - see <see cref="ReadIncludeOrImport"/>
+/// and <see cref="BcsIncludeResolver"/>) of a staged port.
 ///
-/// Only `#define`/`#libdefine`/`#undef`/`#if`/`#ifdef`/`#ifndef`/
-/// `#elif`/`#else`/`#endif` are intercepted here, fully - they never
-/// reach <see cref="BcsParser.ParseHashDirective"/> at all anymore.
-/// Every other directive (`#include`, `#import`, `#library`, ...)
-/// passes straight through unchanged, exactly as <see cref="BcsParser"/>
-/// already handles it.
+/// `#define`/`#libdefine`/`#undef`/`#if`/`#ifdef`/`#ifndef`/`#elif`/
+/// `#else`/`#endif` are always intercepted here, fully - they never
+/// reach <see cref="BcsParser.ParseHashDirective"/> at all. `#include`/
+/// `#import` are intercepted too, but only when constructed with a
+/// non-null <see cref="BcsIncludeResolver"/> (the `BcsParser.ParseProgram`
+/// path) - without one (every plain `BcsParser.Parse(string)` call,
+/// including every pre-Phase-5 test), they pass straight through
+/// unchanged, exactly as <see cref="BcsParser"/> already handles every
+/// *other* directive (`#library`, ...).
 /// </summary>
+/// <summary>
+/// Splicing configuration for <see cref="BcsPreprocessor"/> - how to turn
+/// a resolved `#include`/`#import` path into real text. <c>null</c>
+/// (every plain <see cref="BcsParser.Parse(string)"/> call) means
+/// splicing is disabled entirely; only <see cref="BcsParser.ParseProgram"/>
+/// ever constructs a real one. Mirrors `DecorateParser`/`ZScriptParser`'s
+/// own caller-injected-resolver pattern (<c>OnInclude</c>) rather than
+/// baking in any particular I/O API.
+/// </summary>
+public sealed class BcsIncludeResolver
+{
+    public string? MainSourcePath { get; }
+    public Func<string, string?> ReadFile { get; }
+
+    public BcsIncludeResolver(string? mainSourcePath, Func<string, string?> readFile)
+    {
+        MainSourcePath = mainSourcePath;
+        ReadFile = readFile;
+    }
+}
+
 internal sealed class BcsPreprocessor
 {
-    private readonly BcsTokenizer _tokenizer;
+    /// <summary>
+    /// One currently-open file in the splice - confirmed real structure
+    /// (the real compiler's own `source.c` is a genuinely separate
+    /// multi-file input stack, not a single-stream assumption).
+    /// <see cref="ConditionalBaseline"/> is `_conditionalBranchTaken.Count`
+    /// at the moment this frame was pushed - see <see cref="ReadFromCurrentSource"/>'s
+    /// own remarks on why that's needed to correctly scope an unclosed
+    /// `#if`-family block to *this* file when it closes.
+    /// </summary>
+    private sealed record SourceFrame(BcsTokenizer Tokenizer, string SourcePath, string? Directory, int ConditionalBaseline);
+
     private readonly List<BcsDiagnostic> _diagnostics;
+    private readonly BcsIncludeResolver? _includeResolver;
+
+    // The whole splice, bottom-to-top - the bottom frame (pushed at
+    // construction, never popped) is the original file, always reporting
+    // SourcePath "" regardless of what real path it has (matching the
+    // existing "main file's own symbol has empty SourcePath" convention) -
+    // that real path, when given, only ever feeds Directory, for resolving
+    // its own first level of relative includes.
+    private readonly Stack<SourceFrame> _sourceStack = new();
+
+    // Resolved paths already spliced in (or the main file's own) -
+    // dedup/cycle-guard, confirmed real need (a diamond-shaped or
+    // circular include graph must splice each file at most once).
+    private readonly HashSet<string> _visitedIncludes = new(StringComparer.OrdinalIgnoreCase);
+
+    // Every resolved path actually spliced in, in encounter order -
+    // BcsProgram's own IncludedPaths reporting.
+    private readonly List<string> _includedPaths = new();
 
     // BCS is case-insensitive throughout this project - same reasoning applies to macro names.
     private readonly Dictionary<string, BcsMacroDefinition> _macros = new(StringComparer.OrdinalIgnoreCase);
@@ -77,14 +125,25 @@ internal sealed class BcsPreprocessor
     // ever being evaluated at a time (no reentrancy).
     private BcsToken _condToken = null!;
 
-    public BcsPreprocessor(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
+    public BcsPreprocessor(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics, BcsIncludeResolver? includeResolver = null)
     {
-        _tokenizer = tokenizer;
         _diagnostics = diagnostics;
+        _includeResolver = includeResolver;
+
+        var mainPath = includeResolver?.MainSourcePath;
+        _sourceStack.Push(new SourceFrame(tokenizer, SourcePath: "", Directory: mainPath != null ? Path.GetDirectoryName(mainPath) : null, ConditionalBaseline: 0));
+        if (mainPath != null) _visitedIncludes.Add(Path.GetFullPath(mainPath));
     }
 
     /// <summary>Every `#define`/`#libdefine` encountered, in source order, even one later shadowed by a redefinition - <see cref="BcsParser.Parse"/> builds one <see cref="BcsDefineDirective"/> per entry after a full parse, preserving the existing completion/hover/go-to-def-for-macro-names feature unchanged.</summary>
     public IReadOnlyList<BcsMacroDefinition> Macros => _macroOrder;
+
+    /// <summary>Every resolved path actually spliced in via `#include`/`#import`, in encounter order - <see cref="BcsProgram"/>'s own reporting.</summary>
+    public IReadOnlyList<string> IncludedPaths => _includedPaths;
+
+    private BcsTokenizer CurrentTokenizer => _sourceStack.Peek().Tokenizer;
+    private string CurrentSourcePath => _sourceStack.Peek().SourcePath;
+    private string? CurrentDirectory => _sourceStack.Peek().Directory;
 
     public BcsToken NextSignificantToken(bool includeNewlines = false) => NextSignificantToken(includeNewlines, out _);
 
@@ -155,6 +214,13 @@ internal sealed class BcsPreprocessor
                         comments = new List<BcsToken>();
                         continue;
                     }
+
+                    if (_includeResolver != null && directiveName.Value is "include" or "import")
+                    {
+                        ReadIncludeOrImport(directiveName);
+                        comments = new List<BcsToken>();
+                        continue;
+                    }
                 }
 
                 // Not ours - every other directive stays BcsParser's own responsibility, untouched.
@@ -171,7 +237,7 @@ internal sealed class BcsPreprocessor
             if (token.Type == BcsTokenType.EndOfInput && _conditionalBranchTaken.Count > 0)
             {
                 // Confirmed real behavior (dirc.c's own p_confirm_ifdircs_closed) - one diagnostic per still-open block would be more faithful, but a single one is enough to flag the real mistake (a missing #endif) without piling on.
-                _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column));
+                AddDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column);
                 _conditionalBranchTaken.Clear();
             }
 
@@ -188,10 +254,133 @@ internal sealed class BcsPreprocessor
             return _pushback.Pop();
         }
 
-        return _tokenizer.NextSignificantToken(includeNewlines, out comments);
+        return ReadFromCurrentSource(includeNewlines, out comments);
     }
 
     private void PushBack(BcsToken token) => _pushback.Push(token);
+
+    /// <summary>
+    /// The one place that actually reads from whichever file is on top
+    /// of <see cref="_sourceStack"/>, popping exhausted frames (their
+    /// own `EndOfInput`) and retrying until a real token is found or the
+    /// BOTTOM frame's own genuine final EOF is reached - that bottom
+    /// EOF is returned as-is, letting the main dispatch loop's own
+    /// existing final-unclosed-`#if` check still fire for it. Stamps
+    /// <see cref="BcsToken.SourcePath"/> on every token this way, the
+    /// one central point for it. Before popping a frame, closes out any
+    /// `#if`/`#ifdef`/`#ifndef` opened while THAT frame was active but
+    /// never `#endif`'d (confirmed real: an unclosed conditional inside
+    /// one `#include`d file is that file's own problem, not something
+    /// that should silently bleed into the including file's own later
+    /// reading) - reports one diagnostic per still-open block, attributed
+    /// to the closing frame's own path, and restores
+    /// <see cref="_conditionalBranchTaken"/> to what it was before that
+    /// frame was entered.
+    /// </summary>
+    private BcsToken ReadFromCurrentSource(bool includeNewlines, out List<BcsToken> comments)
+    {
+        while (true)
+        {
+            var token = CurrentTokenizer.NextSignificantToken(includeNewlines, out comments);
+            if (token.Type != BcsTokenType.EndOfInput || _sourceStack.Count == 1)
+            {
+                token.SourcePath = CurrentSourcePath;
+                return token;
+            }
+
+            var frame = _sourceStack.Pop();
+            while (_conditionalBranchTaken.Count > frame.ConditionalBaseline)
+            {
+                _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column, BcsDiagnosticSeverity.Error, frame.SourcePath));
+                _conditionalBranchTaken.Pop();
+            }
+        }
+    }
+
+    /// <summary>Same stack-aware popping/stamping as <see cref="ReadFromCurrentSource"/>, for the one spot (<see cref="ReadDefine"/>'s whitespace-sensitivity check) that needs the tokenizer's raw, non-skipping read instead.</summary>
+    private BcsToken ReadRawTokenFromCurrentSource()
+    {
+        while (true)
+        {
+            var token = CurrentTokenizer.ReadToken();
+            if (token.Type != BcsTokenType.EndOfInput || _sourceStack.Count == 1)
+            {
+                token.SourcePath = CurrentSourcePath;
+                return token;
+            }
+
+            var frame = _sourceStack.Pop();
+            while (_conditionalBranchTaken.Count > frame.ConditionalBaseline)
+            {
+                _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column, BcsDiagnosticSeverity.Error, frame.SourcePath));
+                _conditionalBranchTaken.Pop();
+            }
+        }
+    }
+
+    private void AddDiagnostic(string message, int line, int column, BcsDiagnosticSeverity severity = BcsDiagnosticSeverity.Error) =>
+        _diagnostics.Add(new BcsDiagnostic(message, line, column, severity, CurrentSourcePath));
+
+    private static string? ResolveIncludePath(string rawPath, string? baseDir)
+    {
+        if (Path.IsPathRooted(rawPath)) return rawPath;
+        return baseDir == null ? null : Path.Combine(baseDir, rawPath);
+    }
+
+    /// <summary>
+    /// `#include "path"`/`#import "path"` - confirmed real resolution
+    /// (`zt-bcc`'s own `src/task.c`, `identify_file_relative`): a
+    /// relative path resolves against the INCLUDING file's own
+    /// directory (<see cref="CurrentDirectory"/> at the moment this
+    /// directive is read, not the original main file's), an absolute
+    /// one is used as-is. Only intercepted at all when
+    /// <see cref="_includeResolver"/> is non-null - see this class's
+    /// own remarks. Splices live: on success, pushes a new
+    /// <see cref="SourceFrame"/> and the directive itself vanishes
+    /// (no `BcsIncludeDirective`/`BcsImportDirective` node), exactly
+    /// like `#define` vanishing today.
+    /// </summary>
+    private void ReadIncludeOrImport(BcsToken directiveNameToken)
+    {
+        var pathToken = PullOneRaw(includeNewlines: false, out _);
+        if (pathToken.Type != BcsTokenType.LitString)
+        {
+            AddDiagnostic($"expected a string literal after '#{directiveNameToken.Value}'", pathToken.Line, pathToken.Column);
+            SkipToEndOfLine();
+            return;
+        }
+
+        var rawPath = pathToken.Value;
+        SkipToEndOfLine();
+
+        // Never blame a problem found deep inside an already-spliced-in
+        // file on the editing buffer - it's correctly attributable now
+        // (SourcePath exists), just not here; this only reports a
+        // directive written directly in whichever file is at the BOTTOM
+        // of the stack right now.
+        var reportDiagnostics = _sourceStack.Count == 1;
+
+        var resolved = ResolveIncludePath(rawPath, CurrentDirectory);
+        if (resolved == null)
+        {
+            if (reportDiagnostics) AddDiagnostic($"cannot resolve relative path '{rawPath}' - save this file first", pathToken.Line, pathToken.Column, BcsDiagnosticSeverity.Warning);
+            return;
+        }
+
+        var normalized = Path.GetFullPath(resolved);
+        if (!_visitedIncludes.Add(normalized)) return; // already spliced (or a cycle back to a file already on the stack) - silently skip, same dedup/cycle-safety as before
+
+        var text = _includeResolver!.ReadFile(resolved);
+        if (text == null)
+        {
+            if (reportDiagnostics) AddDiagnostic($"included file not found: '{rawPath}'", pathToken.Line, pathToken.Column, BcsDiagnosticSeverity.Warning);
+            return;
+        }
+
+        _includedPaths.Add(resolved);
+        var includedTokenizer = new BcsTokenizer(new BinaryReader(new MemoryStream(Encoding.UTF8.GetBytes(text))), _diagnostics, resolved);
+        _sourceStack.Push(new SourceFrame(includedTokenizer, resolved, Path.GetDirectoryName(resolved), ConditionalBaseline: _conditionalBranchTaken.Count));
+    }
 
     /// <summary>
     /// <c>#define NAME [(params)] [body]</c> - confirmed real grammar
@@ -212,7 +401,7 @@ internal sealed class BcsPreprocessor
         var nameToken = PullOneRaw(includeNewlines: false, out _);
         if (nameToken.Type != BcsTokenType.Identifier)
         {
-            _diagnostics.Add(new BcsDiagnostic("expected a macro name after '#define'", nameToken.Line, nameToken.Column));
+            AddDiagnostic("expected a macro name after '#define'", nameToken.Line, nameToken.Column);
             SkipToEndOfLine();
             return;
         }
@@ -223,9 +412,10 @@ internal sealed class BcsPreprocessor
             Line = nameToken.Line,
             Column = nameToken.Column,
             DocComment = docComment,
+            SourcePath = nameToken.SourcePath,
         };
 
-        var raw = _tokenizer.ReadToken();
+        var raw = ReadRawTokenFromCurrentSource();
         if (raw.Type == BcsTokenType.OpenParen)
         {
             ReadMacroParameters(macro);
@@ -247,7 +437,7 @@ internal sealed class BcsPreprocessor
     {
         macro.IsFunctionLike = true;
 
-        var token = _tokenizer.NextSignificantToken();
+        var token = ReadFromCurrentSource(includeNewlines: false, out _);
         if (token.Type == BcsTokenType.CloseParen) return; // no parameters at all
 
         while (true)
@@ -256,24 +446,24 @@ internal sealed class BcsPreprocessor
             {
                 macro.IsVariadic = true;
                 macro.Parameters.Add("__VA_ARGS__");
-                token = _tokenizer.NextSignificantToken();
+                token = ReadFromCurrentSource(includeNewlines: false, out _);
                 break;
             }
 
             if (token.Type != BcsTokenType.Identifier)
             {
-                _diagnostics.Add(new BcsDiagnostic("expected a macro parameter name", token.Line, token.Column));
+                AddDiagnostic("expected a macro parameter name", token.Line, token.Column);
                 break;
             }
 
             macro.Parameters.Add(token.RawValue);
-            token = _tokenizer.NextSignificantToken();
+            token = ReadFromCurrentSource(includeNewlines: false, out _);
             if (token.Type != BcsTokenType.Comma) break;
-            token = _tokenizer.NextSignificantToken();
+            token = ReadFromCurrentSource(includeNewlines: false, out _);
         }
 
         if (token.Type == BcsTokenType.CloseParen) return;
-        _diagnostics.Add(new BcsDiagnostic("expected ')'", token.Line, token.Column));
+        AddDiagnostic("expected ')'", token.Line, token.Column);
     }
 
     /// <summary>
@@ -317,12 +507,12 @@ internal sealed class BcsPreprocessor
 
         if (macro.Body[0].Type == BcsTokenType.HashHash)
         {
-            _diagnostics.Add(new BcsDiagnostic("'##' operator at beginning of macro body", macro.Body[0].Line, macro.Body[0].Column));
+            AddDiagnostic("'##' operator at beginning of macro body", macro.Body[0].Line, macro.Body[0].Column);
         }
 
         if (macro.Body[^1].Type == BcsTokenType.HashHash)
         {
-            _diagnostics.Add(new BcsDiagnostic("'##' operator at end of macro body", macro.Body[^1].Line, macro.Body[^1].Column));
+            AddDiagnostic("'##' operator at end of macro body", macro.Body[^1].Line, macro.Body[^1].Column);
         }
 
         for (var i = 0; i < macro.Body.Count; i++)
@@ -335,9 +525,9 @@ internal sealed class BcsPreprocessor
 
             if (!isValidParam)
             {
-                _diagnostics.Add(new BcsDiagnostic(
+                AddDiagnostic(
                     $"'{(next is null ? "?" : TokenText(next))}' is not a parameter of macro '{macro.Name}'",
-                    macro.Body[i].Line, macro.Body[i].Column));
+                    macro.Body[i].Line, macro.Body[i].Column);
             }
         }
     }
@@ -345,9 +535,9 @@ internal sealed class BcsPreprocessor
     /// <summary><c>#undef NAME</c> - not real `TK_*` grammar this project modeled before Phase 1, but cheap and real (confirmed from `dirc.c`'s own `read_undef`/`remove_macro`): simply removes a macro so later uses are no longer expanded.</summary>
     private void ReadUndef()
     {
-        var token = _tokenizer.NextSignificantToken();
+        var token = ReadFromCurrentSource(includeNewlines: false, out _);
         if (token.Type == BcsTokenType.Identifier) _macros.Remove(token.Value);
-        else _diagnostics.Add(new BcsDiagnostic("expected a macro name after '#undef'", token.Line, token.Column));
+        else AddDiagnostic("expected a macro name after '#undef'", token.Line, token.Column);
 
         SkipToEndOfLine();
     }
@@ -382,7 +572,7 @@ internal sealed class BcsPreprocessor
         }
         else
         {
-            var nameToken = _tokenizer.NextSignificantToken();
+            var nameToken = ReadFromCurrentSource(includeNewlines: false, out _);
             var isDefined = nameToken.Type == BcsTokenType.Identifier && _macros.ContainsKey(nameToken.Value);
             SkipToEndOfLine();
 
@@ -390,7 +580,7 @@ internal sealed class BcsPreprocessor
 
             if (nameToken.Type != BcsTokenType.Identifier)
             {
-                _diagnostics.Add(new BcsDiagnostic($"expected a macro name after '#{directive}'", nameToken.Line, nameToken.Column));
+                AddDiagnostic($"expected a macro name after '#{directive}'", nameToken.Line, nameToken.Column);
             }
         }
 
@@ -414,7 +604,7 @@ internal sealed class BcsPreprocessor
         SkipToEndOfLine(); // an #elif's own (unevaluated) condition, or nothing more for #else
         if (_conditionalBranchTaken.Count == 0)
         {
-            _diagnostics.Add(new BcsDiagnostic($"'#{directiveName.Value}' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column));
+            AddDiagnostic($"'#{directiveName.Value}' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column);
             return;
         }
 
@@ -426,7 +616,7 @@ internal sealed class BcsPreprocessor
         SkipToEndOfLine();
         if (_conditionalBranchTaken.Count == 0)
         {
-            _diagnostics.Add(new BcsDiagnostic("'#endif' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column));
+            AddDiagnostic("'#endif' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column);
             return;
         }
 
@@ -444,13 +634,30 @@ internal sealed class BcsPreprocessor
     /// own at all), or this level's own `#endif` (nothing becomes
     /// active - the whole block simply closes). Confirmed real
     /// structure (`dirc.c`'s own `find_endif`/`read_search_dirc`).
+    ///
+    /// Phase 5 real interaction, caught while writing this phase's own
+    /// tests: under splicing, "EOF" while scanning no longer reliably
+    /// means "truly nothing left" - if the block being skipped was
+    /// opened inside a now-exhausted `#include`d file,
+    /// <see cref="ReadFromCurrentSource"/>'s own per-frame cleanup
+    /// already force-closed it (and reported the real "unterminated
+    /// #if" diagnostic) and transparently resumed the OUTER file - so
+    /// the first "EOF" this method would ever actually observe is really
+    /// the outer file's own next real token. Tracking the conditional
+    /// stack's own depth at entry and bailing the instant it drops below
+    /// that (pushing the just-read token back first, so nothing is lost)
+    /// is what stops this method from then blindly scanning through the
+    /// including file's own code hunting for a sibling that can no
+    /// longer exist.
     /// </summary>
     private void SkipInactiveRegion()
     {
+        var expectedDepth = _conditionalBranchTaken.Count;
         var depth = 0;
         while (true)
         {
             var token = PullOneRaw(includeNewlines: true, out _);
+            if (_conditionalBranchTaken.Count < expectedDepth) { PushBack(token); return; } // the block we were skipping was already force-closed by a frame-pop cleanup - nothing more to do here
             if (token.Type == BcsTokenType.EndOfInput) return; // the EOF-level unclosed-#if check in NextSignificantToken itself will still fire for the outer block
 
             if (token.Type != BcsTokenType.Hash) continue;
@@ -531,7 +738,7 @@ internal sealed class BcsPreprocessor
         CondAdvance();
         if (_condToken.Type is BcsTokenType.Newline or BcsTokenType.EndOfInput)
         {
-            _diagnostics.Add(new BcsDiagnostic("missing expression", directiveNameToken.Line, directiveNameToken.Column));
+            AddDiagnostic("missing expression", directiveNameToken.Line, directiveNameToken.Column);
             PushBack(_condToken);
             return 0;
         }
@@ -555,7 +762,7 @@ internal sealed class BcsPreprocessor
 
         if (_condToken.Type != BcsTokenType.Colon)
         {
-            _diagnostics.Add(new BcsDiagnostic("expected ':'", _condToken.Line, _condToken.Column));
+            AddDiagnostic("expected ':'", _condToken.Line, _condToken.Column);
             return value;
         }
 
@@ -675,7 +882,7 @@ internal sealed class BcsPreprocessor
                 if (right == 0)
                 {
                     // Confirmed real diagnostic ("division by zero") - the real compiler aborts compilation entirely on this; we recover instead by resolving the whole condition to false and letting the caller's own SkipToEndOfLine clean up whatever's left on the line.
-                    _diagnostics.Add(new BcsDiagnostic("division by zero", opToken.Line, opToken.Column));
+                    AddDiagnostic("division by zero", opToken.Line, opToken.Column);
                     return 0;
                 }
 
@@ -742,7 +949,7 @@ internal sealed class BcsPreprocessor
                 var value = EvalTernary();
                 if (_condToken.Type != BcsTokenType.CloseParen)
                 {
-                    _diagnostics.Add(new BcsDiagnostic("expected ')'", _condToken.Line, _condToken.Column));
+                    AddDiagnostic("expected ')'", _condToken.Line, _condToken.Column);
                     return value;
                 }
 
@@ -751,7 +958,7 @@ internal sealed class BcsPreprocessor
             }
 
             default:
-                _diagnostics.Add(new BcsDiagnostic("invalid expression", _condToken.Line, _condToken.Column));
+                AddDiagnostic("invalid expression", _condToken.Line, _condToken.Column);
                 CondAdvance(); // consume the offending token so evaluation keeps making forward progress
                 return 0;
         }
@@ -778,7 +985,7 @@ internal sealed class BcsPreprocessor
         }
         else
         {
-            _diagnostics.Add(new BcsDiagnostic("expected a macro name after 'defined'", nameToken.Line, nameToken.Column));
+            AddDiagnostic("expected a macro name after 'defined'", nameToken.Line, nameToken.Column);
             isDefined = false;
         }
 
@@ -787,7 +994,7 @@ internal sealed class BcsPreprocessor
             var closeToken = PullOneRaw(includeNewlines: true, out _);
             if (closeToken.Type != BcsTokenType.CloseParen)
             {
-                _diagnostics.Add(new BcsDiagnostic("expected ')'", closeToken.Line, closeToken.Column));
+                AddDiagnostic("expected ')'", closeToken.Line, closeToken.Column);
                 PushBack(closeToken); // not actually a ')' - let the normal pull loop see it, same recovery posture used everywhere else here
             }
         }
@@ -826,9 +1033,9 @@ internal sealed class BcsPreprocessor
             args = ReadArguments();
             if (!macro.IsVariadic && args.Count != macro.Parameters.Count)
             {
-                _diagnostics.Add(new BcsDiagnostic(
+                AddDiagnostic(
                     $"macro '{macro.Name}' expects {macro.Parameters.Count} argument(s), got {args.Count}",
-                    nameToken.Line, nameToken.Column, BcsDiagnosticSeverity.Warning));
+                    nameToken.Line, nameToken.Column, BcsDiagnosticSeverity.Warning);
             }
         }
 
@@ -852,7 +1059,7 @@ internal sealed class BcsPreprocessor
             var token = PullOneRaw(includeNewlines: false, out _);
             if (token.Type == BcsTokenType.EndOfInput)
             {
-                _diagnostics.Add(new BcsDiagnostic("unterminated macro invocation", token.Line, token.Column));
+                AddDiagnostic("unterminated macro invocation", token.Line, token.Column);
                 break;
             }
 
@@ -1029,7 +1236,7 @@ internal sealed class BcsPreprocessor
             text.Append(TokenText(current));
         }
 
-        return new BcsToken { Type = BcsTokenType.LitString, Value = text.ToString(), Line = hashToken.Line, Column = hashToken.Column, Length = hashToken.Length };
+        return new BcsToken { Type = BcsTokenType.LitString, Value = text.ToString(), Line = hashToken.Line, Column = hashToken.Column, Length = hashToken.Length, SourcePath = hashToken.SourcePath };
     }
 
     /// <summary>
@@ -1060,14 +1267,15 @@ internal sealed class BcsPreprocessor
 
         if (pasteDiagnostics.Count > 0 || pasted.Type is BcsTokenType.EndOfInput or BcsTokenType.Invalid || trailing.Type != BcsTokenType.EndOfInput)
         {
-            _diagnostics.Add(new BcsDiagnostic(
+            AddDiagnostic(
                 $"concatenating '{TokenText(left)}' and '{TokenText(right)}' via '##' produces an invalid token",
-                hashHashToken.Line, hashHashToken.Column));
+                hashHashToken.Line, hashHashToken.Column);
             return null;
         }
 
         pasted.Line = hashHashToken.Line;
         pasted.Column = hashHashToken.Column;
+        pasted.SourcePath = hashHashToken.SourcePath;
         return pasted;
     }
 

@@ -917,10 +917,181 @@ real compiler's own goto-chain) rather than just validating shape.
   multi-`#elif` chain, both `defined()` outcomes, the newline-swallowing
   fix, and the division-by-zero diagnostic.
 
-All four macro-expansion phases (object-like/function-like `#define`/
+## Real macro expansion - Phase 5: cross-file macro visibility via true `#include`/`#import` splicing (new)
+
+The last deferred item from this whole macro-expansion effort. You
+explicitly chose **full token-level splicing** over a narrower "only
+splice macro-affecting directives" approximation, after seeing that the
+full version needs per-token file-attribution threaded through
+declaration parsing and a file field on diagnostics - genuinely the
+largest single change in this whole effort, planned in its own right
+(`EnterPlanMode`) before implementation.
+
+`BcsProgram`/`ParseProgram` used to parse every file in the include
+graph completely separately (its own tokenizer, its own
+`BcsPreprocessor`, its own `_macros` dictionary) and only merge
+*symbols* afterward, post-hoc - meaning a `#define` in an `#include`d
+file was never visible to the including file at all. Real C-style
+`#include` is a textual splice happening *during* tokenization; this
+phase makes that genuinely true: one continuous `BcsPreprocessor`/
+`BcsParser` pass across the whole include graph, producing one
+`BcsCompilationUnit` whose declarations each carry their own real
+origin file.
+
+- **`BcsToken.SourcePath`** (new) and **`BcsNode.SourcePath`** (new) -
+  which file a token/declaration actually came from, empty for the
+  main file (same convention `BcsSymbol.SourcePath` already used).
+  **`BcsDiagnostic`** gains a 5th, optional `sourcePath` parameter -
+  every pre-existing 4-arg call site across the whole codebase compiles
+  unchanged. **`BcsTokenizer`** gains an optional 3rd `sourcePath`
+  parameter, used only to attribute its own diagnostics once more than
+  one tokenizer is ever in play.
+- **`BcsPreprocessor` becomes multi-file-aware** - the actual core of
+  the splice. New `BcsIncludeResolver` (`MainSourcePath`+`ReadFile`,
+  the same caller-injected-resolver pattern `DecorateParser`/
+  `ZScriptParser`'s own `OnInclude` already uses) - `null` (every
+  existing `Parse(string)` call, therefore every pre-Phase-5 test)
+  means splicing is disabled entirely and `#include`/`#import` pass
+  straight through to `BcsParser.ParseHashDirective` exactly as before;
+  confirmed zero behavior change for that path by running the full
+  existing suite before touching a single test. A new `Stack<SourceFrame>`
+  (one entry per currently-open file) backs two new primitives,
+  `ReadFromCurrentSource`/`ReadRawTokenFromCurrentSource`, which pop an
+  exhausted frame and transparently resume the file that `#include`d
+  it - the one place every token gets its `SourcePath` stamped. New
+  `ReadIncludeOrImport` intercepts `#include`/`#import` (only when a
+  resolver is configured) exactly the way `#define` is already
+  intercepted: resolves the path against the CURRENT frame's own
+  directory (preserving the exact real resolution/dedup/cycle-safety
+  rules confirmed from `zt-bcc`'s own `task.c` in the original
+  multi-file feature), and on success pushes a new frame instead of
+  producing a `BcsIncludeDirective`/`BcsImportDirective` node - the
+  directive vanishes, same as `#define`. Since `_macros` was already
+  one shared dictionary (not per-file), this is *all* that was needed
+  for cross-file macro visibility to fall out correct and order-
+  dependent in both directions, for free - no change to the expansion
+  machinery itself.
+- **Unclosed `#if`/`#ifdef`/`#ifndef` is now correctly scoped per file**:
+  before popping an exhausted frame, `ReadFromCurrentSource` closes out
+  any conditional block opened while *that* frame was active but never
+  `#endif`'d - one diagnostic per still-open block, attributed to that
+  frame's own path, with the conditional stack restored to what it was
+  before that frame was entered so the including file's own state
+  continues correctly unaffected.
+- **A real interaction bug found live, while writing this phase's own
+  tests** (not hypothetical): `SkipInactiveRegion`'s own "EOF" check
+  stopped meaning "truly nothing left" once splicing existed - if the
+  block it was skipping was opened inside a now-exhausted `#include`d
+  file, `ReadFromCurrentSource`'s own cleanup already force-closed it
+  and transparently resumed the *outer* file, so the first token
+  `SkipInactiveRegion` would see next was really the including file's
+  own next real token, not EOF - without a fix, it would have kept
+  scanning blindly through the including file's own code hunting for a
+  `#endif` that could no longer exist. Fixed by tracking the
+  conditional stack's depth at entry and bailing (pushing the just-read
+  token back first, so nothing is lost) the instant it drops below
+  that - a sign the block was already closed out from under it.
+- **`BcsParser`**: the one existing shared `AddDiagnostic(message,
+  token)` helper now also passes `token.SourcePath` - fixes every
+  diagnostic this class (and `BcsParser.Expressions.cs`) raises, with
+  zero other call-site changes. `SourcePath` is stamped at every
+  top-level declaration's own construction (function/script/special/
+  enum/variable/define) and at the handful of `BcsSymbol`s built
+  directly from a live token (parameters, body locals, `special`'s own
+  header names, a variable declarator's own name) - all from the same
+  already-correct token, nothing re-derived. `ParseProgram` is
+  *simpler* than before: one tokenizer, one resolver, one parser, one
+  `.Parse()` call - no more recursive per-file resolution/re-parsing.
+- **`BcsAst.cs`**: `FileScopeSymbols()` threads each declaration's own
+  `SourcePath` into the `BcsSymbol` it yields. `CollectSymbolsVisibleAt`/
+  `FindDeclaration` both gain an `atPath` parameter (default `""`, the
+  main file - confirmed via exploration that every real caller, both
+  LSP handlers and the in-app `ScriptDocument`, only ever asks about its
+  own open buffer, so this needed zero consumer changes) and now also
+  gate a function/script's own body-locals/parameters on
+  `member.SourcePath == atPath`, not just the line range - a real new
+  ambiguity true splicing introduces, since per-file line numbers
+  restart at 1 and a different file's body span could otherwise
+  numerically overlap the file actually being queried. The old
+  `CollectFileScopeSymbols()` wrapper (only ever used by the
+  now-deleted post-hoc merge) is deleted as dead code.
+- **`BcsProgram`**'s shape simplifies to `Unit`/`Diagnostics`/
+  `IncludedPaths` (dropping `MainUnit`/`IncludedUnits` - confirmed via
+  exploration that no consumer outside its own test file touched them
+  directly); `CollectSymbolsVisibleAt`/`FindDeclaration` keep their
+  exact existing call shape for every real caller, just delegating to
+  `Unit`'s own new file-aware versions.
+- **A real side benefit, not the point of this phase but a direct
+  consequence of true splicing**: an included file's own genuine syntax
+  error - previously "deliberately out of scope" (no file field existed
+  to attribute it to, so it was silently discarded) - now correctly
+  surfaces as a real diagnostic with the right `SourcePath`.
+- Verified: the full pre-existing suite (1008 tests) passed with zero
+  failures *before* touching `BcsProgramTests.cs` at all, confirming
+  the non-splicing path - every other test in the whole project - is
+  100% behaviorally unchanged. `BcsProgramTests.cs` was then rewritten
+  against the new `Unit`/`IncludedPaths` shape, preserving all 9
+  original real behaviors and adding 6 new ones: a macro defined in an
+  included file expanding in the including file (the decisive
+  OPEN/CLOSE-shape proof used throughout this whole macro effort); the
+  *reverse* direction (a macro defined in the main file before the
+  `#include` visible inside the included file's own content); an
+  `#undef` inside an included file correctly un-defining a macro for
+  the rest of the including file afterward (real order-dependence, not
+  just "both files' macros exist somewhere"); an included file's own
+  syntax error now surfacing with the correct `SourcePath`; an unclosed
+  `#ifdef` inside an included file reported once, correctly attributed,
+  without corrupting the including file's own conditional-compilation
+  state afterward. Full suite (1013 tests) passes with zero regressions.
+  Confirmed end-to-end against the real running LSP process: cross-file
+  macro expansion in both directions, and the included file's own
+  syntax error surfacing.
+
+All five macro-expansion phases (object-like/function-like `#define`/
 `#undef`; `#ifdef`/`#ifndef`/`#else`/`#endif`; `#`/`##`; a real
-`#if`/`#elif` evaluator) are now done. Still deferred: cross-file macro
-visibility (listed above).
+`#if`/`#elif` evaluator; cross-file visibility via true splicing) are
+now done - this effort's entire original scope is complete.
+
+## Real macro hover signatures (new, user-requested)
+
+Hovering a `#define`d name used to always show a bare `"macro NAME"`
+label, even after real macro expansion existed - a pre-existing,
+deliberate scope limit from before any of this macro-expansion effort
+(there was nothing else to show at the time). With real
+`BcsMacroDefinition`s now available (parameters, raw body tokens), this
+was a natural, well-scoped follow-up.
+
+- New `BcsMacroDefinition.BuildSignature()` - the real C-style text,
+  e.g. `#define MAX_HEALTH 100` or `#define MAX(a, b) (a > b ? a : b)`,
+  built from the macro's own real parameter list and raw (unexpanded)
+  body tokens. A variadic trailing parameter displays as `...`, not its
+  real internal name `__VA_ARGS__` (confirmed real, `dirc.c`'s own
+  `read_param_list`) - matching what the user actually typed. A single
+  space is inserted between two body tokens only when their real source
+  columns had an actual gap - same heuristic `BcsPreprocessor.Stringize`
+  already uses; safe here too since re-tokenizing this for hover
+  coloring (`BcsBbcodeFormatter.ColorizeCode`) always tolerates
+  whitespace variation, and the only pairs that ever truly needed a
+  space to avoid merging already had one in the real source (otherwise
+  the original `#define` itself couldn't have tokenized as two separate
+  tokens to begin with).
+- New `BcsDefineDirective.Signature`, threaded through exactly like
+  `BcsFunctionDeclaration`/`BcsScriptDeclaration`'s own `Signature`
+  field; `BcsSymbol.Describe()`'s macro case now prefers it the same
+  way the function case already does, falling back to the bare label
+  only when it's empty (a hand-built symbol with no real macro behind
+  it, e.g. in a unit test).
+- `#define`/`#`-directive coloring for the signature's own `#define `
+  prefix comes for free from `BcsColors.ColorFor`'s existing
+  `Hash`/"identifier right after Hash" handling - no new coloring logic
+  needed.
+- Verified with 4 new tests in `BcsPreprocessorTests.cs` (object-like
+  value, function-like parameters+body, variadic `...` display, a
+  value-less macro showing just its name) and confirmed end-to-end
+  against the real running LSP process: hovering both a macro's own
+  declaration and a use of it shows the real signature in a
+  Markdown-fenced, colorized block. Full suite (1017 tests) passes with
+  zero regressions.
 
 ## Real macro expansion - Phase 2: `#ifdef`/`#ifndef`/`#else`/`#endif` (new)
 
