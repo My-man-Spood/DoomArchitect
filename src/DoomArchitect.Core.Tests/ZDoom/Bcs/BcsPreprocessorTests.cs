@@ -113,4 +113,110 @@ public class BcsPreprocessorTests
         var (_, diagnostics) = BcsParser.Parse("#libdefine OPEN (\n#libdefine CLOSE )\nint x = OPEN 1 + 2 CLOSE;\n");
         Assert.Empty(diagnostics);
     }
+
+    [Fact]
+    public void Parse_IfdefWithDefinedMacro_IncludesItsContent()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE\n#ifdef FEATURE\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfdefWithUndefinedMacro_ExcludesItsContent()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#ifdef FEATURE\nint excluded = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+    }
+
+    [Fact]
+    public void Parse_IfndefWithUndefinedMacro_IncludesItsContent()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#ifndef FEATURE\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfndefWithDefinedMacro_ExcludesItsContent()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE\n#ifndef FEATURE\nint excluded = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+    }
+
+    [Fact]
+    public void Parse_ElseBranch_TakenWhenIfdefConditionIsFalse()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#ifdef FEATURE\nint ifBranch = 1;\n#else\nint elseBranch = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "ifBranch"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "elseBranch"));
+    }
+
+    [Fact]
+    public void Parse_ElseBranch_SkippedWhenIfdefConditionIsTrue()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE\n#ifdef FEATURE\nint ifBranch = 1;\n#else\nint elseBranch = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "ifBranch"));
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "elseBranch"));
+    }
+
+    [Fact]
+    public void Parse_NestedIfdefInsideSkippedRegion_DoesNotStopAtTheNestedEndif()
+    {
+        // The whole outer block is skipped - a nested #ifdef/#endif pair inside it must not be mistaken for the outer block's own #endif (depth tracking in SkipInactiveRegion).
+        var (unit, diagnostics) = BcsParser.Parse(
+            "#ifdef OUTER\n" +
+            "#ifdef INNER\n" +
+            "int nested = 1;\n" +
+            "#endif\n" +
+            "int afterNested = 1;\n" +
+            "#endif\n" +
+            "int afterOuter = 1;\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "nested"));
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "afterNested"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "afterOuter"));
+    }
+
+    [Fact]
+    public void Parse_ElseWithNoOpenIf_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#else\nint x = 1;\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("with no open"));
+    }
+
+    [Fact]
+    public void Parse_EndifWithNoOpenIf_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#endif\nint x = 1;\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("with no open"));
+    }
+
+    [Fact]
+    public void Parse_UnclosedIfdef_ReportsADiagnosticAtEndOfFile()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#ifdef FEATURE\nint x = 1;\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("missing #endif"));
+    }
+
+    [Fact]
+    public void Parse_BareIf_IsToleratedAsAlwaysTrue()
+    {
+        // No real constant-expression evaluator yet (deferred) - a bare #if's own condition tokens are discarded and the branch is simply taken.
+        var (unit, diagnostics) = BcsParser.Parse("#if 1\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
 }

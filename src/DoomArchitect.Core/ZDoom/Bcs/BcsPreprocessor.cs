@@ -11,23 +11,27 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// <see cref="NextSignificantToken(bool)"/> overloads) - everything
 /// returned is already fully macro-expanded.
 ///
-/// This is Phase 1 of a staged port - real object-like and
-/// function-like `#define`/`#undef` with parameter substitution and
-/// recursive rescanning, within a single file. Deliberately deferred
-/// to later phases, not silently dropped: `##` token-pasting and `#`
-/// stringizing; `#if`/`#elif` (needs its own constant-expression
-/// evaluator); `#ifdef`/`#ifndef`/`#else`/`#endif` conditional
-/// compilation; cross-file macro visibility (a `#define` in an
-/// `#include`d file is not yet visible to the including file - true
-/// textual-splice `#include` semantics are a separate, later
-/// reconciliation with the existing post-hoc symbol-merging
-/// <see cref="BcsProgram"/> already does for completion/hover/go-to-def).
+/// This is Phase 1 (`#define`/`#undef` with parameter substitution and
+/// recursive rescanning) plus Phase 2 (`#ifdef`/`#ifndef`/`#else`/
+/// `#endif` conditional compilation, and a bare `#if` tolerated as
+/// always-true - see <see cref="ReadIfdef"/>'s own remarks for exactly
+/// why) of a staged port. Deliberately deferred to later phases, not
+/// silently dropped: `##` token-pasting and `#` stringizing; real
+/// `#if`/`#elif` condition *evaluation* (needs its own constant-
+/// expression evaluator - until it exists, both are treated leniently
+/// rather than correctly evaluated, see <see cref="ReadIfdef"/>); cross-
+/// file macro visibility (a `#define` in an `#include`d file is not
+/// yet visible to the including file - true textual-splice `#include`
+/// semantics are a separate, later reconciliation with the existing
+/// post-hoc symbol-merging <see cref="BcsProgram"/> already does for
+/// completion/hover/go-to-def).
 ///
-/// Only `#define`/`#libdefine`/`#undef` are intercepted here, fully -
-/// they never reach <see cref="BcsParser.ParseHashDirective"/> at all
-/// anymore. Every other directive (`#include`, `#import`, `#library`,
-/// ...) passes straight through unchanged, exactly as
-/// <see cref="BcsParser"/> already handles it.
+/// Only `#define`/`#libdefine`/`#undef`/`#if`/`#ifdef`/`#ifndef`/
+/// `#elif`/`#else`/`#endif` are intercepted here, fully - they never
+/// reach <see cref="BcsParser.ParseHashDirective"/> at all anymore.
+/// Every other directive (`#include`, `#import`, `#library`, ...)
+/// passes straight through unchanged, exactly as <see cref="BcsParser"/>
+/// already handles it.
 /// </summary>
 internal sealed class BcsPreprocessor
 {
@@ -57,6 +61,13 @@ internal sealed class BcsPreprocessor
     // inside its own expansion is never re-expanded, but a *different*
     // macro encountered during that same expansion still is.
     private readonly HashSet<string> _expanding = new(StringComparer.OrdinalIgnoreCase);
+
+    // One entry per currently-open #if/#ifdef/#ifndef block (confirmed
+    // real structure: dirc.c's own push_ifdirc/pop_ifdirc stack) - true
+    // once *some* branch in this chain (the original if, an elif, or
+    // the else) has been entered, which is what makes a later #elif/
+    // #else in the same chain correctly skip even if encountered.
+    private readonly Stack<bool> _conditionalBranchTaken = new();
 
     public BcsPreprocessor(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
     {
@@ -90,7 +101,16 @@ internal sealed class BcsPreprocessor
                 var directiveName = PullOneRaw(includeNewlines: false, out var moreComments);
                 comments.AddRange(moreComments);
 
-                if (directiveName.Type == BcsTokenType.Identifier)
+                // Identifier covers every directive name here except "if"
+                // and "else" - confirmed real bug, found live: those two
+                // collide with actual BCS statement keywords
+                // (BcsTokenType.If/Else, used for real if-statements), so
+                // the tokenizer gives them their own dedicated token types
+                // instead of Identifier, same as any other reserved word.
+                // "ifdef"/"ifndef"/"elif" aren't reserved words anywhere
+                // else in the language, so they tokenize as plain
+                // Identifier and never needed this.
+                if (directiveName.Type is BcsTokenType.Identifier or BcsTokenType.If or BcsTokenType.Else)
                 {
                     if (string.Equals(directiveName.Value, "define", StringComparison.OrdinalIgnoreCase) ||
                         string.Equals(directiveName.Value, "libdefine", StringComparison.OrdinalIgnoreCase))
@@ -106,6 +126,27 @@ internal sealed class BcsPreprocessor
                         comments = new List<BcsToken>();
                         continue;
                     }
+
+                    if (directiveName.Value is "ifdef" or "ifndef" or "if")
+                    {
+                        ReadIfdef(directiveName.Value);
+                        comments = new List<BcsToken>();
+                        continue;
+                    }
+
+                    if (directiveName.Value is "elif" or "else")
+                    {
+                        ReadElseOrElif(directiveName);
+                        comments = new List<BcsToken>();
+                        continue;
+                    }
+
+                    if (string.Equals(directiveName.Value, "endif", StringComparison.OrdinalIgnoreCase))
+                    {
+                        ReadEndif(directiveName);
+                        comments = new List<BcsToken>();
+                        continue;
+                    }
                 }
 
                 // Not ours - every other directive stays BcsParser's own responsibility, untouched.
@@ -117,6 +158,13 @@ internal sealed class BcsPreprocessor
             if (token.Type == BcsTokenType.Identifier && TryStartExpansion(token, includeNewlines))
             {
                 continue; // the (fully expanded) result is now in _pending
+            }
+
+            if (token.Type == BcsTokenType.EndOfInput && _conditionalBranchTaken.Count > 0)
+            {
+                // Confirmed real behavior (dirc.c's own p_confirm_ifdircs_closed) - one diagnostic per still-open block would be more faithful, but a single one is enough to flag the real mistake (a missing #endif) without piling on.
+                _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column));
+                _conditionalBranchTaken.Clear();
             }
 
             skippedComments = comments;
@@ -219,12 +267,27 @@ internal sealed class BcsPreprocessor
         _diagnostics.Add(new BcsDiagnostic("expected ')'", token.Line, token.Column));
     }
 
-    /// <summary>Raw, unexpanded tokens up to (not including) the terminating newline - confirmed real grammar (`dirc.c`'s own `read_body`) stops there. Whitespace/comments inside the body aren't preserved - they only ever mattered for the function-like-vs-object-like check already handled in <see cref="ReadDefine"/>, and for `##`/stringizing, both deferred.</summary>
+    /// <summary>
+    /// Raw, unexpanded tokens up to (not including) the terminating
+    /// newline - confirmed real grammar (`dirc.c`'s own `read_body`)
+    /// stops there. Whitespace/comments inside the body aren't
+    /// preserved - they only ever mattered for the function-like-vs-
+    /// object-like check already handled in <see cref="ReadDefine"/>,
+    /// and for `##`/stringizing, both deferred. Pulls via
+    /// <see cref="PullOneRaw"/>, not the tokenizer directly - a real
+    /// bug otherwise, confirmed live: for an empty body
+    /// (`#define FEATURE` with nothing after the name), `ReadDefine`
+    /// pushes the `Newline`/`EndOfInput` it already read back so this
+    /// method can see it; calling the tokenizer directly here would
+    /// silently skip straight past that pushed-back token and start
+    /// consuming the *next* line as if it were part of this macro's
+    /// own body.
+    /// </summary>
     private void ReadMacroBody(BcsMacroDefinition macro)
     {
         while (true)
         {
-            var token = _tokenizer.NextSignificantToken(includeNewlines: true);
+            var token = PullOneRaw(includeNewlines: true, out _);
             if (token.Type is BcsTokenType.Newline or BcsTokenType.EndOfInput) break;
             macro.Body.Add(token);
         }
@@ -243,6 +306,137 @@ internal sealed class BcsPreprocessor
     private void SkipToEndOfLine()
     {
         while (_tokenizer.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
+    }
+
+    /// <summary>
+    /// <c>#ifdef NAME</c>/<c>#ifndef NAME</c> - confirmed real grammar
+    /// (`dirc.c`'s own `read_ifdef`): active when the name is (for
+    /// `ifdef`) or isn't (for `ifndef`) a currently-defined macro,
+    /// confirmed via the exact same lookup <see cref="TryStartExpansion"/>
+    /// already uses. A bare <c>#if</c> is tolerated here too but
+    /// deliberately *not* evaluated - the real `p_eval_prep_expr` is a
+    /// whole separate constant-expression evaluator this pass doesn't
+    /// have yet. Rather than silently falling through to "unknown
+    /// directive" (what would otherwise happen - `#if` was never in
+    /// this pass's directive table before Phase 2 either) or guessing
+    /// wrong in a way that could hide real code from completion, a bare
+    /// `#if`'s condition is treated as always true: its own tokens are
+    /// discarded and the branch is simply taken unconditionally. This
+    /// is a real, deliberate divergence from the real compiler - not a
+    /// bug - until the evaluator exists in a later phase.
+    /// </summary>
+    private void ReadIfdef(string directive)
+    {
+        var nameToken = _tokenizer.NextSignificantToken();
+        var isDefined = nameToken.Type == BcsTokenType.Identifier && _macros.ContainsKey(nameToken.Value);
+        SkipToEndOfLine(); // the rest of the line - a bare #if's own (unevaluated) condition tokens, or nothing more for #ifdef/#ifndef
+
+        var branchActive = string.Equals(directive, "ifndef", StringComparison.OrdinalIgnoreCase) ? !isDefined
+            : string.Equals(directive, "ifdef", StringComparison.OrdinalIgnoreCase) ? isDefined
+            : true; // bare #if - always true, see this method's own remarks
+
+        if (nameToken.Type != BcsTokenType.Identifier && directive != "if")
+        {
+            _diagnostics.Add(new BcsDiagnostic($"expected a macro name after '#{directive}'", nameToken.Line, nameToken.Column));
+        }
+
+        _conditionalBranchTaken.Push(branchActive);
+        if (!branchActive) SkipInactiveRegion();
+    }
+
+    /// <summary>
+    /// <c>#elif</c>/<c>#else</c> reached during *normal* (active)
+    /// reading - meaning some earlier branch in this same chain was
+    /// already taken (confirmed real semantics: once one branch of an
+    /// if/elif/else chain runs, every later sibling is skipped
+    /// regardless of its own condition - real `#else`'s condition is
+    /// unconditional anyway, and a real `#elif`'s would need the same
+    /// deferred evaluator `#if` does). <see cref="SkipInactiveRegion"/>
+    /// is what actually *finds* an elif/else that should become active
+    /// instead - this method only ever runs for one that shouldn't.
+    /// </summary>
+    private void ReadElseOrElif(BcsToken directiveName)
+    {
+        SkipToEndOfLine(); // an #elif's own (unevaluated) condition, or nothing more for #else
+        if (_conditionalBranchTaken.Count == 0)
+        {
+            _diagnostics.Add(new BcsDiagnostic($"'#{directiveName.Value}' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column));
+            return;
+        }
+
+        SkipInactiveRegion(); // this chain already took a branch - skip past the rest of it, however many more elif/else sections follow, down to this level's own #endif
+    }
+
+    private void ReadEndif(BcsToken directiveName)
+    {
+        SkipToEndOfLine();
+        if (_conditionalBranchTaken.Count == 0)
+        {
+            _diagnostics.Add(new BcsDiagnostic("'#endif' with no open '#if'/'#ifdef'/'#ifndef'", directiveName.Line, directiveName.Column));
+            return;
+        }
+
+        _conditionalBranchTaken.Pop();
+    }
+
+    /// <summary>
+    /// Skips forward - emitting nothing - until finding, at *this*
+    /// level (tracking nested `#if`-family depth so a nested block's
+    /// own `#endif` doesn't get mistaken for this level's), either an
+    /// `#elif`/`#else` that should now become active (this chain
+    /// hasn't taken a branch yet) or this level's own `#endif` (nothing
+    /// becomes active - the whole block simply closes). Confirmed real
+    /// structure (`dirc.c`'s own `find_endif`/`read_search_dirc`).
+    /// `#elif`'s own condition is - again - not evaluated: the first
+    /// `#elif` reached while searching is treated as the one to take,
+    /// which is only correct when there's exactly one (a real divergence
+    /// once a chain has more than one `#elif`, deferred along with real
+    /// evaluation).
+    /// </summary>
+    private void SkipInactiveRegion()
+    {
+        var depth = 0;
+        while (true)
+        {
+            var token = _tokenizer.NextSignificantToken(includeNewlines: true);
+            if (token.Type == BcsTokenType.EndOfInput) return; // the EOF-level unclosed-#if check in NextSignificantToken itself will still fire for the outer block
+
+            if (token.Type != BcsTokenType.Hash) continue;
+
+            var name = _tokenizer.NextSignificantToken();
+            // Same "if"/"else" vs. Identifier gotcha as the main dispatch loop (see its own remarks) - both are real keyword token types here, not Identifier.
+            if (name.Type is not (BcsTokenType.Identifier or BcsTokenType.If or BcsTokenType.Else)) continue;
+
+            if (name.Value is "if" or "ifdef" or "ifndef")
+            {
+                depth++;
+                SkipToEndOfLine();
+                continue;
+            }
+
+            if (depth > 0)
+            {
+                if (string.Equals(name.Value, "endif", StringComparison.OrdinalIgnoreCase)) depth--;
+                SkipToEndOfLine();
+                continue;
+            }
+
+            // depth == 0 - this directive belongs to the level we're actually searching for.
+            if (name.Value is "elif" or "else")
+            {
+                SkipToEndOfLine();
+                _conditionalBranchTaken.Pop();
+                _conditionalBranchTaken.Push(true); // becomes active - resume normal reading right after this line
+                return;
+            }
+
+            if (string.Equals(name.Value, "endif", StringComparison.OrdinalIgnoreCase))
+            {
+                SkipToEndOfLine();
+                _conditionalBranchTaken.Pop(); // block closes with no branch taken - resume normal reading right after this line
+                return;
+            }
+        }
     }
 
     /// <summary>

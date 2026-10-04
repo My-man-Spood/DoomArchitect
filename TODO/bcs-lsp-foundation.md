@@ -732,13 +732,73 @@ recursive rescanning, within a single file.
   `#define`d case is clean; hover on a macro's own name still shows its
   doc comment).
 
-**Explicitly deferred to later phases, not silently dropped:**
-`##` token-pasting and `#` stringizing; `#if`/`#elif` (needs its own
-constant-expression evaluator, comparable in scope to the expression-
-grammar work on its own); `#ifdef`/`#ifndef`/`#else`/`#endif`
-conditional compilation; cross-file macro visibility (today, a
-`#define` in an `#include`d file is **not** visible to the including
-file - true C-preprocessor semantics need `#include` to be a textual
-splice happening *during* tokenization, a fundamentally different
-model from the post-hoc symbol-merging `BcsProgram` already does for
-completion/hover/go-to-def; reconciling the two is real, separate work).
+**Explicitly deferred to later phases, not silently dropped (at the
+time):** `##` token-pasting and `#` stringizing; `#if`/`#elif` (needs
+its own constant-expression evaluator, comparable in scope to the
+expression-grammar work on its own); `#ifdef`/`#ifndef`/`#else`/
+`#endif` conditional compilation - **done in Phase 2, below**; cross-
+file macro visibility (today, a `#define` in an `#include`d file is
+**not** visible to the including file - true C-preprocessor semantics
+need `#include` to be a textual splice happening *during* tokenization,
+a fundamentally different model from the post-hoc symbol-merging
+`BcsProgram` already does for completion/hover/go-to-def; reconciling
+the two is real, separate work, still deferred).
+
+## Real macro expansion - Phase 2: `#ifdef`/`#ifndef`/`#else`/`#endif` (new)
+
+Conditional compilation, within the same staged port - built directly
+on Phase 1's `BcsPreprocessor` layer, no new architecture needed.
+
+- Confirmed real structure from `dirc.c`'s own `push_ifdirc`/
+  `pop_ifdirc`/`find_elif`/`find_endif`/`read_search_dirc`: a stack of
+  currently-open `#if`-family blocks (`BcsPreprocessor._conditionalBranchTaken`),
+  one `bool` per level - true once *some* branch in that chain (the
+  original `#if`/`#ifdef`/`#ifndef`, an `#elif`, or the `#else`) has
+  actually been entered, which is what makes a later `#elif`/`#else` in
+  the same chain correctly skip even when reached. An inactive region is
+  skipped by `SkipInactiveRegion`, tracking nested `#if`-family depth so
+  a nested block's own `#endif` is never mistaken for the enclosing
+  level's. `#else`/`#endif`/`#elif` with no open block, and an unclosed
+  block still open at end-of-file, both report a real diagnostic
+  (confirmed from `dirc.c`'s own `p_confirm_ifdircs_closed` for the
+  latter).
+- A bare `#if` is tolerated, not rejected, but its condition is
+  deliberately **not evaluated** - the real `p_eval_prep_expr` constant-
+  expression evaluator doesn't exist yet (same deferred item as
+  `#elif`'s own condition). Its tokens are discarded and the branch is
+  simply taken unconditionally, a documented divergence from the real
+  compiler until that evaluator exists in a later phase - not a bug.
+  Same leniency for the first `#elif` reached while searching an
+  inactive region: treated as *the* branch to take, correct only when a
+  chain has at most one `#elif` (an accepted, narrow divergence for the
+  same reason).
+- **A real bug found and fixed while building this phase's own tests**
+  (not present in anything Phase 1 shipped as "done," but latent in it):
+  `ReadMacroBody` called the underlying `BcsTokenizer` directly instead
+  of through the shared `PullOneRaw` helper, so it never consulted the
+  `_pushback` buffer `ReadDefine` relies on - for an object-like macro
+  with no value at all (`#define FEATURE`, needed as a building block
+  for `#ifdef FEATURE`-style tests), the pushed-back terminating
+  newline was silently dropped and body-reading incorrectly continued
+  into the *next* source line. Fixed by routing it through `PullOneRaw`
+  like everything else.
+- **A second real bug found the same way:** the main dispatch loop (and
+  `SkipInactiveRegion`'s own nested-directive scan) gated directive-name
+  recognition on `BcsTokenType.Identifier` alone - correct for
+  `ifdef`/`ifndef`/`elif` (none are reserved words anywhere else in the
+  language, confirmed from `user.c`'s own keyword table), but `if` and
+  `else` collide with real BCS statement keywords and tokenize as their
+  own dedicated types (`BcsTokenType.If`/`Else`), never `Identifier`. A
+  bare `#if`/`#else` fell straight through to "not ours," reaching
+  `BcsParser.ParseHashDirective` instead, which rejected it as "expected
+  a directive name after '#'." Fixed by widening both gates to also
+  accept `If`/`Else`.
+- Verified with new tests in `BcsPreprocessorTests.cs`: `#ifdef`/`#ifndef`
+  with a defined and an undefined macro (both directions); `#else`
+  taken when the governing condition is false, skipped when true; a
+  nested `#ifdef`/`#endif` pair inside a skipped outer region doesn't
+  stop the outer scan at the nested `#endif`; `#else`/`#endif` with no
+  open block; an unclosed `#ifdef` reports at end-of-file; a bare `#if`
+  is tolerated as always-true. Full suite (982 tests) passes with zero
+  regressions. Confirmed end-to-end against the real running LSP
+  process for all of the above.
