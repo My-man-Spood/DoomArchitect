@@ -675,11 +675,70 @@ needed this at all.
   initializer in the same file - exactly one diagnostic published, at
   the malformed one's own position, nothing else flagged.
 
-## Deferred, tracked, not cut
+## Real macro expansion - Phase 1 (new)
 
-- **Macro/preprocessor expansion** (`#define`'s *value*/parameter list,
-  `##`, `TK_TYPENAME`-adjacent macro-only pseudo-tokens, conditional
-  compilation) - not modeled at all. A `#define`'s *name* is tracked
-  (see "Completion refinements" above) purely so it can be offered by
-  completion/go-to-definition; `#region`/`#endregion` are still
-  silently skipped to end of line.
+The user explicitly chose a full faithful port over a bounded version,
+after seeing the real scope confirmed from `zt-bcc`'s own source:
+`src/parse/token/stream.c` (expansion mechanics) + `dirc.c` (directive
+reading) + what they depend on in `user.c`/`source.c` total ~4,100
+lines - a genuinely separate two-level lexer architecture (raw tokens →
+preprocessor tokens → macro-expanded tokens → main tokens), not an
+extension of the single-pass tokenizer this project had. Too large for
+one pass, so this is staged - **Phase 1** (done): real object-like and
+function-like `#define`/`#undef` with parameter substitution and
+recursive rescanning, within a single file.
+
+- New `BcsPreprocessor` (Core) - a wrapping layer sitting between the
+  unchanged `BcsTokenizer` and `BcsParser`, mirroring the real
+  compiler's own confirmed layering. Mirrors `BcsTokenizer`'s own
+  pull-based `NextSignificantToken` shape exactly, so `BcsParser`'s 4
+  call sites needed minimal change. Intercepts only `#define`/
+  `#libdefine`/`#undef` fully - every other directive passes straight
+  through to `BcsParser.ParseHashDirective`, untouched.
+- Confirmed real, whitespace-sensitive grammar from `dirc.c`: `#define FOO(x)`
+  (no space) is function-like; `#define FOO (x)` (a space) is
+  object-like with a body that happens to start with a parenthesized
+  expression - `BcsTokenizer.NextSignificantToken` always skips
+  whitespace, so this one check goes around it via `ReadToken()`
+  directly. Variadic (`...`/`__VA_ARGS__`) parameters are supported.
+- Expansion is a pure function over token lists
+  (`BcsPreprocessor.Expand`/`ExpandTokenList`), deliberately not
+  entangled with the live pull loop - each argument is recursively
+  pre-expanded before substitution, and the substituted result is
+  rescanned for further macro references, both confirmed real
+  semantics for the common (non-`#`/`##`) case. A macro's own name
+  appearing inside its own expansion (directly or through another
+  macro - confirmed via a dedicated mutual-reference test) is never
+  re-expanded, confirmed real behavior (`dirc.c`'s own `TK_MACRONAME`
+  marking) - critically, this guard only works because tokens already
+  fully expanded and enqueued are never re-checked by the live loop;
+  re-checking them would silently defeat it.
+- The existing completion/hover/go-to-def-for-macro-names feature
+  (`BcsDefineDirective`) is preserved unchanged, just re-sourced:
+  `BcsParser.Parse` now builds one `BcsDefineDirective` per entry in
+  `BcsPreprocessor.Macros` after its main loop finishes, since
+  `#define`/`#libdefine` never reach `ParseHashDirective`'s own
+  dispatch anymore.
+- Verified end-to-end: the entire pre-existing test suite (959 tests,
+  the highest-risk change made this session - it rewrites `BcsParser`'s
+  fundamental token-pull path) passed with zero regressions; new tests
+  confirm real substitution happened (not just "didn't crash" - our
+  expression grammar never checks whether a name is declared, so a
+  bare unexpanded macro name is otherwise already tolerated on its
+  own), self-reference/mutual-reference termination, nested macro
+  calls as arguments, `#undef`, and wrong-argument-count warnings.
+  Confirmed against the real running LSP process too (a control case
+  with no macros defined shows the expected diagnostics; the real
+  `#define`d case is clean; hover on a macro's own name still shows its
+  doc comment).
+
+**Explicitly deferred to later phases, not silently dropped:**
+`##` token-pasting and `#` stringizing; `#if`/`#elif` (needs its own
+constant-expression evaluator, comparable in scope to the expression-
+grammar work on its own); `#ifdef`/`#ifndef`/`#else`/`#endif`
+conditional compilation; cross-file macro visibility (today, a
+`#define` in an `#include`d file is **not** visible to the including
+file - true C-preprocessor semantics need `#include` to be a textual
+splice happening *during* tokenization, a fundamentally different
+model from the post-hoc symbol-merging `BcsProgram` already does for
+completion/hover/go-to-def; reconciling the two is real, separate work).

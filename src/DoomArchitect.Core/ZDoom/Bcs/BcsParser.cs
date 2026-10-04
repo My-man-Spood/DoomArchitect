@@ -189,7 +189,7 @@ public sealed partial class BcsParser
         }
     }
 
-    private readonly BcsTokenizer _tokenizer;
+    private readonly BcsPreprocessor _preprocessor;
     private readonly List<BcsDiagnostic> _diagnostics;
     private BcsToken _current;
     /// <summary>Every comment token skipped by the most recent <see cref="Advance"/> call to reach <see cref="_current"/> - see <see cref="ExtractDocComment"/>.</summary>
@@ -197,9 +197,9 @@ public sealed partial class BcsParser
 
     public BcsParser(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
     {
-        _tokenizer = tokenizer;
+        _preprocessor = new BcsPreprocessor(tokenizer, diagnostics);
         _diagnostics = diagnostics;
-        _current = _tokenizer.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
+        _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
     }
 
     /// <summary>Convenience one-shot entry point - wraps <paramref name="source"/> as a <see cref="MemoryStream"/> (never real file I/O), used by both the language server (re-parsing the open buffer on every change) and tests.</summary>
@@ -304,7 +304,7 @@ public sealed partial class BcsParser
         return baseDir == null ? null : Path.Combine(baseDir, rawPath);
     }
 
-    private void Advance() => _current = _tokenizer.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
+    private void Advance() => _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
 
     private void AddDiagnostic(string message, BcsToken token) =>
         _diagnostics.Add(new BcsDiagnostic(message, token.Line, token.Column));
@@ -327,7 +327,8 @@ public sealed partial class BcsParser
     /// blank line separating it from this one (a known, accepted
     /// ambiguity if there isn't).
     /// </summary>
-    private static string ExtractDocComment(IReadOnlyList<BcsToken> leadingComments, int declarationStartLine)
+    /// <summary><c>internal</c>, not <c>private</c> - <see cref="BcsPreprocessor"/> reuses this exact algorithm for a `#define`'s own leading doc comment, since it now fully owns reading `#define`/`#libdefine` itself (see its own remarks).</summary>
+    internal static string ExtractDocComment(IReadOnlyList<BcsToken> leadingComments, int declarationStartLine)
     {
         if (leadingComments.Count == 0) return string.Empty;
 
@@ -355,6 +356,18 @@ public sealed partial class BcsParser
             var member = ParseTopLevelMember();
             if (member != null) unit.Members.Add(member);
         }
+
+        // #define/#libdefine are now fully consumed by _preprocessor
+        // before this method's own loop ever sees them (see its own
+        // remarks) - this is what keeps the existing completion/hover/
+        // go-to-def-for-macro-names feature working unchanged, just
+        // sourced from the preprocessor's own bookkeeping instead of a
+        // case inside ParseHashDirective.
+        foreach (var macro in _preprocessor.Macros)
+        {
+            unit.Members.Add(new BcsDefineDirective { Name = macro.Name, DocComment = macro.DocComment, Line = macro.Line, Column = macro.Column });
+        }
+
         return unit;
     }
 
@@ -392,7 +405,6 @@ public sealed partial class BcsParser
     private BcsNode? ParseHashDirective()
     {
         var start = _current;
-        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
         Advance(); // '#'
 
         if (_current.Type != BcsTokenType.Identifier)
@@ -418,23 +430,11 @@ public sealed partial class BcsParser
                 if (_current.Type == BcsTokenType.LitString) Advance();
                 else AddDiagnostic("expected a string literal after '#linklibrary'", _current);
                 return null;
-            case "define":
-            case "libdefine":
-            {
-                // #libdefine shares #define's exact grammar in the real
-                // compiler (both go through read_define) - only
-                // visibility differs (library-private vs. exported),
-                // which this pass doesn't model anyway. Only the name is
-                // extracted (so it's offered by completion) - the
-                // value/parameter list still isn't modeled at all, same
-                // deliberate scope limit as "region"/"endregion" below:
-                // this is not macro-expansion support, just enough to
-                // know a name was declared here.
-                string? macroName = _current.Type == BcsTokenType.Identifier ? _current.RawValue : null;
-                while (_tokenizer.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
-                Advance();
-                return macroName != null ? new BcsDefineDirective { Name = macroName, DocComment = docComment, Line = start.Line, Column = start.Column } : null;
-            }
+            // "define"/"libdefine" never reach here at all anymore -
+            // BcsPreprocessor fully intercepts both before this method
+            // ever sees the '#' (see its own remarks); BcsParser.Parse
+            // builds a BcsDefineDirective per BcsPreprocessor.Macros
+            // entry after the main parse loop finishes instead.
             case "encryptstrings":
             case "nocompact":
             case "wadauthor":
@@ -448,7 +448,7 @@ public sealed partial class BcsParser
             case "region":
             case "endregion":
                 // Not modeled as their own node at all - skip to end of line, which NextSignificantToken's default (not including newlines) would otherwise swallow, so ask for it explicitly here.
-                while (_tokenizer.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
+                while (_preprocessor.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
                 Advance();
                 return null;
             default:
