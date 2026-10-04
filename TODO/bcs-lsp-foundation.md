@@ -830,10 +830,97 @@ real object-like/function-like macro expansion as a faithful port.
   literal regardless of their content, so there's no shape difference
   to assert on either way.
 
-All three macro-expansion phases (object-like/function-like `#define`/
-`#undef`; `#ifdef`/`#ifndef`/`#else`/`#endif`; `#`/`##`) are now done.
-Still deferred, listed above: a real `#if`/`#elif` constant-expression
-evaluator, and cross-file macro visibility.
+## Real macro expansion - Phase 4: a real `#if`/`#elif` constant-expression evaluator (new)
+
+Replaces Phase 2's leniency (a bare `#if` tolerated as always-true, the
+first `#elif` reached while searching always taken unevaluated) with a
+real evaluator, confirmed from `token/expr.c`'s own `p_eval_prep_expr` -
+a small, SEPARATE grammar from the real statement-expression grammar
+(`BcsParser.Expressions.cs`): no assignment, no postfix (`[]`/`.`/
+calls/`++`/`--`), no format-cast tags, and it actually computes an
+`int` value (via plain recursive-descent precedence climbing, not the
+real compiler's own goto-chain) rather than just validating shape.
+
+- Confirmed real precedence (low to high, `eval_binary`'s own flat
+  goto-chain, read bottom-up): ternary `?:` (optional middle operand,
+  the same "Elvis" form the real statement grammar has) → `||` → `&&`
+  → `|` → `^` → `&` → `==`/`!=` → relational → shift → additive →
+  multiplicative → prefix (`+`/`-`/`!`/`~`) → primary.
+- Confirmed real primary set (`eval_primary`'s own switch) - a char
+  literal, `defined`, a decimal/octal/hex literal, or a parenthesized
+  sub-expression, and genuinely nothing else: a fixed-point/binary/
+  radix literal (real token kinds this tokenizer already produces) is
+  just as much a real "invalid expression" error here as any other
+  unrecognized token, confirmed - NOT silently treated as 0 the way an
+  unresolved plain identifier is.
+- Every token is read through the normal auto-expanding main pull loop
+  (confirmed real, `p_read_expanpreptk` - a macro referenced in a
+  condition really does get expanded, e.g. `#if VERSION >= 2`), with
+  one confirmed exception: the name tested by `defined`/`defined(...)`
+  is read RAW (`EvalDefined`, via `PullOneRaw`, never macro-expanded) -
+  confirmed real (`eval_defined`'s own non-expanding reads): `defined`
+  needs to know whether the name ITSELF is currently a macro, not what
+  it would expand to.
+- A plain identifier that isn't a macro evaluates to 0, confirmed real
+  (`eval_id`) - the same convention the standard C preprocessor uses.
+  Division/mod by zero is a real diagnostic (confirmed,
+  "division by zero"); the real compiler aborts compilation entirely
+  on it, while this pass recovers by resolving that expression to 0 and
+  letting the directive's own `SkipToEndOfLine` clean up the rest of
+  the line - the same "diagnose and recover, don't abort" posture this
+  whole LSP effort already takes everywhere else.
+- **`ReadIfdef`** now branches on the directive: `#ifdef`/`#ifndef`
+  still read their name RAW exactly as Phase 2 left them (confirmed
+  correct, same reasoning as `defined`'s own name); a real `#if` now
+  calls the evaluator instead of unconditionally setting its branch
+  active. **`SkipInactiveRegion`** now evaluates an `#elif`'s own
+  condition when reached while searching an inactive region, instead of
+  unconditionally activating the first one found - a FALSE `#elif` is
+  itself skipped too, same as any other sibling, and the search
+  continues looking for the next `#elif`/`#else`/`#endif` at that
+  level. This is what actually fixes Phase 2's known, documented
+  divergence for a chain with more than one real `#elif`.
+- **A real bug caught live while writing this phase's own tests, not
+  hypothetical:** the evaluator's own trailing lookahead read (needed,
+  after reading a primary, to decide whether a binary operator follows
+  it) is always one token PAST the expression itself - and whenever
+  that lookahead token happened to BE the line's own terminating
+  newline, it vanished before the directive's own `SkipToEndOfLine`
+  call ever got to see it, so that call would then keep consuming
+  looking for a newline that had already gone by - silently swallowing
+  the ENTIRE NEXT LINE as if it were trailing garbage on the `#if`'s own
+  line. `EvaluateDirectiveCondition` now pushes back whatever token it
+  ends up holding before returning, every time, so `SkipToEndOfLine`
+  always sees a fresh, correct view of what (if anything) is actually
+  left.
+- `SkipToEndOfLine` and `SkipInactiveRegion`'s own token reads were
+  switched from calling the underlying `BcsTokenizer` directly to going
+  through the shared `PullOneRaw` helper (the same `_pushback`-bypass
+  bug class already found twice in earlier phases) - proactive, since
+  the evaluator's own recovery paths (e.g. `EvalDefined`'s "expected
+  ')'" case) now genuinely rely on pushback being honored immediately
+  afterward.
+- Verified with 19 new tests in `BcsPreprocessorTests.cs`: real operator
+  precedence (`1 + 2 * 3 == 7`, decisive against naive left-to-right
+  evaluation), the ternary's optional middle operand, `defined`/
+  `defined(...)` both ways (true and false), confirmation that
+  `defined` never expands the name it's testing, a macro reference
+  inside a condition actually expanding, an unresolved identifier
+  evaluating to 0, a multi-`#elif` chain picking the correct branch
+  (specifically regression coverage for more than one `#elif`, the
+  exact case Phase 2 got wrong), a chain correctly falling through to
+  `#else` when every `#elif` is false, division-by-zero and invalid-
+  and missing-expression diagnostics, and dedicated regression coverage
+  for the newline-swallowing pushback bug itself. Full suite
+  (1008 tests) passes with zero regressions. Confirmed end-to-end
+  against the real running LSP process for real precedence, a
+  multi-`#elif` chain, both `defined()` outcomes, the newline-swallowing
+  fix, and the division-by-zero diagnostic.
+
+All four macro-expansion phases (object-like/function-like `#define`/
+`#undef`; `#ifdef`/`#ifndef`/`#else`/`#endif`; `#`/`##`; a real
+`#if`/`#elif` evaluator) are now done. Still deferred: cross-file macro
+visibility (listed above).
 
 ## Real macro expansion - Phase 2: `#ifdef`/`#ifndef`/`#else`/`#endif` (new)
 

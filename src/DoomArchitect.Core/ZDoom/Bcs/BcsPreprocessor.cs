@@ -16,19 +16,16 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 ///
 /// This is Phase 1 (`#define`/`#undef` with parameter substitution and
 /// recursive rescanning) plus Phase 2 (`#ifdef`/`#ifndef`/`#else`/
-/// `#endif` conditional compilation, and a bare `#if` tolerated as
-/// always-true - see <see cref="ReadIfdef"/>'s own remarks for exactly
-/// why) plus Phase 3 (`#` stringizing and `##` token-pasting - see
-/// <see cref="Stringize"/>/<see cref="Paste"/>) of a staged port.
-/// Deliberately deferred to later phases, not silently dropped: real
-/// `#if`/`#elif` condition *evaluation* (needs its own constant-
-/// expression evaluator - until it exists, both are treated leniently
-/// rather than correctly evaluated, see <see cref="ReadIfdef"/>); cross-
-/// file macro visibility (a `#define` in an `#include`d file is not
-/// yet visible to the including file - true textual-splice `#include`
-/// semantics are a separate, later reconciliation with the existing
-/// post-hoc symbol-merging <see cref="BcsProgram"/> already does for
-/// completion/hover/go-to-def).
+/// `#endif` conditional compilation) plus Phase 3 (`#` stringizing and
+/// `##` token-pasting - see <see cref="Stringize"/>/<see cref="Paste"/>)
+/// plus Phase 4 (a real `#if`/`#elif` constant-expression evaluator -
+/// see <see cref="EvaluateDirectiveCondition"/>) of a staged port.
+/// Deliberately deferred still: cross-file macro visibility (a
+/// `#define` in an `#include`d file is not yet visible to the
+/// including file - true textual-splice `#include` semantics are a
+/// separate, later reconciliation with the existing post-hoc symbol-
+/// merging <see cref="BcsProgram"/> already does for completion/hover/
+/// go-to-def).
 ///
 /// Only `#define`/`#libdefine`/`#undef`/`#if`/`#ifdef`/`#ifndef`/
 /// `#elif`/`#else`/`#endif` are intercepted here, fully - they never
@@ -72,6 +69,13 @@ internal sealed class BcsPreprocessor
     // the else) has been entered, which is what makes a later #elif/
     // #else in the same chain correctly skip even if encountered.
     private readonly Stack<bool> _conditionalBranchTaken = new();
+
+    // Scratch cursor used only while evaluating one #if/#elif condition
+    // expression (see EvaluateDirectiveCondition and the EvalXxx methods
+    // below it) - single-field threading, the same shape BcsParser's own
+    // _current/Advance() already uses, safe since only one condition is
+    // ever being evaluated at a time (no reentrancy).
+    private BcsToken _condToken = null!;
 
     public BcsPreprocessor(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics)
     {
@@ -133,7 +137,7 @@ internal sealed class BcsPreprocessor
 
                     if (directiveName.Value is "ifdef" or "ifndef" or "if")
                     {
-                        ReadIfdef(directiveName.Value);
+                        ReadIfdef(directiveName);
                         comments = new List<BcsToken>();
                         continue;
                     }
@@ -350,7 +354,7 @@ internal sealed class BcsPreprocessor
 
     private void SkipToEndOfLine()
     {
-        while (_tokenizer.NextSignificantToken(includeNewlines: true) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
+        while (PullOneRaw(includeNewlines: true, out _) is { Type: not (BcsTokenType.Newline or BcsTokenType.EndOfInput) }) { }
     }
 
     /// <summary>
@@ -358,31 +362,36 @@ internal sealed class BcsPreprocessor
     /// (`dirc.c`'s own `read_ifdef`): active when the name is (for
     /// `ifdef`) or isn't (for `ifndef`) a currently-defined macro,
     /// confirmed via the exact same lookup <see cref="TryStartExpansion"/>
-    /// already uses. A bare <c>#if</c> is tolerated here too but
-    /// deliberately *not* evaluated - the real `p_eval_prep_expr` is a
-    /// whole separate constant-expression evaluator this pass doesn't
-    /// have yet. Rather than silently falling through to "unknown
-    /// directive" (what would otherwise happen - `#if` was never in
-    /// this pass's directive table before Phase 2 either) or guessing
-    /// wrong in a way that could hide real code from completion, a bare
-    /// `#if`'s condition is treated as always true: its own tokens are
-    /// discarded and the branch is simply taken unconditionally. This
-    /// is a real, deliberate divergence from the real compiler - not a
-    /// bug - until the evaluator exists in a later phase.
+    /// already uses; deliberately read raw (not through the auto-
+    /// expanding main pull loop), same reasoning as `defined`'s own
+    /// name in <see cref="EvalDefined"/> - we need to know whether the
+    /// NAME ITSELF is a macro, not what it would expand to. A real
+    /// `#if`'s condition is now actually evaluated (Phase 4 - see
+    /// <see cref="EvaluateDirectiveCondition"/>), confirmed real
+    /// grammar from `token/expr.c`'s own `p_eval_prep_expr`.
     /// </summary>
-    private void ReadIfdef(string directive)
+    private void ReadIfdef(BcsToken directiveNameToken)
     {
-        var nameToken = _tokenizer.NextSignificantToken();
-        var isDefined = nameToken.Type == BcsTokenType.Identifier && _macros.ContainsKey(nameToken.Value);
-        SkipToEndOfLine(); // the rest of the line - a bare #if's own (unevaluated) condition tokens, or nothing more for #ifdef/#ifndef
+        var directive = directiveNameToken.Value;
+        bool branchActive;
 
-        var branchActive = string.Equals(directive, "ifndef", StringComparison.OrdinalIgnoreCase) ? !isDefined
-            : string.Equals(directive, "ifdef", StringComparison.OrdinalIgnoreCase) ? isDefined
-            : true; // bare #if - always true, see this method's own remarks
-
-        if (nameToken.Type != BcsTokenType.Identifier && directive != "if")
+        if (string.Equals(directive, "if", StringComparison.OrdinalIgnoreCase))
         {
-            _diagnostics.Add(new BcsDiagnostic($"expected a macro name after '#{directive}'", nameToken.Line, nameToken.Column));
+            branchActive = EvaluateDirectiveCondition(directiveNameToken) != 0;
+            SkipToEndOfLine(); // defensive - anything left on the line past the expression itself (a trailing comment, or a token the evaluator's own recovery didn't consume)
+        }
+        else
+        {
+            var nameToken = _tokenizer.NextSignificantToken();
+            var isDefined = nameToken.Type == BcsTokenType.Identifier && _macros.ContainsKey(nameToken.Value);
+            SkipToEndOfLine();
+
+            branchActive = string.Equals(directive, "ifndef", StringComparison.OrdinalIgnoreCase) ? !isDefined : isDefined;
+
+            if (nameToken.Type != BcsTokenType.Identifier)
+            {
+                _diagnostics.Add(new BcsDiagnostic($"expected a macro name after '#{directive}'", nameToken.Line, nameToken.Column));
+            }
         }
 
         _conditionalBranchTaken.Push(branchActive);
@@ -427,28 +436,26 @@ internal sealed class BcsPreprocessor
     /// <summary>
     /// Skips forward - emitting nothing - until finding, at *this*
     /// level (tracking nested `#if`-family depth so a nested block's
-    /// own `#endif` doesn't get mistaken for this level's), either an
-    /// `#elif`/`#else` that should now become active (this chain
-    /// hasn't taken a branch yet) or this level's own `#endif` (nothing
-    /// becomes active - the whole block simply closes). Confirmed real
+    /// own `#endif` doesn't get mistaken for this level's), an
+    /// `#elif` whose own condition is now actually true (Phase 4 - a
+    /// false `#elif` is itself skipped too, same as any other sibling,
+    /// and the search continues past it), an `#else` (unconditionally
+    /// becomes active - confirmed real, `#else` has no condition of its
+    /// own at all), or this level's own `#endif` (nothing becomes
+    /// active - the whole block simply closes). Confirmed real
     /// structure (`dirc.c`'s own `find_endif`/`read_search_dirc`).
-    /// `#elif`'s own condition is - again - not evaluated: the first
-    /// `#elif` reached while searching is treated as the one to take,
-    /// which is only correct when there's exactly one (a real divergence
-    /// once a chain has more than one `#elif`, deferred along with real
-    /// evaluation).
     /// </summary>
     private void SkipInactiveRegion()
     {
         var depth = 0;
         while (true)
         {
-            var token = _tokenizer.NextSignificantToken(includeNewlines: true);
+            var token = PullOneRaw(includeNewlines: true, out _);
             if (token.Type == BcsTokenType.EndOfInput) return; // the EOF-level unclosed-#if check in NextSignificantToken itself will still fire for the outer block
 
             if (token.Type != BcsTokenType.Hash) continue;
 
-            var name = _tokenizer.NextSignificantToken();
+            var name = PullOneRaw(includeNewlines: false, out _);
             // Same "if"/"else" vs. Identifier gotcha as the main dispatch loop (see its own remarks) - both are real keyword token types here, not Identifier.
             if (name.Type is not (BcsTokenType.Identifier or BcsTokenType.If or BcsTokenType.Else)) continue;
 
@@ -467,7 +474,18 @@ internal sealed class BcsPreprocessor
             }
 
             // depth == 0 - this directive belongs to the level we're actually searching for.
-            if (name.Value is "elif" or "else")
+            if (string.Equals(name.Value, "elif", StringComparison.OrdinalIgnoreCase))
+            {
+                var conditionValue = EvaluateDirectiveCondition(name);
+                SkipToEndOfLine();
+                if (conditionValue == 0) continue; // this elif's own condition was false - it's skipped too, same as any other sibling; keep searching
+
+                _conditionalBranchTaken.Pop();
+                _conditionalBranchTaken.Push(true); // becomes active - resume normal reading right after this line
+                return;
+            }
+
+            if (string.Equals(name.Value, "else", StringComparison.OrdinalIgnoreCase))
             {
                 SkipToEndOfLine();
                 _conditionalBranchTaken.Pop();
@@ -482,6 +500,300 @@ internal sealed class BcsPreprocessor
                 return;
             }
         }
+    }
+
+    // --- Phase 4: #if/#elif constant-expression evaluation ---
+    //
+    // Confirmed real grammar from `token/expr.c`'s own `p_eval_prep_expr` -
+    // a small, SEPARATE evaluator from the real statement-expression
+    // grammar (BcsParser.Expressions.cs): no assignment, no postfix
+    // (`[]`/`.`/calls/`++`/`--`), no format-cast tags, and it actually
+    // computes an int value rather than just validating shape. Every
+    // token is read through the normal auto-expanding main pull loop
+    // (confirmed real: `p_read_expanpreptk`), EXCEPT the name tested by
+    // `defined`/`defined(...)` (see EvalDefined) - confirmed real
+    // (`eval_defined`'s own non-expanding preptk reads): `defined` needs
+    // to know whether the name ITSELF is a macro, not what it expands to.
+
+    /// <summary>
+    /// Reads and evaluates one #if/#elif condition expression. The last
+    /// thing read is always one token PAST the expression itself (needed
+    /// to decide whether a binary operator follows) - pushed back before
+    /// returning, every time, since otherwise whenever that lookahead
+    /// token happens to BE the line's own terminating newline, it would
+    /// vanish before the caller's own <see cref="SkipToEndOfLine"/> ever
+    /// saw it, and that call would then incorrectly swallow the entire
+    /// NEXT line looking for a newline that already went by - a real bug
+    /// caught live, not a hypothetical one.
+    /// </summary>
+    private int EvaluateDirectiveCondition(BcsToken directiveNameToken)
+    {
+        CondAdvance();
+        if (_condToken.Type is BcsTokenType.Newline or BcsTokenType.EndOfInput)
+        {
+            _diagnostics.Add(new BcsDiagnostic("missing expression", directiveNameToken.Line, directiveNameToken.Column));
+            PushBack(_condToken);
+            return 0;
+        }
+
+        var value = EvalTernary();
+        PushBack(_condToken);
+        return value;
+    }
+
+    private void CondAdvance() => _condToken = NextSignificantToken(includeNewlines: true);
+
+    /// <summary>`?:` - confirmed real "Elvis" form (`a ?: b`, the middle operand optional), same as the real statement-expression grammar's own ternary.</summary>
+    private int EvalTernary()
+    {
+        var value = EvalLogicalOr();
+        if (_condToken.Type != BcsTokenType.Questionmark) return value;
+
+        CondAdvance();
+        var middle = value;
+        if (_condToken.Type != BcsTokenType.Colon) middle = EvalTernary(); // confirmed real: the middle operand recurses back to full precedence (eval_binary), not a restricted level
+
+        if (_condToken.Type != BcsTokenType.Colon)
+        {
+            _diagnostics.Add(new BcsDiagnostic("expected ':'", _condToken.Line, _condToken.Column));
+            return value;
+        }
+
+        CondAdvance();
+        var right = EvalTernary();
+        return value != 0 ? middle : right;
+    }
+
+    private int EvalLogicalOr()
+    {
+        var left = EvalLogicalAnd();
+        while (_condToken.Type == BcsTokenType.OpLogicalOr)
+        {
+            CondAdvance();
+            var right = EvalLogicalAnd();
+            left = left != 0 || right != 0 ? 1 : 0;
+        }
+
+        return left;
+    }
+
+    private int EvalLogicalAnd()
+    {
+        var left = EvalBitOr();
+        while (_condToken.Type == BcsTokenType.OpLogicalAnd)
+        {
+            CondAdvance();
+            var right = EvalBitOr();
+            left = left != 0 && right != 0 ? 1 : 0;
+        }
+
+        return left;
+    }
+
+    private int EvalBitOr()
+    {
+        var left = EvalBitXor();
+        while (_condToken.Type == BcsTokenType.OpBitOr) { CondAdvance(); left |= EvalBitXor(); }
+        return left;
+    }
+
+    private int EvalBitXor()
+    {
+        var left = EvalBitAnd();
+        while (_condToken.Type == BcsTokenType.OpBitXor) { CondAdvance(); left ^= EvalBitAnd(); }
+        return left;
+    }
+
+    private int EvalBitAnd()
+    {
+        var left = EvalEquality();
+        while (_condToken.Type == BcsTokenType.OpBitAnd) { CondAdvance(); left &= EvalEquality(); }
+        return left;
+    }
+
+    private int EvalEquality()
+    {
+        var left = EvalRelational();
+        while (true)
+        {
+            if (_condToken.Type == BcsTokenType.OpEquals) { CondAdvance(); left = left == EvalRelational() ? 1 : 0; }
+            else if (_condToken.Type == BcsTokenType.OpNotEquals) { CondAdvance(); left = left != EvalRelational() ? 1 : 0; }
+            else return left;
+        }
+    }
+
+    private int EvalRelational()
+    {
+        var left = EvalShift();
+        while (true)
+        {
+            switch (_condToken.Type)
+            {
+                case BcsTokenType.OpLessThan: CondAdvance(); left = left < EvalShift() ? 1 : 0; break;
+                case BcsTokenType.OpLessOrEqual: CondAdvance(); left = left <= EvalShift() ? 1 : 0; break;
+                case BcsTokenType.OpGreaterThan: CondAdvance(); left = left > EvalShift() ? 1 : 0; break;
+                case BcsTokenType.OpGreaterOrEqual: CondAdvance(); left = left >= EvalShift() ? 1 : 0; break;
+                default: return left;
+            }
+        }
+    }
+
+    private int EvalShift()
+    {
+        var left = EvalAdditive();
+        while (true)
+        {
+            if (_condToken.Type == BcsTokenType.OpLeftShift) { CondAdvance(); left <<= EvalAdditive(); }
+            else if (_condToken.Type == BcsTokenType.OpRightShift) { CondAdvance(); left >>= EvalAdditive(); }
+            else return left;
+        }
+    }
+
+    private int EvalAdditive()
+    {
+        var left = EvalMultiplicative();
+        while (true)
+        {
+            if (_condToken.Type == BcsTokenType.OpAdd) { CondAdvance(); left += EvalMultiplicative(); }
+            else if (_condToken.Type == BcsTokenType.OpSubtract) { CondAdvance(); left -= EvalMultiplicative(); }
+            else return left;
+        }
+    }
+
+    private int EvalMultiplicative()
+    {
+        var left = EvalPrefix();
+        while (true)
+        {
+            if (_condToken.Type == BcsTokenType.OpMultiply) { CondAdvance(); left *= EvalPrefix(); }
+            else if (_condToken.Type is BcsTokenType.OpDivide or BcsTokenType.OpMod)
+            {
+                var isDivide = _condToken.Type == BcsTokenType.OpDivide;
+                var opToken = _condToken;
+                CondAdvance();
+                var right = EvalPrefix();
+                if (right == 0)
+                {
+                    // Confirmed real diagnostic ("division by zero") - the real compiler aborts compilation entirely on this; we recover instead by resolving the whole condition to false and letting the caller's own SkipToEndOfLine clean up whatever's left on the line.
+                    _diagnostics.Add(new BcsDiagnostic("division by zero", opToken.Line, opToken.Column));
+                    return 0;
+                }
+
+                left = isDivide ? left / right : left % right;
+            }
+            else return left;
+        }
+    }
+
+    private int EvalPrefix()
+    {
+        switch (_condToken.Type)
+        {
+            case BcsTokenType.OpAdd: CondAdvance(); return EvalPrefix();
+            case BcsTokenType.OpSubtract: CondAdvance(); return -EvalPrefix();
+            case BcsTokenType.OpLogicalNot: CondAdvance(); return EvalPrefix() == 0 ? 1 : 0;
+            case BcsTokenType.OpBitNot: CondAdvance(); return ~EvalPrefix();
+            default: return EvalPrimary();
+        }
+    }
+
+    /// <summary>
+    /// Confirmed real primary set (`eval_primary`'s own switch): a char
+    /// literal, `defined`, a decimal/octal/hex literal, or a
+    /// parenthesized sub-expression - and nothing else. Notably NOT
+    /// included (confirmed - they fall to the real compiler's own
+    /// `default: longjmp`, the same "invalid expression" error as
+    /// anything else unrecognized, not silently treated as 0): a
+    /// fixed-point/binary/radix literal, or a string literal - all real
+    /// token kinds this project's own tokenizer produces, just never
+    /// legal here in the real grammar either.
+    /// </summary>
+    private int EvalPrimary()
+    {
+        switch (_condToken.Type)
+        {
+            case BcsTokenType.LitChar:
+            {
+                var value = _condToken.IntValue;
+                CondAdvance();
+                return value;
+            }
+
+            case BcsTokenType.Identifier when string.Equals(_condToken.Value, "defined", StringComparison.OrdinalIgnoreCase):
+                return EvalDefined();
+
+            case BcsTokenType.Identifier:
+                // Confirmed real (eval_id): any other identifier reaching here means the auto-expanding read already tried and failed to expand it (not a macro) - it evaluates to plain 0, same as the standard C-preprocessor convention.
+                CondAdvance();
+                return 0;
+
+            case BcsTokenType.LitDecimal:
+            case BcsTokenType.LitOctal:
+            case BcsTokenType.LitHex:
+            {
+                var value = _condToken.IntValue;
+                CondAdvance();
+                return value;
+            }
+
+            case BcsTokenType.OpenParen:
+            {
+                CondAdvance();
+                var value = EvalTernary();
+                if (_condToken.Type != BcsTokenType.CloseParen)
+                {
+                    _diagnostics.Add(new BcsDiagnostic("expected ')'", _condToken.Line, _condToken.Column));
+                    return value;
+                }
+
+                CondAdvance();
+                return value;
+            }
+
+            default:
+                _diagnostics.Add(new BcsDiagnostic("invalid expression", _condToken.Line, _condToken.Column));
+                CondAdvance(); // consume the offending token so evaluation keeps making forward progress
+                return 0;
+        }
+    }
+
+    /// <summary>
+    /// `defined NAME` / `defined(NAME)` - confirmed real (`eval_defined`):
+    /// the name is read RAW, through <see cref="PullOneRaw"/>, never the
+    /// auto-expanding main pull loop - `defined` needs to know whether
+    /// the name ITSELF is currently a macro, not what it would expand
+    /// to (which would be nonsensical - an undefined name doesn't
+    /// expand to anything meaningful to test).
+    /// </summary>
+    private int EvalDefined()
+    {
+        var nameToken = PullOneRaw(includeNewlines: true, out _);
+        var paren = nameToken.Type == BcsTokenType.OpenParen;
+        if (paren) nameToken = PullOneRaw(includeNewlines: true, out _);
+
+        bool isDefined;
+        if (nameToken.Type == BcsTokenType.Identifier)
+        {
+            isDefined = _macros.ContainsKey(nameToken.Value);
+        }
+        else
+        {
+            _diagnostics.Add(new BcsDiagnostic("expected a macro name after 'defined'", nameToken.Line, nameToken.Column));
+            isDefined = false;
+        }
+
+        if (paren)
+        {
+            var closeToken = PullOneRaw(includeNewlines: true, out _);
+            if (closeToken.Type != BcsTokenType.CloseParen)
+            {
+                _diagnostics.Add(new BcsDiagnostic("expected ')'", closeToken.Line, closeToken.Column));
+                PushBack(closeToken); // not actually a ')' - let the normal pull loop see it, same recovery posture used everywhere else here
+            }
+        }
+
+        CondAdvance(); // resume normal auto-expanding reads for whatever follows "defined"/"defined(...)"
+        return isDefined ? 1 : 0;
     }
 
     /// <summary>

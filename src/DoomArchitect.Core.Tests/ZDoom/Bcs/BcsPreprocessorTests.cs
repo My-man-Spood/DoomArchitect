@@ -211,13 +211,164 @@ public class BcsPreprocessorTests
     }
 
     [Fact]
-    public void Parse_BareIf_IsToleratedAsAlwaysTrue()
+    public void Parse_IfWithATrueConstantCondition_IncludesItsContent()
     {
-        // No real constant-expression evaluator yet (deferred) - a bare #if's own condition tokens are discarded and the branch is simply taken.
         var (unit, diagnostics) = BcsParser.Parse("#if 1\nint included = 1;\n#endif\n");
 
         Assert.Empty(diagnostics);
         Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfWithAFalseConstantCondition_ExcludesItsContent()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#if 0\nint excluded = 1;\n#endif\nint after = 1;\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "after"));
+    }
+
+    [Fact]
+    public void Parse_IfWithAnArithmeticCondition_EvaluatesRealOperatorPrecedence()
+    {
+        // 1 + 2 * 3 == 7, not 9 - decisive proof real precedence (not naive left-to-right) is applied.
+        var (unit, diagnostics) = BcsParser.Parse("#if 1 + 2 * 3 == 7\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfWithATernaryCondition_EvaluatesCorrectly()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#if 1 ? 0 : 1\nint excluded = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+    }
+
+    [Fact]
+    public void Parse_IfWithDefined_IsTrueWhenTheMacroIsDefined()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE\n#if defined(FEATURE)\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfWithDefinedWithoutParens_IsSupported()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE\n#if defined FEATURE\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfWithDefined_IsFalseWhenTheMacroIsNotDefined()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#if defined(FEATURE)\nint excluded = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+    }
+
+    [Fact]
+    public void Parse_IfWithDefined_NeverExpandsTheNameItself()
+    {
+        // Confirmed real semantics (eval_defined's own non-expanding reads): "defined" must see the raw name "FEATURE", not whatever it expands to - if it mistakenly macro-expanded the name first, this would misbehave (FEATURE's own body "1 1" isn't a valid single identifier for 'defined' to test at all).
+        var (unit, diagnostics) = BcsParser.Parse("#define FEATURE 1 1\n#if defined(FEATURE)\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfConditionCanReferenceAMacro_AndItIsExpanded()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#define VERSION 2\n#if VERSION >= 2\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_IfWithAnUndefinedIdentifier_EvaluatesItAsZero()
+    {
+        // Confirmed real convention (eval_id): a plain identifier that isn't a macro evaluates to 0, same as the standard C-preprocessor behavior.
+        var (unit, diagnostics) = BcsParser.Parse("#if SOME_UNDEFINED_NAME\nint excluded = 1;\n#else\nint included = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "excluded"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
+    }
+
+    [Fact]
+    public void Parse_ElifChain_PicksTheFirstTrueBranchAmongSeveral()
+    {
+        // Regression coverage specifically for a chain with MORE than one #elif - the old Phase 2 behavior ("the first #elif reached while searching is always taken, unevaluated") would have picked the wrong branch here.
+        var (unit, diagnostics) = BcsParser.Parse(
+            "#if 0\n" +
+            "int first = 1;\n" +
+            "#elif 0\n" +
+            "int second = 1;\n" +
+            "#elif 1\n" +
+            "int third = 1;\n" +
+            "#else\n" +
+            "int fourth = 1;\n" +
+            "#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "first"));
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "second"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "third"));
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "fourth"));
+    }
+
+    [Fact]
+    public void Parse_ElifChain_FallsThroughToElseWhenEveryElifIsFalse()
+    {
+        var (unit, diagnostics) = BcsParser.Parse("#if 0\nint first = 1;\n#elif 0\nint second = 1;\n#else\nint third = 1;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "first"));
+        Assert.DoesNotContain(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "second"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "third"));
+    }
+
+    [Fact]
+    public void Parse_IfDivisionByZero_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#if 1 / 0\nint x = 1;\n#endif\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("division by zero"));
+    }
+
+    [Fact]
+    public void Parse_IfWithAnInvalidExpression_ReportsADiagnostic()
+    {
+        // ')' is never a valid way to start a primary expression, confirmed real (eval_primary's own switch has no case for it).
+        var (_, diagnostics) = BcsParser.Parse("#if )\nint x = 1;\n#endif\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("invalid expression"));
+    }
+
+    [Fact]
+    public void Parse_IfWithAMissingExpression_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#if\nint x = 1;\n#endif\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("missing expression"));
+    }
+
+    [Fact]
+    public void Parse_IfConditionDoesNotSwallowTheFollowingLine()
+    {
+        // Decisive regression coverage for the exact pushback bug found live: the condition's own trailing lookahead read must not consume the line's terminating newline without pushing it back, or everything on the NEXT line gets mistaken for trailing garbage on the #if line.
+        var (unit, diagnostics) = BcsParser.Parse("#if 1\nint a = 1;\nint b = 2;\n#endif\n");
+
+        Assert.Empty(diagnostics);
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "a"));
+        Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "b"));
     }
 
     [Fact]
