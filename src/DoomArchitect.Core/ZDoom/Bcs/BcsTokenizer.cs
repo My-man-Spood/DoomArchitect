@@ -216,9 +216,22 @@ public sealed class BcsToken
     /// The token's text. For an <see cref="BcsTokenType.Identifier"/> or a
     /// reserved word recognized from one, this is already lowercased -
     /// matching the real compiler's own case-folding (confirmed in
-    /// <c>user.c</c>) - so it is NOT the original source spelling.
+    /// <c>user.c</c>) - so it is NOT the original source spelling. See
+    /// <see cref="RawValue"/> for that.
     /// </summary>
     public string Value { get; internal set; } = string.Empty;
+
+    /// <summary>
+    /// For an <see cref="BcsTokenType.Identifier"/> only, the exact
+    /// original source spelling before case-folding (e.g. <c>MyVar</c>,
+    /// where <see cref="Value"/> would be <c>myvar</c>) - empty for every
+    /// other token kind. The real compiler itself never needs this (it
+    /// case-folds in place and moves on, confirmed in <c>user.c</c>), but
+    /// a completion provider offering a user's own declared name back to
+    /// them should preserve how they actually wrote it rather than
+    /// silently re-casing it on every suggestion.
+    /// </summary>
+    public string RawValue { get; internal set; } = string.Empty;
 
     public int IntValue { get; internal set; }
     public double DoubleValue { get; internal set; }
@@ -287,11 +300,15 @@ public sealed class BcsTokenizer
     /// <summary>Every tokenizer-level reserved word (the real compiler's exact 53-entry table) - exposed so e.g. a syntax highlighter can style keywords without duplicating this list.</summary>
     public static readonly HashSet<BcsTokenType> ReservedWordTypes;
 
+    /// <summary>The same 53 entries as <see cref="ReservedWordTypes"/>, as literal source text - exposed for completion providers (in-app and the standalone LSP server) so neither has to duplicate this project's own reserved-word enumeration.</summary>
+    public static readonly List<string> ReservedWordTexts;
+
     static BcsTokenizer()
     {
         NamedTokenTypes = new Dictionary<string, BcsTokenType>();
         NamedTokenTypesOrder = new List<string>();
         ReservedWordTypes = new HashSet<BcsTokenType>();
+        ReservedWordTexts = new List<string>();
 
         foreach (var tokenType in Enum.GetValues<BcsTokenType>())
         {
@@ -302,7 +319,11 @@ public sealed class BcsTokenizer
             NamedTokenTypes.Add(attrs[0].Value, tokenType);
             NamedTokenTypesOrder.Add(attrs[0].Value);
             // A reserved word's literal text is all-lowercase-letters; punctuation never is - this is how ReadIdentifier tells "could this identifier actually be one of the reserved words" apart from "just register this as a candidate for the generic punctuation scan too" without a second, separately-maintained list.
-            if (attrs[0].Value.Length > 0 && char.IsLower(attrs[0].Value[0])) ReservedWordTypes.Add(tokenType);
+            if (attrs[0].Value.Length > 0 && char.IsLower(attrs[0].Value[0]))
+            {
+                ReservedWordTypes.Add(tokenType);
+                ReservedWordTexts.Add(attrs[0].Value);
+            }
         }
 
         NamedTokenTypesOrder.Sort((a, b) => b.Length - a.Length);
@@ -423,12 +444,12 @@ public sealed class BcsTokenizer
             raw.Length >= 2 && (char.IsLower(raw[^2]) || raw[^2] == '_') && raw[^1] == 'T';
 
         var lowered = raw.ToLowerInvariant();
-        if (isTypeName) return new BcsToken { Type = BcsTokenType.TypeName, Value = lowered, Line = line, Column = column };
+        if (isTypeName) return new BcsToken { Type = BcsTokenType.TypeName, Value = lowered, RawValue = raw, Line = line, Column = column };
 
         if (NamedTokenTypes.TryGetValue(lowered, out var keyword) && ReservedWordTypes.Contains(keyword))
             return new BcsToken { Type = keyword, Value = lowered, Line = line, Column = column };
 
-        return new BcsToken { Type = BcsTokenType.Identifier, Value = lowered, Line = line, Column = column };
+        return new BcsToken { Type = BcsTokenType.Identifier, Value = lowered, RawValue = raw, Line = line, Column = column };
     }
 
     /// <summary>

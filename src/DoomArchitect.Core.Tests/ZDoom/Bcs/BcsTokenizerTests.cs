@@ -216,6 +216,26 @@ public class BcsTokenizerTests
     }
 
     [Fact]
+    public void ReadToken_Identifier_RawValuePreservesOriginalCasing()
+    {
+        // Value is case-folded for grammar/lookup purposes, but a completion provider offering a user's own declared name back to them needs their actual spelling, not a re-cased one.
+        var (tokenizer, _) = Create("MyVar");
+        var token = tokenizer.ReadToken();
+
+        Assert.Equal("MyVar", token.RawValue);
+    }
+
+    [Fact]
+    public void ReadToken_Keyword_RawValueIsEmpty()
+    {
+        // Keywords always display canonically lowercase - RawValue is only meaningful for Identifier/TypeName.
+        var (tokenizer, _) = Create("SCRIPT");
+        var token = tokenizer.ReadToken();
+
+        Assert.Equal(string.Empty, token.RawValue);
+    }
+
+    [Fact]
     public void ReadToken_UppercaseKeyword_IsRecognizedAndLowercased()
     {
         var (tokenizer, _) = Create("SCRIPT");
@@ -328,5 +348,27 @@ public class BcsTokenizerTests
         Assert.False(token.IsValid);
         Assert.Contains(diagnostics, d => d.Message == "invalid character");
         Assert.Equal(BcsTokenType.EndOfInput, tokenizer.ReadToken().Type);
+    }
+
+    [Fact]
+    public void ReservedWordTexts_HasExactlyTheRealCompilersFiftyThreeEntries()
+    {
+        Assert.Equal(53, BcsTokenizer.ReservedWordTexts.Count);
+    }
+
+    [Theory]
+    [InlineData("script")]
+    [InlineData("foreach")]
+    [InlineData("createtranslation")] // the real spelling for BcsTokenType.PalTrans
+    public void ReservedWordTexts_ContainsTheRealKeywordSpelling(string keyword)
+    {
+        Assert.Contains(keyword, BcsTokenizer.ReservedWordTexts);
+    }
+
+    [Fact]
+    public void ReservedWordTexts_MatchesReservedWordTypesOneForOne()
+    {
+        // Built together in the same reflection pass - a mismatch here would mean the two lists drifted apart.
+        Assert.Equal(BcsTokenizer.ReservedWordTypes.Count, BcsTokenizer.ReservedWordTexts.Count);
     }
 }

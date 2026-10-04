@@ -16,27 +16,35 @@ namespace DoomArchitect.LanguageServer;
 /// keystroke is cheap, and it keeps this first pass simple) for
 /// <c>.bcs</c> files: re-runs <see cref="BcsParser"/> on open/change and
 /// publishes its collected <see cref="BcsDiagnostic"/>s as real LSP
-/// <see cref="PublishDiagnosticsParams"/>. Hover, completion, go-to-
-/// definition, and any semantic analysis beyond raw syntax diagnostics
-/// are explicitly out of scope for this pass - see TODO/TODO.md.
+/// <see cref="PublishDiagnosticsParams"/>. Also the sole writer of
+/// <see cref="BcsDocumentStore"/> - <see cref="BcsHoverHandler"/>/
+/// <see cref="BcsCompletionHandler"/> need the open document's current
+/// text too, but requests like <c>textDocument/hover</c> only ever carry
+/// a URI and a position, never the text itself. Go-to-definition,
+/// multi-file <c>#include</c> resolution, and any semantic analysis
+/// beyond raw syntax diagnostics are still explicitly out of scope for
+/// this pass - see TODO/TODO.md.
 /// </summary>
 internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
 {
     private readonly ILanguageServerFacade _server;
+    private readonly BcsDocumentStore _documentStore;
 
     private readonly TextDocumentSelector _selector = new(
         new TextDocumentFilter { Pattern = "**/*.bcs" }
     );
 
-    public BcsTextDocumentHandler(ILanguageServerFacade server)
+    public BcsTextDocumentHandler(ILanguageServerFacade server, BcsDocumentStore documentStore)
     {
         _server = server;
+        _documentStore = documentStore;
     }
 
     public TextDocumentSyncKind Change { get; } = TextDocumentSyncKind.Full;
 
     public override Task<Unit> Handle(DidOpenTextDocumentParams notification, CancellationToken token)
     {
+        _documentStore.Set(notification.TextDocument.Uri, notification.TextDocument.Text);
         PublishDiagnosticsFor(notification.TextDocument.Uri, notification.TextDocument.Text);
         return Unit.Task;
     }
@@ -44,11 +52,21 @@ internal sealed class BcsTextDocumentHandler : TextDocumentSyncHandlerBase
     public override Task<Unit> Handle(DidChangeTextDocumentParams notification, CancellationToken token)
     {
         var text = notification.ContentChanges.LastOrDefault()?.Text;
-        if (text != null) PublishDiagnosticsFor(notification.TextDocument.Uri, text);
+        if (text != null)
+        {
+            _documentStore.Set(notification.TextDocument.Uri, text);
+            PublishDiagnosticsFor(notification.TextDocument.Uri, text);
+        }
+
         return Unit.Task;
     }
 
-    public override Task<Unit> Handle(DidCloseTextDocumentParams notification, CancellationToken token) => Unit.Task;
+    /// <summary>Closing off an otherwise-real, if slow, leak - without this, <see cref="BcsDocumentStore"/> would grow forever for an editor session that opens/closes many files.</summary>
+    public override Task<Unit> Handle(DidCloseTextDocumentParams notification, CancellationToken token)
+    {
+        _documentStore.Remove(notification.TextDocument.Uri);
+        return Unit.Task;
+    }
 
     public override Task<Unit> Handle(DidSaveTextDocumentParams notification, CancellationToken token) => Unit.Task;
 

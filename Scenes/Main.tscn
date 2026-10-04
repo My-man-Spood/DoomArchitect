@@ -53,6 +53,7 @@ theme_type_variation = &"DocumentTabStripPanel"
 
 [node name="TabBar" type="TabBar" parent="TabStripLayer/TabStripPanel"]
 layout_mode = 2
+focus_mode = 0
 theme_type_variation = &"DocumentTabBar"
 theme_override_constants/icon_max_width = 14
 

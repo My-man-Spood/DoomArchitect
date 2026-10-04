@@ -93,6 +93,88 @@ that reports real syntax errors as LSP diagnostics for `.bcs` files.
   scripts have never had automated tests, matching existing precedent
   (`MapView.cs`/`ScriptDocument.cs` itself, etc.) - needs the user's own
   visual confirmation in the running app.
+- **Diagnostic hover + keyword completion**, both in-app and LSP (new).
+  `BcsTokenizer.ReservedWordTexts` (new) exposes the same 53-entry
+  reserved-word list as literal text, built in the same reflection pass
+  as `ReservedWordTypes` so the two can't drift apart - the one shared
+  source both completion providers below read from.
+  - **In-app**: `ScriptDocument` now retains the latest `BcsParser.Parse`
+    diagnostics as a field (`_diagnostics`, previously a throwaway
+    local) and wires `CodeEdit.SetTooltipRequestFunc` to show a
+    diagnostic's message on hover, plus `CodeEdit.CodeCompletionRequested`
+    to offer the 53 keywords via `AddCodeCompletionOption`. Confirmed
+    from Godot's own `text_edit.cpp`: the tooltip callback only fires
+    when the mouse is over a recognized "word" and hands back that
+    word's *text*, not a position - the callback ignores that argument
+    entirely and instead derives the real line via
+    `CodeEdit.GetLineColumnAtPos(GetLocalMousePosition())`. Known,
+    accepted limitation from that same source: hovering a blank column
+    on a diagnostic line (trailing whitespace, a bare `}`) shows nothing,
+    since the callback never fires there at all - not worth a custom
+    popup/mouse-motion workaround for what this needs today.
+  - **LSP**: new `BcsHoverHandler`/`BcsCompletionHandler`, registered in
+    `Program.cs` alongside `BcsTextDocumentHandler`. Hover/completion
+    requests carry only a URI + position, never the document's text, so
+    a new `BcsDocumentStore` (DI singleton, written by
+    `BcsTextDocumentHandler`'s open/change/close handling, read by the
+    other two) had to be added to track it - real new scope this pass
+    needed, not a pre-existing gap. Verified end-to-end with a real
+    framed-JSON-RPC exchange against the running process (hover on a
+    line with a diagnostic → its message; hover on a clean line →
+    `null`; completion → all 53 keywords, LSP kind 14).
+  - Completion was keyword-only at first - now superseded, see below.
+    Hover is still diagnostic-only - no hover-on-identifier ("what is
+    this token"), which would need real symbol *resolution* (which
+    declaration a given use refers to), not just the flat symbol
+    *collection* completion now has.
+- **Symbol-aware identifier completion**, both in-app and LSP (new) -
+  real declared names (functions, script/function parameters, globals,
+  locals declared inside script/function bodies, enum types and their
+  members), not a word-based "any identifier seen anywhere" approach
+  (explicitly chosen over the simpler alternative). The parser used to
+  treat every script/function body as 100% opaque (`SkipBracedBlock`
+  just brace-counted and discarded every token) - this is the first
+  pass that looks inside one at all.
+  - New `BcsParser.DeclarationScanner` (private): a small pattern-
+    matcher fed token-by-token from the existing brace/paren-depth-
+    counting loops (`SkipBracedBlock`, `SkipBalancedParens`,
+    `ParseVariableDeclaration`'s declarator loop, `ParseFunction`'s
+    header loop) - additive to them, not a restructuring. Recognizes an
+    identifier immediately after a type keyword (or after a comma
+    continuing the same list, guarded by depth-equality so a function
+    call's arguments, e.g. `Foo(a, b)`, are never mistaken for a
+    declaration) as a declared name - including the real indexed form
+    (`global int 0:a, 1:b;`, confirmed from `zt-bcc`'s own
+    `src/parse/dec.c`, `read_instance_list`/`read_storage_index`). No
+    real expression/statement grammar was added - only this one
+    declaration-shaped pattern is recognized; everything else inside a
+    body is still skipped exactly as before.
+  - `BcsSpecialDeclaration` gets `Names` (plural - one `special`
+    statement can declare several, comma-separated, confirmed from
+    `dec.c`'s `p_read_special_list`) - deliberately **not** a
+    `Parameters` field to match `BcsFunctionDeclaration`: confirmed from
+    that same source (`read_special_param`) that special parameters are
+    declared by type only and are never named at all.
+  - New `BcsSymbol`/`BcsSymbolKind` and `BcsCompilationUnit.CollectSymbols()`
+    flatten every declared name in the file into one deduplicated list.
+    Deliberately **not** scope-aware - a local from one script can show
+    up while editing a different part of the file, the same "flat, not
+    scope-aware" fidelity diagnostic hover already has.
+  - **In-app**: `ScriptDocument` retains the parsed `BcsCompilationUnit`
+    (`_bcsUnit`, alongside the existing `_diagnostics` field) and offers
+    `CollectSymbols()` through completion alongside keywords, mapped to
+    Godot's real `CodeCompletionKind` (`Function`/`Variable`/`Enum`/
+    `Constant` - Godot has no dedicated "enum member" kind, `Constant`
+    is the closest honest fit).
+  - **LSP**: `BcsCompletionHandler` now takes a `BcsDocumentStore`
+    dependency (it didn't need one before) and merges the same
+    `CollectSymbols()` list, mapped to LSP's own `CompletionItemKind`
+    (which does have an exact `EnumMember`). Verified end-to-end against
+    the real running process: a function, its parameters, a body local,
+    a script's own body local, an enum type, and its members all showed
+    up with the correct kind; a plain *use* of a declared name (e.g.
+    `add(alpha, beta)`'s call arguments) did not get offered twice or
+    confused with a declaration.
 
 ## Real findings worth remembering (verified from zt-bcc's source, not general ACS knowledge)
 
@@ -122,16 +204,129 @@ that reports real syntax errors as LSP diagnostics for `.bcs` files.
   `.acs` files too, not just `.bcs` - it's genuinely the right grammar
   for both in all but that narrow edge case, not a shortcut.
 
+## Completion refinements: original casing, `#define` names (new)
+
+- **`BcsToken.RawValue`** (new) - the real source spelling of an
+  `Identifier`/`TypeName` token, before case-folding. `Value` stays
+  lowercased everywhere (grammar/lookup still needs that), but every
+  symbol-name extraction point in `BcsParser` (function/special/enum
+  names, script names, declarator names, body locals, macro names) now
+  uses `RawValue` instead - a real, confirmed bug before this: no matter
+  what case a user actually declared `MyVar` in, completion always
+  offered `myvar` back, since every name ultimately came from the
+  already-case-folded `Value`.
+- **Godot's own completion filter is unconditionally case-insensitive**
+  at the engine level - confirmed directly from `code_edit.cpp`
+  (`_filter_code_completion_candidates_impl`, which lowercases both the
+  typed prefix and every candidate's display text before fuzzy-
+  matching, with no opt-out short of overriding the whole
+  `_filter_code_completion_candidates` virtual). This is not a bug to
+  work around - typing `ADD` matching a declared `Add` is actually
+  *correct* for BCS, which is itself a case-insensitive language
+  (confirmed from `zt-bcc`'s own `user.c`) - so filtering case-
+  insensitively is the right behavior, not a shortcoming. Only the
+  *displayed/inserted* casing was actually wrong, and that's what
+  `RawValue` fixes.
+- **`#define NAME ...`** now contributes `NAME` (original casing) as a
+  `BcsSymbolKind.Macro` completion candidate via a new
+  `BcsDefineDirective` AST node - still genuinely not macro-expansion
+  support (the value/parameter list is still skipped, unmodeled, exactly
+  as before); this only recognizes that a name was declared so it can
+  be offered.
+
+## Preprocessor-directive highlighting + a latent tab-focus regression (new)
+
+- **`#directive` highlighting**: `BcsSyntaxHighlighter` now colors any
+  `#` plus the identifier immediately following it (tracked via a new
+  `previousSignificant` field threaded through `Rebuild`'s token loop) -
+  deliberately generalized to *any* directive name rather than a
+  hardcoded list, since a directive's name is just a plain `Identifier`
+  at the tokenizer level (none of `define`/`include`/`region`/etc. are
+  real reserved words - see `BcsParser`'s own remarks), so there's no
+  dedicated token type to switch on.
+- **Tab no longer toggled 2D/3D in the map view** - a latent bug from the
+  earlier tabs feature (not caused by anything in this file), only
+  surfacing once the user was actively clicking between tabs during BCS
+  testing. Root cause: Godot's `TabBar` defaults `focus_mode` to
+  `FOCUS_MODE_ALL` (confirmed via Godot's own docs), overriding
+  `Control`'s own default of `FOCUS_NONE` - clicking a tab left keyboard
+  focus on the `TabBar`, so a later `Tab` keypress was consumed by
+  Godot's built-in focus-navigation instead of reaching `MapView`'s own
+  `_UnhandledInput`-based toggle. Fixed with `focus_mode = 0` on the
+  `TabBar` node in `Scenes/Main.tscn`.
+
+## Scope-aware completion + go-to-definition (new)
+
+Both items the previous "Deferred" section flagged as needing the same
+underlying work - done together, since both need to answer "given a
+position, which declaration does this refer to, and where exactly is
+it."
+
+- **`BcsSymbol` now carries its own declaration position** (`Line`/
+  `Column`, not just `Name`/`Kind`). `BcsParser.DeclarationScanner`
+  builds fully-formed `BcsSymbol`s directly (position was already
+  available in every `BcsToken` it was handed - it just wasn't being
+  kept). Every field that used to be `List<string>` of declared names
+  (`BcsFunctionDeclaration.ParameterNames`, `BcsScriptDeclaration.ParameterNames`,
+  `BcsVariableDeclaration.DeclaratorNames`, `BcsEnumDeclaration.MemberNames`,
+  `BcsSpecialDeclaration.Names`) is now `List<BcsSymbol>` for the same
+  reason. A function/script's own name gets `NameLine`/`NameColumn` (or
+  `NumberLine`/`NumberColumn`) alongside it. Consequence: `BcsSymbol`
+  equality now includes position, so two distinct declarations that
+  happen to share a name (the same local redeclared across two different
+  scripts) no longer collapse for free in a `HashSet` the way they used
+  to - completion providers dedupe explicitly by `(Name, Kind)` instead.
+- **Body span tracking** - `BcsScriptDeclaration` already had `BodyLine`/
+  `BodyColumn` for the opening `{`; it now also has `BodyEndLine`/
+  `BodyEndColumn` for the matching closing `}`. `BcsFunctionDeclaration`
+  gets all four for the first time (it had none at all before).
+  `SkipBracedBlock` captures both ends directly rather than discarding
+  the closing brace's position the way it used to.
+- **`BcsCompilationUnit.CollectSymbolsVisibleAt(int line)`** - the
+  scope-aware replacement for completion: always includes file-scope
+  names (functions/scripts/special names, enum types+members, globals,
+  macros), plus a function/script's own parameters+locals only when
+  `line` falls inside that specific body's span. `CollectSymbols()` (the
+  old flat method) is unchanged and still used by a few tests.
+- **`BcsCompilationUnit.FindDeclaration(string name, int line)`** - the
+  go-to-definition resolver. Case-insensitive (BCS itself is
+  case-insensitive). Checks the enclosing body's own locals/parameters
+  first (correct shadowing - a local wins over a same-named global from
+  inside that local's own scope), falls back to file scope otherwise.
+- **In-app**: wired through Godot's own built-in Ctrl/Cmd+Click
+  mechanism rather than any custom hit-testing - confirmed from
+  `scene/gui/code_edit.cpp` directly: `symbol_validate(symbol)` fires on
+  Ctrl/Cmd-held mouse motion over a word (no position - same
+  mouse-position derivation the existing tooltip callback already
+  needs); the app answers via `SetSymbolLookupWordAsValid`;
+  `symbol_lookup(symbol, line, column)` then fires only on an actual
+  Ctrl/Cmd+click on a word already marked valid, handing over the
+  click's own 0-based position directly. `OnBcsCodeCompletionRequested`
+  now reads the caret's current line and calls `CollectSymbolsVisibleAt`
+  instead of the old flat `CollectSymbols()`.
+- **LSP**: new `BcsDefinitionHandler` (`textDocument/definition`),
+  registered in `Program.cs`. Unlike Godot's `CodeEdit`, LSP only hands
+  over a cursor position, never the word under it - a small `WordAt`
+  helper (scan both directions over word characters from the requested
+  column) finds it first. `BcsCompletionHandler` updated the same way as
+  the in-app side, using `request.Position.Line`.
+- Verified end-to-end against the real running LSP process (same
+  framed-JSON-RPC smoke-test approach as every other feature here): two
+  scripts each declaring a same-named local - `textDocument/definition`
+  on a use inside each resolves to *that script's own* local, not the
+  other's; a shared global resolves correctly from inside either;
+  `textDocument/completion` triggered inside one script's body excludes
+  the other script's locals while still offering the shared global.
+  In-app Ctrl+Click navigation and scope-filtered completion need the
+  user's own manual confirmation in the running app (no automated
+  coverage exists for `Scripts/View/*`, same existing precedent).
+
 ## Deferred, tracked, not cut
 
-- **Hover, completion, go-to-definition, any semantic analysis beyond
-  raw syntax diagnostics** - named explicitly out of scope for this
-  pass in every relevant doc comment. In-app `ScriptDocument` now shows
-  diagnostics as a line tint only, with no way to actually read a
-  diagnostic's message text in the app itself yet (no hover/tooltip, no
-  problems panel) - the message is there (`BcsDiagnostic.Message`),
-  just not surfaced visually. The standalone LSP server is the only way
-  to see diagnostic text today, via a real LSP client.
+- **Hover-on-identifier** ("what is this token") - hover is still
+  diagnostic-message-only. The symbol-resolution layer `FindDeclaration`
+  now provides could drive this too (hover a name → show what it
+  resolves to), but that's a new UI surface, not built yet.
 - **Multi-file `#include`/`#import` resolution** - this pass parses only
   the one open buffer; a real project's shared headers aren't resolved.
 - **Expression-level grammar inside variable declarations/script
@@ -147,6 +342,9 @@ that reports real syntax errors as LSP diagnostics for `.bcs` files.
   confirmed `#`-directive table; this pass accepts both a `#`-prefixed
   and bare-keyword spelling defensively. Read `zt-bcc`'s own
   `src/parse/stmt.c` before treating either as authoritative.
-- **Macro/preprocessor support** (`#define`, `##`, `TK_TYPENAME`-adjacent
-  macro-only pseudo-tokens) - not modeled at all; `#define`/`#region`/
-  `#endregion` are silently skipped to end of line.
+- **Macro/preprocessor expansion** (`#define`'s *value*/parameter list,
+  `##`, `TK_TYPENAME`-adjacent macro-only pseudo-tokens, conditional
+  compilation) - not modeled at all. A `#define`'s *name* is tracked
+  (see "Completion refinements" above) purely so it can be offered by
+  completion/go-to-definition; `#region`/`#endregion` are still
+  silently skipped to end of line.
