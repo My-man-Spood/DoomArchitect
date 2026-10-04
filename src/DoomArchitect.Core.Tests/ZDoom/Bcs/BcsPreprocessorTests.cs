@@ -219,4 +219,89 @@ public class BcsPreprocessorTests
         Assert.Empty(diagnostics);
         Assert.Contains(unit.Members, m => m is BcsVariableDeclaration v && v.DeclaratorNames.Any(d => d.Name == "included"));
     }
+
+    [Fact]
+    public void Parse_Stringize_TurnsTheRawArgumentIntoASingleStringLiteral()
+    {
+        // Decisive proof, same reasoning as the Phase 1 OPEN/CLOSE tests: if '#x' were NOT turned into one string literal, the three raw argument tokens "a b c" would pass straight through as three separate identifiers, and "str s = a b c;" is a real diagnostic (expected ';'); correctly stringized, it reads as "str s = \"a b c\";" - one clean string-literal initializer.
+        // (Macro named STRINGIFY, not STR - "str" is itself a real reserved word, confirmed from user.c's own keyword table, so it can never be a macro name either, same as in the real compiler.)
+        var (_, diagnostics) = BcsParser.Parse("#define STRINGIFY(x) #x\nstr s = STRINGIFY(a b c);\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_TokenPasting_JoinsTwoIdentifiersIntoOne()
+    {
+        // Decisive proof: unpasted, "CAT(x, y)" would leave "x y" as two separate identifiers - "int z = x y;" is a real diagnostic (expected ';'); correctly pasted into the single identifier "xy", it's clean.
+        var (_, diagnostics) = BcsParser.Parse("#define CAT(a, b) a ## b\nint xy = 1;\nint z = CAT(x, y);\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_TokenPasting_CanJoinAnIdentifierAndADigitIntoOneNewIdentifier()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#define MAKE(n) item ## n\nint item1 = 1;\nint w = MAKE(1);\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_ChainedTokenPasting_ResolvesLeftToRight()
+    {
+        // The middle operand ('b') is shared between both '##'s - a real regression risk if pass 2 treats the two pastes as independent non-overlapping pairs instead of folding the chain.
+        var (_, diagnostics) = BcsParser.Parse("#define CAT3(a, b, c) a ## b ## c\nint xyz = 1;\nint w = CAT3(x, y, z);\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_TokenPasting_WithAnEmptyArgumentOnOneSide_LeavesTheOtherSideStandingAlone()
+    {
+        // Confirmed real "placemarker" behavior: an empty argument adjacent to '##' contributes nothing, and the paste simply doesn't happen - the surviving side passes through unchanged rather than erroring.
+        var (_, diagnostics) = BcsParser.Parse("#define CAT(a, b) a ## b\nint x = 1;\nint w = CAT(x, );\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_TokenPasting_WithEmptyArgumentsOnBothSides_ProducesNothing()
+    {
+        // Decisive proof nothing leaks through: if any stray token survived between "1" and "+ 2", two primaries in a row with no operator between them would be a real diagnostic.
+        var (_, diagnostics) = BcsParser.Parse("#define CAT(a, b) a ## b\nint x = 1 CAT(,) + 2;\n");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Parse_TokenPasting_ThatProducesAnInvalidToken_ReportsADiagnostic()
+    {
+        // Pasting a decimal literal directly against an identifier ("1" + "x" = "1x") doesn't re-lex as one single token - a real, reported divergence from the real compiler's own hand-built compatibility table (see Paste's own remarks), not a silent no-op.
+        var (_, diagnostics) = BcsParser.Parse("#define BAD(a, b) a ## b\nint z = BAD(1, x);\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("invalid token"));
+    }
+
+    [Fact]
+    public void Parse_HashHashAtBeginningOfMacroBody_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#define BAD(x) ## x\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("beginning of macro body"));
+    }
+
+    [Fact]
+    public void Parse_HashHashAtEndOfMacroBody_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#define BAD(x) x ##\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("end of macro body"));
+    }
+
+    [Fact]
+    public void Parse_HashNotFollowedByAParameter_ReportsADiagnostic()
+    {
+        var (_, diagnostics) = BcsParser.Parse("#define BAD(x) #y\n");
+        Assert.Contains(diagnostics, d => d.Message.Contains("not a parameter"));
+    }
+
+    [Fact]
+    public void Parse_HashInAnObjectLikeMacro_IsJustALiteralHash_NotValidated()
+    {
+        // Confirmed real semantics (TK_PROCESSEDHASH): '#' only means "stringize" inside a FUNCTION-like macro's body - in an object-like one it's simply a literal token, never checked against anything.
+        var (_, diagnostics) = BcsParser.Parse("#define OBJ #foo\n");
+        Assert.Empty(diagnostics);
+    }
 }

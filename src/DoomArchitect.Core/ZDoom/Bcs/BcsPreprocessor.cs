@@ -1,3 +1,6 @@
+using System.IO;
+using System.Text;
+
 namespace DoomArchitect.Core.ZDoom.Bcs;
 
 /// <summary>
@@ -15,8 +18,9 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// recursive rescanning) plus Phase 2 (`#ifdef`/`#ifndef`/`#else`/
 /// `#endif` conditional compilation, and a bare `#if` tolerated as
 /// always-true - see <see cref="ReadIfdef"/>'s own remarks for exactly
-/// why) of a staged port. Deliberately deferred to later phases, not
-/// silently dropped: `##` token-pasting and `#` stringizing; real
+/// why) plus Phase 3 (`#` stringizing and `##` token-pasting - see
+/// <see cref="Stringize"/>/<see cref="Paste"/>) of a staged port.
+/// Deliberately deferred to later phases, not silently dropped: real
 /// `#if`/`#elif` condition *evaluation* (needs its own constant-
 /// expression evaluator - until it exists, both are treated leniently
 /// rather than correctly evaluated, see <see cref="ReadIfdef"/>); cross-
@@ -228,6 +232,7 @@ internal sealed class BcsPreprocessor
         }
 
         ReadMacroBody(macro);
+        ValidateMacroBody(macro);
 
         _macros[macro.Name] = macro; // last definition wins for lookup - real redefinition-conflict diagnostics are out of scope for this phase
         _macroOrder.Add(macro); // every definition still gets its own completion/hover/go-to-def entry, redefinition or not - matches this project's own existing position-based symbol identity
@@ -290,6 +295,46 @@ internal sealed class BcsPreprocessor
             var token = PullOneRaw(includeNewlines: true, out _);
             if (token.Type is BcsTokenType.Newline or BcsTokenType.EndOfInput) break;
             macro.Body.Add(token);
+        }
+    }
+
+    /// <summary>
+    /// Define-time validation for `#`/`##` inside a macro body - confirmed
+    /// real diagnostics from `dirc.c`'s own `read_body`/`read_body_item`,
+    /// which catch these as soon as the macro is defined rather than at
+    /// every later call site. A lone `#` inside an OBJECT-like macro's
+    /// body is deliberately never checked here at all - confirmed real
+    /// behavior (`TK_PROCESSEDHASH`): it's just a literal `#` there, no
+    /// stringize meaning, nothing to validate.
+    /// </summary>
+    private void ValidateMacroBody(BcsMacroDefinition macro)
+    {
+        if (macro.Body.Count == 0) return;
+
+        if (macro.Body[0].Type == BcsTokenType.HashHash)
+        {
+            _diagnostics.Add(new BcsDiagnostic("'##' operator at beginning of macro body", macro.Body[0].Line, macro.Body[0].Column));
+        }
+
+        if (macro.Body[^1].Type == BcsTokenType.HashHash)
+        {
+            _diagnostics.Add(new BcsDiagnostic("'##' operator at end of macro body", macro.Body[^1].Line, macro.Body[^1].Column));
+        }
+
+        for (var i = 0; i < macro.Body.Count; i++)
+        {
+            if (macro.Body[i].Type != BcsTokenType.Hash || !macro.IsFunctionLike) continue;
+
+            var next = i + 1 < macro.Body.Count ? macro.Body[i + 1] : null;
+            var isValidParam = next is { Type: BcsTokenType.Identifier } &&
+                macro.Parameters.Any(p => string.Equals(p, next.Value, StringComparison.OrdinalIgnoreCase));
+
+            if (!isValidParam)
+            {
+                _diagnostics.Add(new BcsDiagnostic(
+                    $"'{(next is null ? "?" : TokenText(next))}' is not a parameter of macro '{macro.Name}'",
+                    macro.Body[i].Line, macro.Body[i].Column));
+            }
         }
     }
 
@@ -522,38 +567,196 @@ internal sealed class BcsPreprocessor
     }
 
     /// <summary>
-    /// Pure substitution, one pass over the macro's own body - each
-    /// argument is first recursively expanded through
-    /// <see cref="ExpandTokenList"/> (confirmed real semantics for the
-    /// common case; both `#`/`##`, which would need the *unexpanded*
-    /// argument instead, are deferred), then substituted wherever its
-    /// parameter name appears in the body; everything else passes
-    /// through unchanged. Deliberately not entangled with the live
-    /// pull loop - directly unit-testable against hand-built token
-    /// lists.
+    /// Two passes over the macro's own body - confirmed real structure
+    /// (`stream.c`'s own `expand_macro`/`expand_id`, two separate walks
+    /// rather than one, for the same reason: `##`'s own operands must
+    /// already be fully substituted - though NOT yet macro-rescanned,
+    /// see <see cref="Paste"/> - before they can be pasted, so
+    /// substitution has to finish completely first).
+    ///
+    /// Pass 1 (substitution): each parameter occurrence is replaced -
+    /// with its argument pre-expanded through <see cref="ExpandTokenList"/>
+    /// in the common case (confirmed real semantics), but with the
+    /// RAW, unexpanded argument instead when the parameter sits
+    /// immediately next to a `##` on either side (confirmed real:
+    /// `stream.c`'s own `expand_id` checks exactly this adjacency before
+    /// deciding whether to pre-expand at all) - an empty such argument
+    /// contributes a single <see cref="BcsTokenType.Placemarker"/>
+    /// sentinel rather than nothing, so pass 2 can tell "genuinely
+    /// nothing here" apart from "the next unrelated body token just
+    /// happens to follow." A `#`-stringize of a parameter is resolved
+    /// here too (always against the raw argument - confirmed real,
+    /// `stringize()` never pre-expands). Every other body token,
+    /// including a bare `##` itself, passes through unchanged so pass 2
+    /// can find it.
+    ///
+    /// Pass 2 (concatenation): splices every `(left, '##', right)` into
+    /// one token via <see cref="Paste"/>, or - when a placemarker
+    /// sentinel stands on one side - passes the other side through
+    /// alone (or drops both, if both sides are empty). Deliberately not
+    /// entangled with the live pull loop - directly unit-testable
+    /// against hand-built token lists.
     /// </summary>
     private List<BcsToken> Expand(BcsMacroDefinition macro, List<List<BcsToken>> args)
     {
         var expandedArgs = new List<List<BcsToken>>(args.Count);
         foreach (var arg in args) expandedArgs.Add(ExpandTokenList(arg));
 
-        var result = new List<BcsToken>();
-        foreach (var token in macro.Body)
+        var substituted = new List<BcsToken>();
+        for (var i = 0; i < macro.Body.Count; i++)
         {
+            var token = macro.Body[i];
+
+            if (token.Type == BcsTokenType.Hash && macro.IsFunctionLike &&
+                i + 1 < macro.Body.Count && macro.Body[i + 1].Type == BcsTokenType.Identifier)
+            {
+                var stringizeIndex = macro.Parameters.FindIndex(p => string.Equals(p, macro.Body[i + 1].Value, StringComparison.OrdinalIgnoreCase));
+                if (stringizeIndex >= 0 && stringizeIndex < args.Count)
+                {
+                    substituted.Add(Stringize(token, args[stringizeIndex]));
+                    i++; // the parameter name itself is already consumed into the stringized result
+                    continue;
+                }
+            }
+
             if (token.Type == BcsTokenType.Identifier)
             {
                 var paramIndex = macro.Parameters.FindIndex(p => string.Equals(p, token.Value, StringComparison.OrdinalIgnoreCase));
                 if (paramIndex >= 0)
                 {
-                    if (paramIndex < expandedArgs.Count) result.AddRange(expandedArgs[paramIndex]);
+                    var adjacentToConcat =
+                        (i > 0 && macro.Body[i - 1].Type == BcsTokenType.HashHash) ||
+                        (i + 1 < macro.Body.Count && macro.Body[i + 1].Type == BcsTokenType.HashHash);
+
+                    if (adjacentToConcat)
+                    {
+                        var raw = paramIndex < args.Count ? args[paramIndex] : new List<BcsToken>();
+                        if (raw.Count == 0)
+                        {
+                            substituted.Add(new BcsToken { Type = BcsTokenType.Placemarker, Line = token.Line, Column = token.Column });
+                        }
+                        else
+                        {
+                            substituted.AddRange(raw);
+                        }
+                    }
+                    else if (paramIndex < expandedArgs.Count)
+                    {
+                        substituted.AddRange(expandedArgs[paramIndex]);
+                    }
+
                     continue;
                 }
             }
 
-            result.Add(token);
+            substituted.Add(token);
         }
 
-        return result;
+        // Mutates in place rather than walking forward pairwise - confirmed
+        // real structure (`expand_macro`'s own final loop: `concat()`
+        // rewrites `lside` into the paste result but does NOT advance past
+        // it, so the very next check re-examines whether *that* result is
+        // itself followed by another '##'). This is what correctly
+        // resolves a CHAIN (`a ## b ## c`): the shared middle operand
+        // first merges with its left neighbor, and the merged result is
+        // then immediately re-checked against the next '##' instead of
+        // being skipped over as if it were two independent pastes.
+        var working = new List<BcsToken>(substituted);
+        var idx = 0;
+        while (idx < working.Count)
+        {
+            if (idx + 1 >= working.Count || working[idx + 1].Type != BcsTokenType.HashHash) { idx++; continue; }
+
+            var hashHash = working[idx + 1];
+            var left = working[idx];
+            var hasRight = idx + 2 < working.Count;
+            var right = hasRight ? working[idx + 2] : new BcsToken { Type = BcsTokenType.Placemarker, Line = hashHash.Line, Column = hashHash.Column };
+
+            BcsToken? merged;
+            if (left.Type == BcsTokenType.Placemarker && right.Type == BcsTokenType.Placemarker) merged = null;
+            else if (left.Type == BcsTokenType.Placemarker) merged = right;
+            else if (right.Type == BcsTokenType.Placemarker) merged = left;
+            else merged = Paste(left, right, hashHash); // null on an invalid combination (diagnostic already reported) - nothing survives, same as the both-empty case
+
+            working.RemoveRange(idx + 1, hasRight ? 2 : 1);
+            working[idx] = merged ?? new BcsToken { Type = BcsTokenType.Placemarker, Line = hashHash.Line, Column = hashHash.Column };
+            // idx deliberately NOT advanced - see this method's own remarks
+        }
+
+        return working.Where(t => t.Type != BcsTokenType.Placemarker).ToList(); // a defensive final sweep, same as the real compiler's own - every placemarker should already have been consumed above
+    }
+
+    private static string TokenText(BcsToken token) => token.RawValue.Length > 0 ? token.RawValue : token.Value;
+
+    /// <summary>
+    /// `#` operator (confirmed real semantics, `stream.c`'s own
+    /// `stringize`): turns one parameter's RAW, unexpanded argument
+    /// tokens into a single new string literal - confirmed real that
+    /// the argument is never macro-expanded first here, unlike normal
+    /// substitution. Unlike the real compiler, this tokenizer never
+    /// keeps whitespace as its own token at all (see
+    /// <see cref="BcsToken.Length"/>'s own remarks) - a single space is
+    /// reinserted between two adjacent argument tokens only when their
+    /// real source columns actually had a gap, which approximates but
+    /// can't perfectly reproduce the real compiler's own literal-
+    /// whitespace preservation; a narrow, documented divergence; not a
+    /// bug.
+    /// </summary>
+    private static BcsToken Stringize(BcsToken hashToken, List<BcsToken> rawArgumentTokens)
+    {
+        var text = new StringBuilder();
+        for (var i = 0; i < rawArgumentTokens.Count; i++)
+        {
+            var current = rawArgumentTokens[i];
+            if (i > 0)
+            {
+                var previous = rawArgumentTokens[i - 1];
+                if (current.Line == previous.Line && current.Column > previous.Column + previous.Length) text.Append(' ');
+            }
+
+            text.Append(TokenText(current));
+        }
+
+        return new BcsToken { Type = BcsTokenType.LitString, Value = text.ToString(), Line = hashToken.Line, Column = hashToken.Column, Length = hashToken.Length };
+    }
+
+    /// <summary>
+    /// `##` operator (confirmed real semantics, `stream.c`'s own
+    /// `concat`/`concat_tangible`): joins two adjacent tokens' own
+    /// source text into one new token. Rather than hand-porting the
+    /// real compiler's own ~150-line hand-built `concat_result`
+    /// compatibility table (every legal lside/rside type pair), this
+    /// re-lexes the combined text through a fresh, throwaway
+    /// <see cref="BcsTokenizer"/> - whatever a single token would
+    /// really read as, that's the result; combined text that reads as
+    /// more than one token (or none, or something invalid) is the same
+    /// "produces an invalid token" real diagnostic, just detected
+    /// differently. The pasted token is deliberately NOT rescanned for
+    /// further macro expansion here - confirmed real (`concat_tangible`
+    /// never re-enters macro expansion on its own result either); that
+    /// happens for free afterward anyway, since <see cref="Expand"/>'s
+    /// own result is always rescanned by whichever caller invoked it
+    /// (<see cref="TryStartExpansion"/>/<see cref="ExpandTokenList"/>).
+    /// </summary>
+    private BcsToken? Paste(BcsToken left, BcsToken right, BcsToken hashHashToken)
+    {
+        var combinedText = TokenText(left) + TokenText(right);
+        var pasteDiagnostics = new List<BcsDiagnostic>();
+        var tokenizer = new BcsTokenizer(new BinaryReader(new MemoryStream(Encoding.UTF8.GetBytes(combinedText))), pasteDiagnostics);
+        var pasted = tokenizer.NextSignificantToken();
+        var trailing = tokenizer.NextSignificantToken();
+
+        if (pasteDiagnostics.Count > 0 || pasted.Type is BcsTokenType.EndOfInput or BcsTokenType.Invalid || trailing.Type != BcsTokenType.EndOfInput)
+        {
+            _diagnostics.Add(new BcsDiagnostic(
+                $"concatenating '{TokenText(left)}' and '{TokenText(right)}' via '##' produces an invalid token",
+                hashHashToken.Line, hashHashToken.Column));
+            return null;
+        }
+
+        pasted.Line = hashHashToken.Line;
+        pasted.Column = hashHashToken.Column;
+        return pasted;
     }
 
     /// <summary>

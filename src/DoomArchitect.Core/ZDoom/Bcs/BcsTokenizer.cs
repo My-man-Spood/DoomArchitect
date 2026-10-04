@@ -43,12 +43,21 @@ public sealed class BcsTokenString : Attribute
 /// recognized token would be a real regression against the actual
 /// compiler's grammar, not a fix - don't.
 ///
-/// Deliberately not modeled at all (no enum member): the 8 real
-/// preprocessor-pseudo tokens (<c>TK_NONE</c>/<c>TK_STRINGIZE</c>/
-/// <c>TK_PLACEMARKER</c>/<c>TK_PROCESSEDHASH</c>/<c>TK_LINKLIBRARY</c>/
-/// <c>TK_ENDMACRO</c>/<c>TK_ENDMACROARG</c>/<c>TK_MACRONAME</c>) and
-/// <c>TK_RESERVED</c> itself - no macro-expansion support exists yet.
-/// <c>TK_SPACE</c>/<c>TK_TAB</c> aren't modeled separately from
+/// Real macro expansion exists now (<see cref="BcsPreprocessor"/>), which
+/// needs exactly one of the real preprocessor-pseudo tokens as a genuine
+/// member - <see cref="Placemarker"/> (<c>TK_PLACEMARKER</c>), the
+/// `##`-concatenation empty-argument sentinel; see its own remarks for
+/// why. The other 7 (<c>TK_NONE</c>/<c>TK_STRINGIZE</c>/
+/// <c>TK_PROCESSEDHASH</c>/<c>TK_LINKLIBRARY</c>/<c>TK_ENDMACRO</c>/
+/// <c>TK_ENDMACROARG</c>/<c>TK_MACRONAME</c>) and <c>TK_RESERVED</c>
+/// itself are still deliberately not modeled as enum members:
+/// `#`-stringize and a lone `#` in an object-like macro body are
+/// recognized by position (immediately after `#`/inside which kind of
+/// macro) at expansion time instead of by mutating the stored token's
+/// type the way the real compiler does; self-reference
+/// (<c>TK_MACRONAME</c>) is handled by <see cref="BcsPreprocessor"/>'s
+/// own `_expanding` guard set instead of tagging a token; the rest
+/// genuinely have no use here yet. <c>TK_SPACE</c>/<c>TK_TAB</c> aren't modeled separately from
 /// <see cref="Whitespace"/> either - confirmed (<c>user.c</c>'s own
 /// `read_token`) that the real compiler's normal lexing path only ever
 /// produces <c>TK_HORZSPACE</c> for a run of spaces/tabs; the other two
@@ -63,6 +72,20 @@ public enum BcsTokenType
     BlockComment,
     Invalid,
     EndOfInput, // TK_END
+
+    /// <summary>
+    /// TK_PLACEMARKER - the real compiler's own `##`-concatenation
+    /// sentinel (confirmed from `stream.c`'s own `expand_id`/`concat`):
+    /// stands in for a parameter substituted with zero tokens
+    /// (an empty macro-call argument) while it's still adjacent to a
+    /// `##`, so the concatenation pass can tell "truly nothing here"
+    /// apart from "the next real token just happens to follow" before
+    /// being discarded. <see cref="BcsTokenizer"/> never produces this -
+    /// only <see cref="BcsPreprocessor"/>'s own `Expand` ever
+    /// synthesizes one, as pure in-memory bookkeeping with no source
+    /// position of its own meaning anything.
+    /// </summary>
+    Placemarker,
 
     LitDecimal, // TK_LIT_DECIMAL
     LitOctal,   // TK_LIT_OCTAL - real explicit "0o"/"0O" prefix only; a bare leading zero is decimal, never octal (confirmed divergence from both C and this project's own ZScriptTokenizer)

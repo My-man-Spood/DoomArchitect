@@ -733,16 +733,107 @@ recursive rescanning, within a single file.
   doc comment).
 
 **Explicitly deferred to later phases, not silently dropped (at the
-time):** `##` token-pasting and `#` stringizing; `#if`/`#elif` (needs
-its own constant-expression evaluator, comparable in scope to the
-expression-grammar work on its own); `#ifdef`/`#ifndef`/`#else`/
-`#endif` conditional compilation - **done in Phase 2, below**; cross-
-file macro visibility (today, a `#define` in an `#include`d file is
-**not** visible to the including file - true C-preprocessor semantics
-need `#include` to be a textual splice happening *during* tokenization,
-a fundamentally different model from the post-hoc symbol-merging
-`BcsProgram` already does for completion/hover/go-to-def; reconciling
-the two is real, separate work, still deferred).
+time):** `##` token-pasting and `#` stringizing - **done in Phase 3,
+below**; `#if`/`#elif` (needs its own constant-expression evaluator,
+comparable in scope to the expression-grammar work on its own), still
+deferred; `#ifdef`/`#ifndef`/`#else`/`#endif` conditional compilation -
+**done in Phase 2, above**; cross-file macro visibility (today, a
+`#define` in an `#include`d file is **not** visible to the including
+file - true C-preprocessor semantics need `#include` to be a textual
+splice happening *during* tokenization, a fundamentally different
+model from the post-hoc symbol-merging `BcsProgram` already does for
+completion/hover/go-to-def; reconciling the two is real, separate work,
+still deferred).
+
+## Real macro expansion - Phase 3: `#` stringizing and `##` token-pasting (new)
+
+The last of the originally-deferred `#define` mechanics, completing
+real object-like/function-like macro expansion as a faithful port.
+
+- Confirmed real grammar from `dirc.c`'s own `read_body`/`read_body_item`:
+  `##` at the very beginning or end of a macro body, and a `#` not
+  immediately followed by one of the macro's OWN parameters inside a
+  FUNCTION-like macro, are all real diagnostics reported at *define*
+  time, not at a later call site - `BcsPreprocessor.ValidateMacroBody`
+  (new) runs right after a macro's body is read. A lone `#` inside an
+  OBJECT-like macro's body is deliberately never checked at all -
+  confirmed real (`TK_PROCESSEDHASH`): it's just a literal `#` there,
+  no stringize meaning, nothing to validate.
+- **`BcsTokenType.Placemarker`** (new, genuinely real - `TK_PLACEMARKER`
+  in the real `enum tk`) - the real compiler's own sentinel for "this
+  parameter's argument was empty, but it's still adjacent to a `##`, so
+  don't let the next unrelated body token get mistaken for its other
+  operand." `BcsTokenizer` itself never produces one; only
+  `BcsPreprocessor.Expand`'s own in-memory bookkeeping ever does. The
+  class-level doc comment on `BcsTokenType` (listing what's
+  deliberately *not* modeled) is updated to explain why this one
+  earned a real member while 7 siblings still don't.
+- **`BcsPreprocessor.Expand`** rewritten as two confirmed-real passes
+  (`stream.c`'s own `expand_macro`, which also walks its body twice,
+  not once, for the same reason): pass 1 substitutes every parameter
+  (pre-expanded through `ExpandTokenList` in the common case, but with
+  the RAW, unexpanded argument when adjacent to a `##` on either side -
+  confirmed real, `expand_id`'s own adjacency check decides this before
+  ever considering nested expansion) and resolves every `#`-stringize
+  against the raw argument (`Stringize`, new); pass 2
+  (`BcsPreprocessor`'s own `##`-resolution loop) mutates a working list
+  in place rather than walking forward pairwise - confirmed real
+  structure (`concat()` rewrites its left operand into the paste result
+  without advancing past it) - which is what correctly folds a CHAIN of
+  `##`s (`a ## b ## c`, where the shared middle operand merges with its
+  left neighbor first and the result is then immediately re-checked
+  against the next `##`, rather than two independent non-overlapping
+  pastes being attempted).
+- **`Stringize`** (new) - confirmed real (`stream.c`'s own `stringize()`):
+  never macro-expands its argument first, unlike normal substitution.
+  One real, narrow, documented divergence: this tokenizer never keeps
+  whitespace as its own token at all (unlike the real one), so a single
+  space is reinserted between two argument tokens only when their real
+  source columns had an actual gap - an approximation of, not a perfect
+  reproduction of, the real compiler's own literal-whitespace
+  preservation.
+- **`Paste`** (new) - confirmed real semantics (`stream.c`'s own
+  `concat`/`concat_tangible`): joins two tokens' own source text into
+  one. Deliberately does NOT hand-port the real compiler's own
+  ~150-line hand-built `concat_result` compatibility table - instead
+  re-lexes the combined text through a fresh, throwaway `BcsTokenizer`
+  and accepts the result only if it reads back as exactly one valid
+  token, a pragmatic, equivalent-in-effect substitute. Combined text
+  that doesn't is the same "produces an invalid token" real diagnostic,
+  just detected differently; this project's own choice to report and
+  recover (drop the paste, keep going) rather than abort compilation
+  entirely can visibly cascade into a second, honest diagnostic right
+  after it (e.g. an initializer left with nothing in it) - not a bug,
+  the same "one real problem can cascade" pattern already accepted
+  elsewhere in this codebase.
+- Verified with new tests in `BcsPreprocessorTests.cs`: stringizing a
+  multi-token raw argument into one string literal (decisive shape
+  proof, same reasoning as Phase 1's own OPEN/CLOSE tests); pasting two
+  identifiers, and an identifier with a digit, into one new identifier;
+  a 3-way CHAINED paste (regression coverage for the shared-middle-
+  operand case specifically); an empty argument on one side of a `##`
+  leaving the other side standing alone; empty arguments on BOTH sides
+  producing nothing at all, with nothing leaking into the surrounding
+  expression; an invalid combination reporting a real diagnostic; `##`
+  at the beginning/end of a macro body; `#` not followed by a real
+  parameter; a lone `#` inside an object-like macro never validated.
+  Full suite (993 tests) passes with zero regressions. Confirmed
+  end-to-end against the real running LSP process for stringizing,
+  simple and chained pasting, an invalid paste's cascading diagnostics,
+  and the `##`-at-end-of-body diagnostic.
+- **Not independently tested, though confirmed correct from source and
+  documented in `Stringize`'s own remarks**: that stringizing truly
+  uses the raw argument rather than a pre-expanded one. This project's
+  parse-shape test strategy (prove a *diagnostic* difference between
+  right and wrong behavior) can't distinguish the two here - `Stringize`
+  always collapses whatever tokens it's given into exactly one string
+  literal regardless of their content, so there's no shape difference
+  to assert on either way.
+
+All three macro-expansion phases (object-like/function-like `#define`/
+`#undef`; `#ifdef`/`#ifndef`/`#else`/`#endif`; `#`/`##`) are now done.
+Still deferred, listed above: a real `#if`/`#elif` constant-expression
+evaluator, and cross-file macro visibility.
 
 ## Real macro expansion - Phase 2: `#ifdef`/`#ifndef`/`#else`/`#endif` (new)
 
