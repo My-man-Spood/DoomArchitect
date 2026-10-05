@@ -1151,3 +1151,77 @@ on Phase 1's `BcsPreprocessor` layer, no new architecture needed.
   is tolerated as always-true. Full suite (982 tests) passes with zero
   regressions. Confirmed end-to-end against the real running LSP
   process for all of the above.
+
+## Real `#include`/`#import` dedup semantics, fixed to match the real compiler (new)
+
+A follow-up correction to Phase 5, found while discussing with the user
+how to organize a map's scripting across multiple files. Phase 5's
+original splicing implementation treated `#include` and `#import`
+identically: a single `_visitedIncludes` set silently skipped
+re-splicing ANY resolved path once it had been seen before - true
+cycles and ordinary diamond-shaped repeats alike. Checking this against
+`zt-bcc`'s own real source turned up that this was wrong on both
+counts, and the two directives don't even share the same real
+semantics with each other:
+
+- **`#include`** (`source.c`'s own `p_load_included_source`): the real
+  compiler has NO general dedup at all. The identical file genuinely
+  gets re-spliced every time it's `#include`d - confirmed directly from
+  source, which even has a hardcoded special-case hard error
+  specifically for `#include`ing `zcommon.acs` more than once,
+  implying the general case (any other file) is NOT guarded and really
+  would re-splice, risking real duplicate-definition errors. The only
+  thing actually special-cased is a true CYCLE - this exact file still
+  actively open somewhere up the current include chain - reported as
+  a real diagnostic ("file already being loaded", confirmed wording),
+  not a silent skip.
+- **`#import`** (`library.c`'s own `load_imported_lib`: "Return the
+  library if it is already loaded"): genuinely different real
+  semantics - permanently deduped. Once a given resolved path has been
+  imported anywhere, importing it again (from the same or a different
+  file) is a silent no-op, by design, so many independent files can
+  each `#import` a shared library without caring whether another one
+  got there first. A library attempting to import itself is its own
+  real, separate diagnostic ("library attempting to import itself").
+
+This resolves a real, practical question: with `#include` having no
+dedup at all, how does a mapper safely organize shared functionality
+across several files without a shared dependency getting spliced in
+twice? The answer, confirmed as the actual real-world idiom (no
+special language support needed beyond what Phases 1/2 already
+built): a manual include guard, same shape as a C header guard -
+```c
+#ifndef COMMON_ACS_INCLUDED
+#define COMMON_ACS_INCLUDED
+// shared declarations
+#endif
+```
+- every sibling file can safely `#include` the shared file directly at
+its own top, in any order, and the second (and further) time it's
+reached, the guard macro is already defined and the body is skipped.
+
+- `BcsPreprocessor.SourceFrame` gained `ResolvedPath` (the frame's real,
+  never-blanked resolved path, distinct from the user-facing
+  `SourcePath` tag that's blanked to `""` for the main file) - needed
+  so a file including/importing *itself* can still be detected as a
+  cycle even though its own reported tag is blank.
+- `_visitedIncludes` (the old, wrong, single blanket-dedup set) is
+  replaced by two separate, correctly-scoped sets:
+  `_activeResolvedPaths` (mirrors `_sourceStack` push/pop exactly - a
+  true "currently open" cycle guard, seeded once with the main file's
+  own resolved path, which is never removed since that frame is never
+  popped) and `_importedPaths` (permanent, `#import`-only dedup,
+  matching "return the library if already loaded").
+- Verified with 4 new tests in `BcsProgramTests.cs`: `#include`ing the
+  same file twice from two separate directives really splices it twice
+  (decisive count-based proof - a declared name appears twice in the
+  resulting symbol list, not deduped to once); `#import`ing the same
+  library twice is a silent no-op the second time (the name appears
+  only once, zero diagnostics); a file `#import`ing itself reports the
+  real diagnostic; the existing circular-`#include` test now also
+  asserts the real "file already being loaded" diagnostic actually
+  appears (previously silently absent). Full suite (1020 tests) passes
+  with zero regressions. Confirmed end-to-end against the real running
+  LSP process: two sibling files each safely `#include`ing a guarded
+  shared file (clean), and a true `#include` cycle correctly reporting
+  the real diagnostic.

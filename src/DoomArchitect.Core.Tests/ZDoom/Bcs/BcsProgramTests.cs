@@ -70,7 +70,7 @@ public class BcsProgramTests : IDisposable
     [Fact]
     public void ParseProgram_CircularIncludes_TerminatesAndDoesNotDuplicate()
     {
-        // Confirmed real compiler behavior (zt-bcc's own task.c): files are deduped by resolved identity, so a cycle is spliced at most once per file, never infinitely.
+        // Confirmed real compiler behavior (zt-bcc's own source.c, p_load_included_source): a true cycle (this exact file still actively open up the current chain) is caught and reported - "file already being loaded" - rather than silently re-spliced into an infinite loop.
         var aPath = Path.Combine(_tempDir, "a.acs");
         var bPath = Path.Combine(_tempDir, "b.acs");
         File.WriteAllText(aPath, "#include \"b.acs\"\nfunction int FromA() { }");
@@ -81,6 +81,42 @@ public class BcsProgramTests : IDisposable
         Assert.Single(program.IncludedPaths); // only b.acs - the cycle back to a.acs itself is caught, not re-spliced
         Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "FromB");
         Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "FromA");
+        Assert.Contains(program.Diagnostics, d => d.Message.Contains("already being loaded"));
+    }
+
+    [Fact]
+    public void ParseProgram_IncludingTheSameFileTwiceFromDifferentDirectives_ReallySplicesItTwice()
+    {
+        // Confirmed real compiler behavior (zt-bcc's own source.c): #include has NO general dedup at all - the same file genuinely gets re-spliced every time it's #included (a real shared file needs its own manual #ifndef/#define include guard to be safe - plain #include alone doesn't protect against this, by design).
+        WriteFile("shared.acs", "int counter = 0;\n");
+        var mainPath = WriteFile("main.acs", "#include \"shared.acs\"\n#include \"shared.acs\"\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Equal(2, program.CollectSymbolsVisibleAt(1).Count(s => s.Name == "counter"));
+    }
+
+    [Fact]
+    public void ParseProgram_ImportingTheSameLibraryTwice_IsASilentNoOpTheSecondTime()
+    {
+        // Confirmed real compiler behavior (zt-bcc's own library.c, load_imported_lib: "Return the library if it is already loaded") - genuinely different from #include's own lack of dedup, by design, so many files can each #import a shared library without caring whether another one already did.
+        WriteFile("lib.acs", "int counter = 0;\n");
+        var mainPath = WriteFile("main.acs", "#import \"lib.acs\"\n#import \"lib.acs\"\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Single(program.CollectSymbolsVisibleAt(1), s => s.Name == "counter");
+        Assert.Empty(program.Diagnostics);
+    }
+
+    [Fact]
+    public void ParseProgram_FileImportingItself_ReportsTheRealDiagnostic()
+    {
+        var mainPath = WriteFile("main.acs", "#import \"main.acs\"\n");
+
+        var program = BcsParser.ParseProgram(File.ReadAllText(mainPath), mainPath, ReadFile);
+
+        Assert.Contains(program.Diagnostics, d => d.Message.Contains("attempting to import itself"));
     }
 
     [Fact]

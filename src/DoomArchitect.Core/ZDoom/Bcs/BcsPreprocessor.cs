@@ -64,8 +64,14 @@ internal sealed class BcsPreprocessor
     /// at the moment this frame was pushed - see <see cref="ReadFromCurrentSource"/>'s
     /// own remarks on why that's needed to correctly scope an unclosed
     /// `#if`-family block to *this* file when it closes.
+    /// <see cref="ResolvedPath"/> is this frame's real, never-blanked
+    /// resolved path (unlike <see cref="SourcePath"/>, which is blanked
+    /// to <c>""</c> for the bottom/main frame) - used only for the real
+    /// cycle check in <see cref="ReadIncludeOrImport"/>, which needs to
+    /// detect a file including/importing *itself* even though its own
+    /// reported tag is blank.
     /// </summary>
-    private sealed record SourceFrame(BcsTokenizer Tokenizer, string SourcePath, string? Directory, int ConditionalBaseline);
+    private sealed record SourceFrame(BcsTokenizer Tokenizer, string SourcePath, string? Directory, int ConditionalBaseline, string ResolvedPath);
 
     private readonly List<BcsDiagnostic> _diagnostics;
     private readonly BcsIncludeResolver? _includeResolver;
@@ -78,10 +84,29 @@ internal sealed class BcsPreprocessor
     // its own first level of relative includes.
     private readonly Stack<SourceFrame> _sourceStack = new();
 
-    // Resolved paths already spliced in (or the main file's own) -
-    // dedup/cycle-guard, confirmed real need (a diamond-shaped or
-    // circular include graph must splice each file at most once).
-    private readonly HashSet<string> _visitedIncludes = new(StringComparer.OrdinalIgnoreCase);
+    // Resolved paths CURRENTLY on _sourceStack (an ancestor chain, not
+    // "ever seen") - a real cycle guard, confirmed from source.c's own
+    // p_load_included_source ("file already being loaded" is checked
+    // against files still actively open, never against ones already
+    // finished and popped). The main file's own resolved path, when
+    // given, is seeded here once and never removed (it's never popped
+    // until the whole parse ends, so it's always "active").
+    //
+    // Deliberately NOT a general "already included, skip" dedup anymore -
+    // confirmed real (same source.c): #include has NO such dedup at all;
+    // the identical file genuinely gets re-spliced every time it's
+    // #included, which is exactly why a real shared file needs its own
+    // manual #ifndef/#define include guard to be included safely from
+    // more than one sibling.
+    private readonly HashSet<string> _activeResolvedPaths = new(StringComparer.OrdinalIgnoreCase);
+
+    // #import's own, genuinely different real semantics (confirmed from
+    // library.c's own load_imported_lib: "Return the library if it is
+    // already loaded") - once a library has been imported anywhere, a
+    // later #import of that same resolved path, from any file, is a
+    // silent no-op (reuse, not a re-splice) - permanently, never reset,
+    // unlike #include's own lack of any such dedup.
+    private readonly HashSet<string> _importedPaths = new(StringComparer.OrdinalIgnoreCase);
 
     // Every resolved path actually spliced in, in encounter order -
     // BcsProgram's own IncludedPaths reporting.
@@ -131,8 +156,9 @@ internal sealed class BcsPreprocessor
         _includeResolver = includeResolver;
 
         var mainPath = includeResolver?.MainSourcePath;
-        _sourceStack.Push(new SourceFrame(tokenizer, SourcePath: "", Directory: mainPath != null ? Path.GetDirectoryName(mainPath) : null, ConditionalBaseline: 0));
-        if (mainPath != null) _visitedIncludes.Add(Path.GetFullPath(mainPath));
+        var mainResolvedPath = mainPath != null ? Path.GetFullPath(mainPath) : "";
+        _sourceStack.Push(new SourceFrame(tokenizer, SourcePath: "", Directory: mainPath != null ? Path.GetDirectoryName(mainPath) : null, ConditionalBaseline: 0, ResolvedPath: mainResolvedPath));
+        if (mainPath != null) _activeResolvedPaths.Add(mainResolvedPath); // never removed - the bottom frame is never popped until the whole parse ends
     }
 
     /// <summary>Every `#define`/`#libdefine` encountered, in source order, even one later shadowed by a redefinition - <see cref="BcsParser.Parse"/> builds one <see cref="BcsDefineDirective"/> per entry after a full parse, preserving the existing completion/hover/go-to-def-for-macro-names feature unchanged.</summary>
@@ -289,6 +315,7 @@ internal sealed class BcsPreprocessor
             }
 
             var frame = _sourceStack.Pop();
+            _activeResolvedPaths.Remove(frame.ResolvedPath);
             while (_conditionalBranchTaken.Count > frame.ConditionalBaseline)
             {
                 _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column, BcsDiagnosticSeverity.Error, frame.SourcePath));
@@ -310,6 +337,7 @@ internal sealed class BcsPreprocessor
             }
 
             var frame = _sourceStack.Pop();
+            _activeResolvedPaths.Remove(frame.ResolvedPath);
             while (_conditionalBranchTaken.Count > frame.ConditionalBaseline)
             {
                 _diagnostics.Add(new BcsDiagnostic("unterminated #if/#ifdef/#ifndef - missing #endif", token.Line, token.Column, BcsDiagnosticSeverity.Error, frame.SourcePath));
@@ -339,9 +367,32 @@ internal sealed class BcsPreprocessor
     /// <see cref="SourceFrame"/> and the directive itself vanishes
     /// (no `BcsIncludeDirective`/`BcsImportDirective` node), exactly
     /// like `#define` vanishing today.
+    ///
+    /// `#include` and `#import` have genuinely different real dedup
+    /// semantics here, confirmed from source - NOT the same mechanism
+    /// this code used to treat them as:
+    /// <list type="bullet">
+    /// <item>`#include` (`source.c`'s own `p_load_included_source`): NO
+    /// general dedup at all. The same file genuinely gets re-spliced
+    /// every time it's `#include`d - a real shared file needs its own
+    /// manual `#ifndef`/`#define` include guard to be safely
+    /// `#include`d from more than one sibling. Only a true CYCLE (this
+    /// exact file still actively open somewhere up the current chain)
+    /// is special-cased - a real diagnostic ("file already being
+    /// loading", confirmed wording), not a silent skip.</item>
+    /// <item>`#import` (`library.c`'s own `load_imported_lib`: "Return
+    /// the library if it is already loaded"): genuinely deduped,
+    /// permanently - once a given resolved path has been imported
+    /// anywhere, importing it again (from the same or a different
+    /// file) is a silent no-op, by design, so many independent files
+    /// can each `#import` a shared library without caring whether
+    /// another one already did.</item>
+    /// </list>
     /// </summary>
     private void ReadIncludeOrImport(BcsToken directiveNameToken)
     {
+        var isImport = string.Equals(directiveNameToken.Value, "import", StringComparison.OrdinalIgnoreCase);
+
         var pathToken = PullOneRaw(includeNewlines: false, out _);
         if (pathToken.Type != BcsTokenType.LitString)
         {
@@ -368,7 +419,15 @@ internal sealed class BcsPreprocessor
         }
 
         var normalized = Path.GetFullPath(resolved);
-        if (!_visitedIncludes.Add(normalized)) return; // already spliced (or a cycle back to a file already on the stack) - silently skip, same dedup/cycle-safety as before
+
+        if (isImport && !_importedPaths.Add(normalized)) return; // already imported anywhere - silent reuse, confirmed real #import semantics
+
+        if (_activeResolvedPaths.Contains(normalized))
+        {
+            // A real cycle - this exact file is still actively open somewhere up the current chain (confirmed real diagnostics: source.c's own "file already being loaded" for #include, library.c's own "library attempting to import itself" for #import).
+            AddDiagnostic(isImport ? "library attempting to import itself" : "file already being loaded", pathToken.Line, pathToken.Column);
+            return;
+        }
 
         var text = _includeResolver!.ReadFile(resolved);
         if (text == null)
@@ -378,8 +437,9 @@ internal sealed class BcsPreprocessor
         }
 
         _includedPaths.Add(resolved);
+        _activeResolvedPaths.Add(normalized);
         var includedTokenizer = new BcsTokenizer(new BinaryReader(new MemoryStream(Encoding.UTF8.GetBytes(text))), _diagnostics, resolved);
-        _sourceStack.Push(new SourceFrame(includedTokenizer, resolved, Path.GetDirectoryName(resolved), ConditionalBaseline: _conditionalBranchTaken.Count));
+        _sourceStack.Push(new SourceFrame(includedTokenizer, resolved, Path.GetDirectoryName(resolved), ConditionalBaseline: _conditionalBranchTaken.Count, ResolvedPath: normalized));
     }
 
     /// <summary>
