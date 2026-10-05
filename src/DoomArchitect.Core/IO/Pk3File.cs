@@ -137,6 +137,10 @@ public sealed class Pk3File : IResourceContainer, IDisposable
         return null;
     }
 
+    /// <summary>Every real entry's own full path, folded into a real nested tree by <see cref="PathTreeBuilder"/> - directory entries were never indexed in the first place (see the constructor's own remarks), so nothing extra needs excluding here.</summary>
+    public ResourceTreeNode BuildTree(string displayName) =>
+        PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.Pk3Container, _entriesByPath.Keys);
+
     private static bool TitleMatches(string path, string name) =>
         Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase);
 

@@ -1,0 +1,36 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Scripts/View/ResourceBrowserPanel.cs" id="1"]
+
+[node name="ResourceBrowserPanel" type="PanelContainer"]
+script = ExtResource("1")
+
+[node name="Layout" type="VBoxContainer" parent="."]
+layout_mode = 2
+
+[node name="Toolbar" type="HBoxContainer" parent="Layout"]
+layout_mode = 2
+
+[node name="AddScriptButton" type="Button" parent="Layout/Toolbar"]
+layout_mode = 2
+focus_mode = 0
+disabled = true
+text = "Add Script"
+
+[node name="AddLibraryButton" type="Button" parent="Layout/Toolbar"]
+layout_mode = 2
+focus_mode = 0
+disabled = true
+text = "Add Library"
+
+[node name="Tree" type="Tree" parent="Layout"]
+layout_mode = 2
+focus_mode = 0
+size_flags_vertical = 3
+
+[node name="ContextMenu" type="PopupMenu" parent="."]
+
+[node name="StubDialog" type="AcceptDialog" parent="."]
+title = "Not Implemented Yet"
+initial_position = 1
+exclusive = false

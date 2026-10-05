@@ -167,6 +167,7 @@ so it isn't lost, not because it belongs in the tables below.
 |---|---|
 | [Multi-resource support (WadResourceSet)](resources-multi-resource-support.md) | |
 | [PK3 resource loading](resources-pk3-loading.md) | |
+| [Resource browser panel (VSCode-style source tree)](resources-browser-panel.md) | First pass - visibility/structure only, no UDB equivalent exists. |
 
 ### Input
 
@@ -194,6 +195,7 @@ so it isn't lost, not because it belongs in the tables below.
 | Item | Note |
 |---|---|
 | [Document tabs (map editor + script tabs)](documents-and-tabs.md) | |
+| [Map view SubViewport fix + immersive full-view 3D mode](ui-map-subviewport-immersive-3d.md) | Fixes the browser/map-view stacking bug; adds an opt-in full-window 3D mode. |
 
 ### Scripting / LSP
 

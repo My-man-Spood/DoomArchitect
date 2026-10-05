@@ -15,6 +15,31 @@ public sealed class WadLump
     public byte[] Data { get; }
 }
 
+/// <summary>One map's own contiguous lump run, found by <see cref="WadFile.FindMapLumpGroups"/> - <see cref="Lumps"/> is everything strictly after the marker (not including the marker itself), up to (and, for a UDMF group, including) its own terminator.</summary>
+public sealed record MapLumpGroup(string MarkerName, bool IsUdmf, IReadOnlyList<WadLump> Lumps);
+
+/// <summary>
+/// The two real map-lump-name sets, confirmed from the UDMF spec (classic
+/// binary-format lumps) and this project's own supported UDMF lump set -
+/// the single shared source of truth every "find this map's own lump group"
+/// consumer in this file/<see cref="ClassicMapReader"/>/<see cref="MapFileSaver"/>
+/// reads from, instead of each maintaining its own copy.
+/// </summary>
+public static class WadMapLumpNames
+{
+    public static readonly IReadOnlyList<string> Classic = new[]
+    {
+        "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS",
+        "NODES", "SECTORS", "REJECT", "BLOCKMAP", "BEHAVIOR", "SCRIPTS",
+    };
+
+    /// <summary>Everything that can follow a map marker's own <c>TEXTMAP</c> lump, per the UDMF spec - lumps this project doesn't model yet (<c>BEHAVIOR</c>/<c>DIALOGUE</c>/<c>ZNODES</c>/<c>BLOCKMAP</c>/<c>REJECT</c>/<c>SCRIPTS</c>) are included here purely so they're recognized as part of the group, not silently dropped.</summary>
+    public static readonly IReadOnlyList<string> Udmf = new[]
+    {
+        "TEXTMAP", "BEHAVIOR", "DIALOGUE", "ZNODES", "BLOCKMAP", "REJECT", "SCRIPTS", "ENDMAP",
+    };
+}
+
 /// <summary>
 /// Reads the classic WAD container format: a 12-byte header
 /// (identification, lump count, directory offset) followed by a flat
@@ -81,6 +106,83 @@ public sealed class WadFile : IResourceContainer
 
     public WadLump? FindLump(string name) =>
         Lumps.FirstOrDefault(l => l.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The index of the first lump named <paramref name="name"/>, or -1 - shared by every "locate a map's own marker" lookup (<see cref="ClassicMapReader"/>/<see cref="MapFileSaver"/> each used to re-implement this identically).</summary>
+    public static int FindMarkerIndex(IReadOnlyList<WadLump> lumps, string name)
+    {
+        for (var i = 0; i < lumps.Count; i++)
+        {
+            if (lumps[i].Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Scans forward from <paramref name="start"/> while each lump's name is
+    /// in <paramref name="knownNames"/>, returning the index just past the
+    /// group - the one shared "collect a map's own lump run" primitive every
+    /// consumer in this file/<see cref="ClassicMapReader"/>/<see cref="MapFileSaver"/>
+    /// now goes through, instead of each independently re-scanning. Stops
+    /// immediately after <paramref name="stopAfterName"/> if given (UDMF's
+    /// own <c>ENDMAP</c> terminator) - without it, stops at the first lump
+    /// whose name isn't in the known set at all (the classic-format case,
+    /// which has no terminator lump of its own).
+    /// </summary>
+    public static int FindGroupEnd(IReadOnlyList<WadLump> lumps, int start, IReadOnlyCollection<string> knownNames, string? stopAfterName = null)
+    {
+        var i = start;
+        while (i < lumps.Count && knownNames.Contains(lumps[i].Name, StringComparer.OrdinalIgnoreCase))
+        {
+            var isStop = stopAfterName != null && lumps[i].Name.Equals(stopAfterName, StringComparison.OrdinalIgnoreCase);
+            i++;
+            if (isStop) break;
+        }
+
+        return i;
+    }
+
+    /// <summary>
+    /// Every map in this WAD, each with its own marker name and real lump
+    /// group (<see cref="FindGroupEnd"/>, same real UDMF-vs-classic
+    /// lookahead <see cref="FindUdmfMapNames"/>/<see cref="FindClassicMapNames"/>
+    /// already use) - the general version those two only ever needed a
+    /// single-lump lookahead for, built for a tree-browser-style consumer
+    /// that needs each map's own full, ordered lump list, not just its
+    /// name. Walks the whole lump list once, in order; any lump not
+    /// recognized as starting a map (and not already consumed as part of
+    /// one) is simply skipped over here - a caller that wants "every lump
+    /// not in any map group" can still derive that by set difference against
+    /// <see cref="Lumps"/>.
+    /// </summary>
+    public IReadOnlyList<MapLumpGroup> FindMapLumpGroups()
+    {
+        var groups = new List<MapLumpGroup>();
+        var i = 0;
+
+        while (i < Lumps.Count)
+        {
+            var isUdmf = i + 1 < Lumps.Count && Lumps[i + 1].Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase);
+            var isClassic = !isUdmf && i + 1 < Lumps.Count && Lumps[i + 1].Name.Equals("THINGS", StringComparison.OrdinalIgnoreCase);
+
+            if (!isUdmf && !isClassic)
+            {
+                i++;
+                continue;
+            }
+
+            var markerName = Lumps[i].Name;
+            var bodyStart = i + 1;
+            var bodyEnd = isUdmf
+                ? FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP")
+                : FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Classic);
+
+            groups.Add(new MapLumpGroup(markerName, isUdmf, Lumps.Skip(bodyStart).Take(bodyEnd - bodyStart).ToList()));
+            i = bodyEnd;
+        }
+
+        return groups;
+    }
 
     /// <summary>A WAD has no real path hierarchy - a ZScript `#include` inside one references another lump directly by (bare) name, so this just strips any path/extension and delegates to <see cref="FindLump"/>.</summary>
     public byte[]? FindByPath(string path) => FindLump(Path.GetFileNameWithoutExtension(path))?.Data;
@@ -203,5 +305,54 @@ public sealed class WadFile : IResourceContainer
         }
 
         return Encoding.ASCII.GetString(Lumps[nextIndex].Data);
+    }
+
+    /// <summary>
+    /// A browsable tree for this WAD: one <see cref="ResourceTreeNodeKind.MapGroup"/>
+    /// child per map (<see cref="FindMapLumpGroups"/>, each with its own
+    /// lump children, in order), every other lump a flat top-level
+    /// <see cref="ResourceTreeNodeKind.Lump"/> child - a direct re-walk of
+    /// the same marker/group-end logic <see cref="FindMapLumpGroups"/> uses
+    /// (sharing the real scanning primitive, <see cref="FindGroupEnd"/>,
+    /// not re-implementing it) rather than built from its own output, since
+    /// a loose lump has no representation there at all. Deliberately NOT
+    /// sorted, unlike <see cref="PathTreeBuilder"/>'s own output - a WAD's
+    /// lump order is real file order, meaningful to preserve for browsing,
+    /// not an arbitrary dictionary enumeration order.
+    /// </summary>
+    public ResourceTreeNode BuildTree(string displayName)
+    {
+        var root = new ResourceTreeNode { DisplayName = displayName, Kind = ResourceTreeNodeKind.WadContainer };
+        var i = 0;
+
+        while (i < Lumps.Count)
+        {
+            var isUdmf = i + 1 < Lumps.Count && Lumps[i + 1].Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase);
+            var isClassic = !isUdmf && i + 1 < Lumps.Count && Lumps[i + 1].Name.Equals("THINGS", StringComparison.OrdinalIgnoreCase);
+
+            if (!isUdmf && !isClassic)
+            {
+                root.Children.Add(new ResourceTreeNode { DisplayName = Lumps[i].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[i].Name });
+                i++;
+                continue;
+            }
+
+            var markerName = Lumps[i].Name;
+            var bodyStart = i + 1;
+            var bodyEnd = isUdmf
+                ? FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP")
+                : FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Classic);
+
+            var mapNode = new ResourceTreeNode { DisplayName = markerName, Kind = ResourceTreeNodeKind.MapGroup, Path = markerName };
+            for (var j = bodyStart; j < bodyEnd; j++)
+            {
+                mapNode.Children.Add(new ResourceTreeNode { DisplayName = Lumps[j].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[j].Name });
+            }
+
+            root.Children.Add(mapNode);
+            i = bodyEnd;
+        }
+
+        return root;
     }
 }

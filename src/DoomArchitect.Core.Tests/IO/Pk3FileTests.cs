@@ -101,4 +101,28 @@ public class Pk3FileTests
         Assert.Single(flats);
         Assert.Equal(new byte[] { 1 }, flats[0].Data);
     }
+
+    [Fact]
+    public void BuildTree_FoldersBeforeFilesAlphabetically()
+    {
+        var pk3 = Pk3TestBuilder.Build(
+            ("zscript.zs", Array.Empty<byte>()),
+            ("flats/MYFLAT.png", Array.Empty<byte>()),
+            ("acs/main.acs", Array.Empty<byte>()));
+
+        var tree = pk3.BuildTree("my.pk3");
+
+        Assert.Equal("my.pk3", tree.DisplayName);
+        Assert.Equal(ResourceTreeNodeKind.Pk3Container, tree.Kind);
+        Assert.Equal(new[] { "acs", "flats", "zscript.zs" }, tree.Children.Select(c => c.DisplayName));
+        Assert.Equal(ResourceTreeNodeKind.Folder, tree.Children[0].Kind);
+        Assert.Equal(ResourceTreeNodeKind.Folder, tree.Children[1].Kind);
+        Assert.Equal(ResourceTreeNodeKind.File, tree.Children[2].Kind);
+
+        var acsFolder = tree.Children[0];
+        var mainAcs = Assert.Single(acsFolder.Children);
+        Assert.Equal("main.acs", mainAcs.DisplayName);
+        Assert.Equal(ResourceTreeNodeKind.File, mainAcs.Kind);
+        Assert.Equal("acs/main.acs", mainAcs.Path);
+    }
 }

@@ -175,4 +175,113 @@ public class WadFileTests
 
         Assert.Throws<NotSupportedException>(() => wad.ReadMapTextMap("E1M1"));
     }
+
+    [Fact]
+    public void FindMapLumpGroups_UdmfMap_StopsRightAfterEndmap()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", WadTestBuilder.TextLump("namespace = \"doom\";")),
+            ("BEHAVIOR", new byte[] { 1 }),
+            ("ENDMAP", Array.Empty<byte>()),
+            ("AFTER", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var groups = wad.FindMapLumpGroups();
+
+        var group = Assert.Single(groups);
+        Assert.Equal("MAP01", group.MarkerName);
+        Assert.True(group.IsUdmf);
+        Assert.Equal(new[] { "TEXTMAP", "BEHAVIOR", "ENDMAP" }, group.Lumps.Select(l => l.Name));
+    }
+
+    [Fact]
+    public void FindMapLumpGroups_ClassicMap_StopsAtFirstUnrecognizedLump()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("E1M1", Array.Empty<byte>()),
+            ("THINGS", new byte[] { 1 }),
+            ("LINEDEFS", new byte[] { 2 }),
+            ("VERTEXES", new byte[] { 3 }),
+            ("AFTER", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var groups = wad.FindMapLumpGroups();
+
+        var group = Assert.Single(groups);
+        Assert.Equal("E1M1", group.MarkerName);
+        Assert.False(group.IsUdmf);
+        Assert.Equal(new[] { "THINGS", "LINEDEFS", "VERTEXES" }, group.Lumps.Select(l => l.Name));
+    }
+
+    [Fact]
+    public void FindMapLumpGroups_MultipleMaps_EachGroupCorrectlyBounded()
+    {
+        // Decisive proof the classic group's own scan is bounded, not an unbounded search for known names across the whole WAD - E1M2's own THINGS must not leak into E1M1's group.
+        var bytes = WadTestBuilder.Build(
+            ("E1M1", Array.Empty<byte>()),
+            ("THINGS", new byte[] { 1 }),
+            ("E1M2", Array.Empty<byte>()),
+            ("THINGS", new byte[] { 2 }),
+            ("LINEDEFS", new byte[] { 3 }));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var groups = wad.FindMapLumpGroups();
+
+        Assert.Equal(2, groups.Count);
+        Assert.Equal("E1M1", groups[0].MarkerName);
+        Assert.Equal(new[] { "THINGS" }, groups[0].Lumps.Select(l => l.Name));
+        Assert.Equal("E1M2", groups[1].MarkerName);
+        Assert.Equal(new[] { "THINGS", "LINEDEFS" }, groups[1].Lumps.Select(l => l.Name));
+    }
+
+    [Fact]
+    public void FindMapLumpGroups_LumpsNotPartOfAnyMap_AreSkippedNotMisidentified()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("PLAYPAL", new byte[] { 1 }),
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", WadTestBuilder.TextLump("namespace = \"doom\";")),
+            ("ENDMAP", Array.Empty<byte>()));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var groups = wad.FindMapLumpGroups();
+
+        var group = Assert.Single(groups);
+        Assert.Equal("MAP01", group.MarkerName);
+    }
+
+    [Fact]
+    public void FindMapLumpGroups_NoMaps_ReturnsEmpty()
+    {
+        var bytes = WadTestBuilder.Build(("PLAYPAL", new byte[] { 1 }), ("COLORMAP", new byte[] { 2 }));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Empty(wad.FindMapLumpGroups());
+    }
+
+    [Fact]
+    public void BuildTree_MapsBecomeGroupsAndLooseLumpsStayFlat_InOriginalOrder()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("PLAYPAL", new byte[] { 1 }),
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", WadTestBuilder.TextLump("namespace = \"doom\";")),
+            ("ENDMAP", Array.Empty<byte>()),
+            ("COLORMAP", new byte[] { 2 }));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var tree = wad.BuildTree("my.wad");
+
+        Assert.Equal("my.wad", tree.DisplayName);
+        Assert.Equal(ResourceTreeNodeKind.WadContainer, tree.Kind);
+        Assert.Equal(new[] { "PLAYPAL", "MAP01", "COLORMAP" }, tree.Children.Select(c => c.DisplayName));
+        Assert.Equal(ResourceTreeNodeKind.Lump, tree.Children[0].Kind);
+
+        var mapNode = tree.Children[1];
+        Assert.Equal(ResourceTreeNodeKind.MapGroup, mapNode.Kind);
+        Assert.Equal(new[] { "TEXTMAP", "ENDMAP" }, mapNode.Children.Select(c => c.DisplayName));
+        Assert.All(mapNode.Children, c => Assert.Equal(ResourceTreeNodeKind.Lump, c.Kind));
+    }
 }

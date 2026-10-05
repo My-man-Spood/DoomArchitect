@@ -3,6 +3,8 @@
 [ext_resource type="Script" path="res://Scripts/View/AppShell.cs" id="1"]
 [ext_resource type="Theme" uid="uid://cj2ixmf56srbg" path="res://Assets/BaseTheme.tres" id="2"]
 [ext_resource type="Script" uid="uid://d3rertnouig4y" path="res://Scripts/View/MainMenuBar.cs" id="3"]
+[ext_resource type="PackedScene" path="res://Scenes/UI/ResourceBrowserPanel.tscn" id="4"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/icon_chevron.svg" id="5"]
 
 [node name="AppShell" type="Control"]
 anchors_preset = 15
@@ -57,11 +59,35 @@ focus_mode = 0
 theme_type_variation = &"DocumentTabBar"
 theme_override_constants/icon_max_width = 14
 
+[node name="ResourceBrowserPanel" parent="." instance=ExtResource("4")]
+layout_mode = 1
+anchor_right = 0.0
+anchor_bottom = 1.0
+offset_right = 260.0
+offset_top = 32.0
+grow_vertical = 2
+
+[node name="BrowserToggleLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="BrowserToggleButton" type="TextureButton" parent="BrowserToggleLayer"]
+layout_mode = 1
+offset_right = 16.0
+offset_bottom = 48.0
+focus_mode = 0
+mouse_default_cursor_shape = 2
+tooltip_text = "Toggle Resource Browser"
+ignore_texture_size = true
+stretch_mode = 5
+texture_normal = ExtResource("5")
+modulate = Color(1, 1, 1, 0.25)
+
 [node name="ContentArea" type="Control" parent="."]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
+offset_left = 260.0
 offset_top = 32.0
 grow_horizontal = 2
 grow_vertical = 2

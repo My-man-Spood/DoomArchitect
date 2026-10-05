@@ -11,26 +11,6 @@ namespace DoomArchitect.Core.IO;
 /// </summary>
 public static class MapFileSaver
 {
-    /// <summary>
-    /// The full set of real UDMF map-lump names that can follow a map
-    /// marker's own <c>TEXTMAP</c> lump, per the UDMF spec - used only to
-    /// find where an existing UDMF group ends so the lumps this project
-    /// doesn't understand yet (<c>BEHAVIOR</c>/<c>DIALOGUE</c>/<c>ZNODES</c>/
-    /// <c>BLOCKMAP</c>/<c>REJECT</c>/<c>SCRIPTS</c>) are preserved
-    /// byte-for-byte rather than silently dropped on save.
-    /// </summary>
-    private static readonly string[] UdmfGroupLumpNames =
-    {
-        "TEXTMAP", "BEHAVIOR", "DIALOGUE", "ZNODES", "BLOCKMAP", "REJECT", "SCRIPTS", "ENDMAP",
-    };
-
-    /// <summary>Matches <see cref="ClassicMapReader"/>'s own known classic map-lump set exactly.</summary>
-    private static readonly string[] ClassicGroupLumpNames =
-    {
-        "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS",
-        "NODES", "SECTORS", "REJECT", "BLOCKMAP", "BEHAVIOR", "SCRIPTS",
-    };
-
     public static byte[] SaveUdmfMap(IReadOnlyList<WadLump>? originalLumps, UdmfDocument document, string mapName)
     {
         var udmfText = UdmfWriter.Write(document);
@@ -70,7 +50,7 @@ public static class MapFileSaver
             };
         }
 
-        var markerIndex = FindMarkerIndex(originalLumps, mapName);
+        var markerIndex = WadFile.FindMarkerIndex(originalLumps, mapName);
         if (markerIndex < 0)
         {
             var appended = new List<WadLump>(originalLumps)
@@ -90,7 +70,7 @@ public static class MapFileSaver
 
         if (nextName != null && nextName.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase))
         {
-            var groupEnd = FindGroupEnd(originalLumps, nextIndex, UdmfGroupLumpNames, stopAfterEndMap: true);
+            var groupEnd = WadFile.FindGroupEnd(originalLumps, nextIndex, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP");
             for (var i = nextIndex; i < groupEnd; i++)
             {
                 var lump = originalLumps[i];
@@ -103,7 +83,7 @@ public static class MapFileSaver
 
         if (nextName != null && nextName.Equals("THINGS", StringComparison.OrdinalIgnoreCase))
         {
-            var groupEnd = FindGroupEnd(originalLumps, nextIndex, ClassicGroupLumpNames, stopAfterEndMap: false);
+            var groupEnd = WadFile.FindGroupEnd(originalLumps, nextIndex, WadMapLumpNames.Classic);
             result.Add(textMapLump);
             result.Add(new WadLump("ENDMAP", Array.Empty<byte>()));
             result.AddRange(originalLumps.Skip(groupEnd));
@@ -114,28 +94,5 @@ public static class MapFileSaver
         result.Add(new WadLump("ENDMAP", Array.Empty<byte>()));
         result.AddRange(originalLumps.Skip(nextIndex));
         return result;
-    }
-
-    private static int FindMarkerIndex(IReadOnlyList<WadLump> lumps, string mapName)
-    {
-        for (var i = 0; i < lumps.Count; i++)
-        {
-            if (lumps[i].Name.Equals(mapName, StringComparison.OrdinalIgnoreCase)) return i;
-        }
-
-        return -1;
-    }
-
-    private static int FindGroupEnd(IReadOnlyList<WadLump> lumps, int start, string[] knownNames, bool stopAfterEndMap)
-    {
-        var i = start;
-        while (i < lumps.Count && knownNames.Contains(lumps[i].Name, StringComparer.OrdinalIgnoreCase))
-        {
-            var isEndMap = stopAfterEndMap && lumps[i].Name.Equals("ENDMAP", StringComparison.OrdinalIgnoreCase);
-            i++;
-            if (isEndMap) break;
-        }
-
-        return i;
     }
 }

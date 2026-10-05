@@ -105,6 +105,10 @@ public sealed class DirectoryResource : IResourceContainer
         return null;
     }
 
+    /// <summary>Every real file's own relative path, folded into a real nested tree by <see cref="PathTreeBuilder"/> - mirrors <see cref="Pk3File.BuildTree"/>.</summary>
+    public ResourceTreeNode BuildTree(string displayName) =>
+        PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.DirectoryContainer, _pathsByRelativePath.Keys);
+
     private static bool TitleMatches(string relative, string name) =>
         Path.GetFileNameWithoutExtension(relative).Equals(name, StringComparison.OrdinalIgnoreCase);
 

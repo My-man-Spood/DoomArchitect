@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
@@ -42,6 +43,9 @@ public partial class MainMenuBar : MenuBar
 	/// around). Null-safe: a no-op if nothing's listening yet.
 	/// </summary>
 	public Action OpenScriptRequested { get; set; }
+
+	/// <summary>Fired with the new value whenever "Immersive 3D View" is toggled from the Preferences menu - <c>AppShell</c> owns what that actually does to its own layout (see its own remarks), this menu only owns persisting the setting and reflecting its checked state.</summary>
+	public Action<bool> Immersive3DViewToggled { get; set; }
 
 	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
 	{
@@ -104,12 +108,32 @@ public partial class MainMenuBar : MenuBar
 		// covers more than just game-configuration resources - it gained a
 		// Keybinds tab (see TODO/TODO.md's "Keybinding management" entry).
 		preferencesMenu.AddItem("Preferences...", 0);
+		preferencesMenu.AddCheckItem("Immersive 3D View", 1);
+		preferencesMenu.SetItemChecked(1, AppSettingsFile.Load().GetImmersive3DView());
 		preferencesMenu.IdPressed += id =>
 		{
 			if (id == 0) OpenPreferences();
+			else if (id == 1) ToggleImmersive3DView(preferencesMenu);
 		};
 
 		InitializeSelectionBoxMenu(preferencesMenu);
+	}
+
+	/// <summary>
+	/// Persists immediately on click, same as every other immediate-effect
+	/// Preferences menu item here (unlike <see cref="InitializeSelectionBoxMenu"/>'s
+	/// own "Selection Box" item, which is deliberately session-only) -
+	/// <see cref="Immersive3DViewToggled"/> is how <c>AppShell</c> finds
+	/// out, the same settable-callback shape <see cref="OpenScriptRequested"/>
+	/// already uses.
+	/// </summary>
+	private void ToggleImmersive3DView(PopupMenu preferencesMenu)
+	{
+		var settings = AppSettingsFile.Load();
+		var newValue = !settings.GetImmersive3DView();
+		AppSettingsFile.Save(settings.WithImmersive3DView(newValue));
+		preferencesMenu.SetItemChecked(1, newValue);
+		Immersive3DViewToggled?.Invoke(newValue);
 	}
 
 	/// <summary>

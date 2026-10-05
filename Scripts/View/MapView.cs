@@ -67,6 +67,9 @@ public partial class MapView : Node3D
 	public OpenMapMenu OpenMapMenu => _openMapMenu;
 	public MapOverlay Overlay => _overlay;
 
+	/// <summary>Fired whenever the 2D/3D toggle actually flips - <c>AppShell</c>'s own reason to care: an immersive full-view 3D mode (hiding the resource browser/tab strip/menu bar) needs to know the instant this happens, not poll for it.</summary>
+	public event Action<bool> In3DChanged;
+
 	private MapData _map;
 	private TextureCache _textureCache;
 	private TextureSet _textureSet;
@@ -1303,6 +1306,7 @@ public partial class MapView : Node3D
 				_targetHighlight.UpdateHighlights(null, _selectedSectors3D, _selectedLinedefs3D, _selectedThings3D, MapVector2.Zero);
 			}
 
+			In3DChanged?.Invoke(_in3D);
 			return;
 		}
 

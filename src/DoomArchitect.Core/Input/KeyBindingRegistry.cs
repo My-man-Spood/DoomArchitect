@@ -28,6 +28,7 @@ public static class KeyBindingRegistry
     private const string CategoryMarquee = "Marquee Selection";
     private const string CategoryNumericFields = "Numeric Fields";
     private const string CategoryCamera = "Camera";
+    private const string CategoryPanels = "Panels";
 
     public static IReadOnlyList<KeyBindingDefinition> All { get; } = new[]
     {
@@ -83,5 +84,7 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("camera_strafe_right", CategoryCamera, "Strafe Right", "Moves the 3D camera right.", new KeyBinding("D")),
         new KeyBindingDefinition("camera_fly_up", CategoryCamera, "Fly Up", "Moves the 3D camera straight up.", new KeyBinding("Space")),
         new KeyBindingDefinition("camera_fly_down", CategoryCamera, "Fly Down", "Moves the 3D camera straight down.", new KeyBinding("Shift")),
+
+        new KeyBindingDefinition("toggle_resource_browser", CategoryPanels, "Toggle Resource Browser", "Shows or hides the resource browser panel.", new KeyBinding("B", Ctrl: true)),
     };
 }

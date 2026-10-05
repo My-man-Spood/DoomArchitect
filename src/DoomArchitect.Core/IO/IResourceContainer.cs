@@ -29,4 +29,7 @@ public interface IResourceContainer
     /// full nested path.
     /// </summary>
     byte[]? FindByPath(string path);
+
+    /// <summary>A browsable tree for this whole container - see <see cref="ResourceTreeNode"/>'s own remarks. <paramref name="displayName"/> becomes the returned root's own name, since no container knows its own on-disk filename/label.</summary>
+    ResourceTreeNode BuildTree(string displayName);
 }

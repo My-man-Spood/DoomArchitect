@@ -78,4 +78,10 @@ public sealed class AppSettings
 
         return new AppSettings(_root.WithBlock("keybinds", KeyBindingOverrides.Write(overrides)));
     }
+
+    /// <summary>Whether switching into 3D mode should take over the whole app window (hiding the resource browser/tab strip/menu bar) instead of staying docked beside the resource browser - off (docked) by default, since it's a deliberate opt-in, not the normal editing posture.</summary>
+    public bool GetImmersive3DView() => _root.Find("immersive3dview")?.AsBool() ?? false;
+
+    public AppSettings WithImmersive3DView(bool value) =>
+        new(_root.WithAssignment("immersive3dview", CfgValue.OfBool(value)));
 }

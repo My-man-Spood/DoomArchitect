@@ -1,4 +1,5 @@
 using System.Linq;
+using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
@@ -49,10 +50,20 @@ public partial class AppShell : Control
 	private TabBar _tabBar;
 	private Control _tabStripPanel;
 	private Control _contentArea;
+	private ResourceBrowserPanel _resourceBrowserPanel;
+	private TextureButton _browserToggleButton;
 	private FileDialog _openScriptDialog;
+	private SubViewportContainer _mapViewportContainer;
 
 	private readonly System.Collections.Generic.List<Node> _tabContents = new();
 	private int _activeTab = -1;
+
+	private bool _in3D;
+	private bool _immersive3DEnabled;
+	private bool _isImmersive;
+	private bool _resourceBrowserVisibleBeforeImmersive;
+	private bool _browserToggleHovered;
+	private bool _browserPanelHovered;
 
 	public override void _Ready()
 	{
@@ -61,6 +72,8 @@ public partial class AppShell : Control
 		_tabBar = GetNode<TabBar>("TabStripLayer/TabStripPanel/TabBar");
 		_tabStripPanel = GetNode<Control>("TabStripLayer/TabStripPanel");
 		_contentArea = GetNode<Control>("ContentArea");
+		_resourceBrowserPanel = GetNode<ResourceBrowserPanel>("ResourceBrowserPanel");
+		_browserToggleButton = GetNode<TextureButton>("BrowserToggleLayer/BrowserToggleButton");
 		_openScriptDialog = GetNode<FileDialog>("OpenScriptDialog");
 
 		_tabBar.TabClosePressed += OnTabClosePressed;
@@ -69,17 +82,170 @@ public partial class AppShell : Control
 		_openScriptDialog.FileSelected += OnScriptFileSelected;
 		_mainMenuBar.OpenScriptRequested = () => _openScriptDialog.PopupCentered();
 
+		_browserToggleButton.Pressed += OnToggleResourceBrowser;
+		_browserToggleButton.MouseEntered += () => SetBrowserToggleHover(true);
+		_browserToggleButton.MouseExited += () => SetBrowserToggleHover(false);
+		_resourceBrowserPanel.MouseEntered += () => SetBrowserPanelHover(true);
+		_resourceBrowserPanel.MouseExited += () => SetBrowserPanelHover(false);
+		Resized += UpdateBrowserToggleButton;
+
+		_immersive3DEnabled = AppSettingsFile.Load().GetImmersive3DView();
+		_mainMenuBar.Immersive3DViewToggled = enabled =>
+		{
+			_immersive3DEnabled = enabled;
+			UpdateMapViewportLayout();
+		};
+
 		AddMapTab();
+		CallDeferred(MethodName.UpdateContentAreaLeftOffset);
+	}
+
+	/// <summary>
+	/// Lives outside any one tab's own input handling on purpose - the
+	/// resource browser is a permanent, tab-independent fixture (see this
+	/// class's own remarks), so its own toggle keybinding belongs at the
+	/// level that actually owns it, not duplicated into every tab type
+	/// that might otherwise want to poll for it.
+	/// </summary>
+	public override void _UnhandledInput(InputEvent @event)
+	{
+		if (@event.IsActionPressed("toggle_resource_browser")) OnToggleResourceBrowser();
+	}
+
+	private void OnToggleResourceBrowser()
+	{
+		_resourceBrowserPanel.Visible = !_resourceBrowserPanel.Visible;
+		UpdateContentAreaLeftOffset();
+		UpdateMapViewportLayout();
+	}
+
+	/// <summary>
+	/// A single collapse-and-reopen control, living outside the browser
+	/// (on its own <c>CanvasLayer</c>, deliberately above the base layer
+	/// everything else here sits on - the real bug an earlier, in-panel-
+	/// only collapse button had: hiding the whole panel took its own
+	/// toggle button down with it, leaving only the undiscoverable
+	/// keybinding; a second, separately-added button fixed reachability
+	/// but, being a plain sibling <c>Control</c> added to the tree before
+	/// the Map tab's own code-created <see cref="_mapViewportContainer"/>,
+	/// still ended up drawn *behind* it once the map view expanded to
+	/// reclaim the browser's space - a real, reported bug, not a guess).
+	/// Tracks the browser's own right edge (so it sits just outside it
+	/// when open, and at the screen's left edge when closed), vertically
+	/// centered on the browser's own height, and - per request - reads as
+	/// an almost-invisible edge handle rather than a normal toolbar
+	/// button: nearly transparent at rest, fading to full opacity while
+	/// either it or the browser itself is hovered (see
+	/// <see cref="SetBrowserToggleHover"/>/<see cref="SetBrowserPanelHover"/>).
+	/// Hidden entirely in immersive mode, same as every other piece of
+	/// chrome that mode hides.
+	/// </summary>
+	private void UpdateBrowserToggleButton()
+	{
+		_browserToggleButton.Visible = !_isImmersive;
+
+		const float buttonWidth = 16f;
+		const float buttonHeight = 48f;
+		var topOfBrowser = _menuBarPanel.Size.Y + _tabStripPanel.Size.Y;
+		var centerY = (topOfBrowser + Size.Y) / 2f;
+
+		_browserToggleButton.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+		_browserToggleButton.OffsetRight = _browserToggleButton.OffsetLeft + buttonWidth;
+		_browserToggleButton.OffsetTop = centerY - buttonHeight / 2f;
+		_browserToggleButton.OffsetBottom = centerY + buttonHeight / 2f;
+		_browserToggleButton.FlipH = !_resourceBrowserPanel.Visible;
+	}
+
+	private void SetBrowserToggleHover(bool hovered)
+	{
+		_browserToggleHovered = hovered;
+		UpdateBrowserToggleOpacity();
+	}
+
+	private void SetBrowserPanelHover(bool hovered)
+	{
+		_browserPanelHovered = hovered;
+		UpdateBrowserToggleOpacity();
+	}
+
+	/// <summary>Near-invisible at rest (0.25 alpha) - only reveals itself at full opacity while the pointer is actually over the toggle or the browser it controls, per request; a short tween rather than an instant snap so it reads as a deliberate reveal, not a flicker.</summary>
+	private void UpdateBrowserToggleOpacity()
+	{
+		var revealed = _browserToggleHovered || _browserPanelHovered;
+		CreateTween().TweenProperty(_browserToggleButton, "modulate:a", revealed ? 1f : 0.25f, 0.12);
+	}
+
+	/// <summary>Reclaims the resource browser's own real measured width for <see cref="_contentArea"/> when collapsed, gives it back when expanded - never a hand-picked constant, same reasoning as <see cref="AlignMapToolbarBelowTabStrip"/>'s own vertical offset. Only ever relevant to <see cref="_contentArea"/>'s own Script tabs - the Map tab's <see cref="_mapViewportContainer"/> has its own, separate layout logic in <see cref="UpdateMapViewportLayout"/>.</summary>
+	private void UpdateContentAreaLeftOffset()
+	{
+		_contentArea.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+	}
+
+	/// <summary>
+	/// Docks <see cref="_mapViewportContainer"/> beside the resource browser
+	/// and below the tab strip/menu bar - or, in immersive mode, expands it
+	/// to the full window and hides everything else - re-run on every input
+	/// that could change either: <see cref="MapView.In3DChanged"/>, the
+	/// "Immersive 3D View" preference being toggled, and the resource
+	/// browser's own collapse state changing. <see cref="_mapViewportContainer"/>'s
+	/// right/bottom anchors are fixed at 1 once in <see cref="AddMapTab"/> -
+	/// only its left/top offsets ever need recomputing here, so window
+	/// resizes alone don't need to trigger this.
+	/// </summary>
+	private void UpdateMapViewportLayout()
+	{
+		var wantImmersive = _in3D && _immersive3DEnabled;
+
+		if (wantImmersive && !_isImmersive)
+		{
+			_resourceBrowserVisibleBeforeImmersive = _resourceBrowserPanel.Visible;
+		}
+		else if (!wantImmersive && _isImmersive)
+		{
+			_resourceBrowserPanel.Visible = _resourceBrowserVisibleBeforeImmersive;
+		}
+
+		_isImmersive = wantImmersive;
+		_menuBarPanel.Visible = !wantImmersive;
+		_tabStripPanel.Visible = !wantImmersive;
+		if (wantImmersive) _resourceBrowserPanel.Visible = false;
+		UpdateBrowserToggleButton();
+
+		if (wantImmersive)
+		{
+			_mapViewportContainer.OffsetLeft = 0;
+			_mapViewportContainer.OffsetTop = 0;
+		}
+		else
+		{
+			_mapViewportContainer.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+			_mapViewportContainer.OffsetTop = _menuBarPanel.Size.Y + _tabStripPanel.Size.Y;
+		}
 	}
 
 	private void AddMapTab()
 	{
 		var mapDocument = GD.Load<PackedScene>(MapDocumentScenePath).Instantiate<MapView>();
-		_contentArea.AddChild(mapDocument);
+
+		var mapSubViewport = new SubViewport();
+		_mapViewportContainer = new SubViewportContainer
+		{
+			Stretch = true,
+			AnchorRight = 1f,
+			AnchorBottom = 1f,
+			OffsetRight = 0f,
+			OffsetBottom = 0f,
+		};
+		_mapViewportContainer.AddChild(mapSubViewport);
+		mapSubViewport.AddChild(mapDocument);
+		AddChild(_mapViewportContainer);
 		_tabContents.Add(mapDocument);
 
 		mapDocument.MainMenuBar = _mainMenuBar;
+		mapDocument.In3DChanged += OnMapIn3DChanged;
 		_mainMenuBar.Initialize(mapDocument.OpenMapMenu, mapDocument.Overlay);
+		mapDocument.OpenMapMenu.MapLoaded += (_, _, _, resources) => _resourceBrowserPanel.Refresh(resources);
+		mapDocument.OpenMapMenu.MapResourcesChanged += (_, _, resources) => _resourceBrowserPanel.Refresh(resources);
 
 		// Deferred: neither the menu bar's nor the tab strip panel's own
 		// height (its themed TabBar's natural minimum can exceed
@@ -92,6 +258,12 @@ public partial class AppShell : Control
 		SwitchTo(0);
 	}
 
+	private void OnMapIn3DChanged(bool in3D)
+	{
+		_in3D = in3D;
+		UpdateMapViewportLayout();
+	}
+
 	/// <summary>
 	/// The menu bar and tab strip both already sit above everything else on
 	/// their own <c>CanvasLayer</c>s - this just pushes the map's own
@@ -99,9 +271,9 @@ public partial class AppShell : Control
 	/// <see cref="_menuBarPanel"/>) down out of the way of both, the same
 	/// screen-space-position conflict a <c>CanvasLayer</c> would otherwise
 	/// produce. <see cref="_contentArea"/> (today only ever actually filled
-	/// by a Control-rooted tab like <c>ScriptDocument</c> - a Map tab's own
-	/// 3D content ignores its Control parent's offset entirely) only has to
-	/// clear the strip, not the map's own toolbar below it.
+	/// by a Control-rooted tab like <c>ScriptDocument</c>) only has to clear
+	/// the strip, not the map's own toolbar below it; <see cref="_mapViewportContainer"/>'s
+	/// own equivalent offset is computed by <see cref="UpdateMapViewportLayout"/>.
 	/// </summary>
 	private void AlignMapToolbarBelowTabStrip(MapView mapDocument)
 	{
@@ -111,6 +283,8 @@ public partial class AppShell : Control
 		_tabStripPanel.OffsetTop = menuBarHeight;
 		mapDocument.GetNode<Control>("UI/TopBar").OffsetTop = menuBarHeight + tabStripHeight;
 		_contentArea.OffsetTop = menuBarHeight + tabStripHeight;
+		_resourceBrowserPanel.OffsetTop = menuBarHeight + tabStripHeight;
+		UpdateMapViewportLayout();
 	}
 
 	private void OnScriptFileSelected(string path)
@@ -173,9 +347,14 @@ public partial class AppShell : Control
 		Activate(_tabContents[index]);
 	}
 
-	private static void Activate(Node content)
+	private void Activate(Node content)
 	{
-		if (content is MapView mapView) mapView.SetTabActive(true);
+		if (content is MapView mapView)
+		{
+			mapView.SetTabActive(true);
+			_mapViewportContainer.Visible = true;
+			UpdateMapViewportLayout();
+		}
 		else if (content is Control control)
 		{
 			control.Visible = true;
@@ -183,9 +362,13 @@ public partial class AppShell : Control
 		}
 	}
 
-	private static void Deactivate(Node content)
+	private void Deactivate(Node content)
 	{
-		if (content is MapView mapView) mapView.SetTabActive(false);
+		if (content is MapView mapView)
+		{
+			mapView.SetTabActive(false);
+			_mapViewportContainer.Visible = false;
+		}
 		else if (content is Control control)
 		{
 			control.Visible = false;

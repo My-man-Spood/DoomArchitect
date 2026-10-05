@@ -28,12 +28,6 @@ public static class ClassicMapReader
     private const int ThingRecordSize = 10;
     private const int NoSidedef = ushort.MaxValue;
 
-    private static readonly string[] MapLumpNames =
-    {
-        "THINGS", "LINEDEFS", "SIDEDEFS", "VERTEXES", "SEGS", "SSECTORS",
-        "NODES", "SECTORS", "REJECT", "BLOCKMAP", "BEHAVIOR", "SCRIPTS",
-    };
-
     public static (MapData Map, IReadOnlyList<string> Warnings) Read(WadFile wad, string mapName)
     {
         var lumps = FindMapLumps(wad, mapName);
@@ -87,31 +81,19 @@ public static class ClassicMapReader
     /// binary map lump - which in practice is always the next map's own
     /// marker, or the end of the WAD. Bounded on purpose: an unbounded
     /// search for e.g. "VERTEXES" across the whole WAD could pick up a
-    /// later map's lump if this one were missing its own.
+    /// later map's lump if this one were missing its own. Shared scanning
+    /// primitives (<see cref="WadFile.FindMarkerIndex"/>/<see cref="WadFile.FindGroupEnd"/>)
+    /// and the shared classic-lump-name set (<see cref="WadMapLumpNames.Classic"/>) -
+    /// this used to be its own independent copy of both.
     /// </summary>
     private static List<WadLump> FindMapLumps(WadFile wad, string mapName)
     {
-        var markerIndex = -1;
-        for (var i = 0; i < wad.Lumps.Count; i++)
-        {
-            if (wad.Lumps[i].Name.Equals(mapName, StringComparison.OrdinalIgnoreCase))
-            {
-                markerIndex = i;
-                break;
-            }
-        }
-
+        var markerIndex = WadFile.FindMarkerIndex(wad.Lumps, mapName);
         if (markerIndex < 0) throw new KeyNotFoundException($"No map named '{mapName}' found in this WAD.");
 
-        var lumps = new List<WadLump>();
-        for (var i = markerIndex + 1; i < wad.Lumps.Count; i++)
-        {
-            var lump = wad.Lumps[i];
-            if (!MapLumpNames.Contains(lump.Name, StringComparer.OrdinalIgnoreCase)) break;
-            lumps.Add(lump);
-        }
-
-        return lumps;
+        var bodyStart = markerIndex + 1;
+        var bodyEnd = WadFile.FindGroupEnd(wad.Lumps, bodyStart, WadMapLumpNames.Classic);
+        return wad.Lumps.Skip(bodyStart).Take(bodyEnd - bodyStart).ToList();
     }
 
     private static WadLump RequireLump(List<WadLump> lumps, string name, string mapName)

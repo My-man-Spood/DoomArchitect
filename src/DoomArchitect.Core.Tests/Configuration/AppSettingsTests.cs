@@ -165,4 +165,30 @@ public class AppSettingsTests
         Assert.Equal(new KeyBinding("Alt"), overrides["texture_nudge_amount_grid_modifier"]);
         Assert.Equal(new KeyBinding("Ctrl", Shift: true, Alt: true), overrides["draw_cardinal_lock_modifier"]);
     }
+
+    [Fact]
+    public void GetImmersive3DView_NothingSet_DefaultsToFalse()
+    {
+        var settings = AppSettings.Empty();
+
+        Assert.False(settings.GetImmersive3DView());
+    }
+
+    [Fact]
+    public void WithImmersive3DView_ThenGet_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithImmersive3DView(true);
+
+        Assert.True(settings.GetImmersive3DView());
+    }
+
+    [Fact]
+    public void Immersive3DView_ToText_ThenParse_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithImmersive3DView(true);
+
+        var reloaded = AppSettings.Parse(settings.ToText());
+
+        Assert.True(reloaded.GetImmersive3DView());
+    }
 }

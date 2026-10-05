@@ -88,4 +88,22 @@ public class DirectoryResourceTests
 
         Assert.Null(dir.FindLump("NOPE"));
     }
+
+    [Fact]
+    public void BuildTree_RealNestedFolderStructure()
+    {
+        var dir = DirectoryTestBuilder.Build(
+            ("acs/lib/shared.acs", Array.Empty<byte>()),
+            ("acs/main.acs", Array.Empty<byte>()));
+
+        var tree = dir.BuildTree("myproject");
+
+        Assert.Equal("myproject", tree.DisplayName);
+        Assert.Equal(ResourceTreeNodeKind.DirectoryContainer, tree.Kind);
+        var acsFolder = Assert.Single(tree.Children);
+        Assert.Equal(ResourceTreeNodeKind.Folder, acsFolder.Kind);
+        Assert.Equal(new[] { "lib", "main.acs" }, acsFolder.Children.Select(c => c.DisplayName));
+        Assert.Equal(ResourceTreeNodeKind.Folder, acsFolder.Children[0].Kind);
+        Assert.Equal(ResourceTreeNodeKind.File, acsFolder.Children[1].Kind);
+    }
 }
