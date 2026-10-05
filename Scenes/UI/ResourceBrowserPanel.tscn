@@ -23,10 +23,21 @@ focus_mode = 0
 disabled = true
 text = "Add Library"
 
+[node name="ToolbarSpacer" type="Control" parent="Layout/Toolbar"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="CollapseAllButton" type="Button" parent="Layout/Toolbar"]
+layout_mode = 2
+focus_mode = 0
+tooltip_text = "Collapse All"
+text = "Collapse All"
+
 [node name="Tree" type="Tree" parent="Layout"]
 layout_mode = 2
 focus_mode = 0
 size_flags_vertical = 3
+theme_override_constants/icon_max_width = 16
 
 [node name="ContextMenu" type="PopupMenu" parent="."]
 

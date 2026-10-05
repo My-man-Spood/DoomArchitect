@@ -32,4 +32,30 @@ public interface IResourceContainer
 
     /// <summary>A browsable tree for this whole container - see <see cref="ResourceTreeNode"/>'s own remarks. <paramref name="displayName"/> becomes the returned root's own name, since no container knows its own on-disk filename/label.</summary>
     ResourceTreeNode BuildTree(string displayName);
+
+    /// <summary>
+    /// Whether this container already provides the exact file at
+    /// <paramref name="absolutePath"/> as one of its own entries - used to
+    /// avoid double-counting a map's own backing WAD as a separate resource
+    /// when it physically lives inside a folder/PK3 that's already
+    /// configured as one (e.g. a GZDoom-convention <c>maps/MAP01.wad</c>
+    /// sitting inside a mod's own resource folder). Only a
+    /// <see cref="DirectoryResource"/> can ever really answer true here - a
+    /// WAD or PK3 has no standalone, independently-addressable files of its
+    /// own on disk to match against.
+    /// </summary>
+    bool ContainsFile(string absolutePath);
+
+    /// <summary>
+    /// The real on-disk absolute path backing <paramref name="relativePath"/>
+    /// (one of this container's own entries, exactly as its own
+    /// <see cref="BuildTree"/> output names it), or null if there isn't one -
+    /// a WAD or PK3 has no standalone files of its own to resolve to, same
+    /// as <see cref="ContainsFile"/>. Lets a caller that only has a tree
+    /// node's own relative path (e.g. the resource browser, matching a
+    /// folder-nested leaf against the currently open map's real file) go
+    /// the other direction from <see cref="ContainsFile"/> without needing
+    /// to know this container's own root itself.
+    /// </summary>
+    string? ResolveAbsolutePath(string relativePath);
 }

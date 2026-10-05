@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://dd0wcf87vs2oq"
-path="res://.godot/imported/icon_wad.svg-bb1b555c2fe53af8652e5cac11650f37.ctex"
+uid="uid://bumk1ngchvviq"
+path="res://.godot/imported/icon_lump.png-5d317911b700c7167624b102d5b184bb.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Icons/icon_wad.svg"
-dest_files=["res://.godot/imported/icon_wad.svg-bb1b555c2fe53af8652e5cac11650f37.ctex"]
+source_file="res://Assets/Icons/icon_lump.png"
+dest_files=["res://.godot/imported/icon_lump.png-5d317911b700c7167624b102d5b184bb.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

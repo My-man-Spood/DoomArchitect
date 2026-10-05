@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://brf6qcinkr5ir"
-path="res://.godot/imported/icon_lump.svg-d8313d89a6ecb3622a5aa0866bfa7e4c.ctex"
+uid="uid://b3t66m1pnsxjr"
+path="res://.godot/imported/icon_linedefs.png-d9fcf7ef34cf89405e8a43a3754568fc.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Icons/icon_lump.svg"
-dest_files=["res://.godot/imported/icon_lump.svg-d8313d89a6ecb3622a5aa0866bfa7e4c.ctex"]
+source_file="res://Assets/Icons/icon_linedefs.png"
+dest_files=["res://.godot/imported/icon_linedefs.png-d9fcf7ef34cf89405e8a43a3754568fc.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

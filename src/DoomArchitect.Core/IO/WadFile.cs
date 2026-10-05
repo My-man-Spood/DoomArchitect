@@ -355,4 +355,10 @@ public sealed class WadFile : IResourceContainer
 
         return root;
     }
+
+    /// <summary>A WAD's own lumps aren't independently addressable files on disk at all - never a match.</summary>
+    public bool ContainsFile(string absolutePath) => false;
+
+    /// <summary>A WAD lump has no standalone on-disk path of its own to resolve to.</summary>
+    public string? ResolveAbsolutePath(string relativePath) => null;
 }

@@ -9,31 +9,39 @@ using Godot;
 /// Script..." apply regardless of which tab happens to be showing; it
 /// used to live inside <c>MapDocument.tscn</c> itself, which made it
 /// disappear along with the rest of that tab's content whenever a Script
-/// tab was active - a real, reported bug, not a deliberate choice), above
-/// a tab strip (<see cref="TabBar"/> - the plain label/icon/close-button
-/// strip, not <c>TabContainer</c>, which only manages <see cref="Control"/>-
-/// type children as pages - the map document's own root is a <c>Node3D</c>,
+/// tab was active - a real, reported bug, not a deliberate choice) running
+/// the full window width, with everything else below it split into two
+/// columns, VSCode-Explorer-style: <see cref="_resourceBrowserPanel"/> on
+/// the left, running the full remaining height; a tab strip
+/// (<see cref="TabBar"/> - the plain label/icon/close-button strip, not
+/// <c>TabContainer</c>, which only manages <see cref="Control"/>-type
+/// children as pages - the map document's own root is a <c>Node3D</c>,
 /// since only one <see cref="Camera3D"/> can be <see cref="Camera3D.Current"/>
 /// across the whole viewport at a time and <c>CanvasLayer</c> content
 /// renders independently of normal scene-tree visibility either way, so
 /// hosting it needs <see cref="MapView.SetTabActive"/>'s own explicit
-/// toggling regardless of which container manages the strip), above a
-/// shared content area. Both the menu bar and the strip live on their own
-/// <c>CanvasLayer</c>s (15 and 20 respectively, both above every map
-/// document's own "UI" layer at 10) so they reliably render in front
-/// rather than fighting a map's own toolbar for draw order. The target
-/// order, top to bottom, is: the menu bar, then the tab strip, then
-/// whichever tab is active - for a Map tab, that's its own toolbar
-/// (mode/grid/test-map buttons) then the 2D/3D view; <see cref="AlignMapToolbarBelowTabStrip"/>
-/// pushes that map's own "TopBar" (now just the toolbar) down by the
-/// menu bar's and strip's combined height, measured fresh rather than a
-/// guessed constant, so it never fights either of them for the same
-/// screen-space position <c>CanvasLayer</c> content would otherwise land
-/// at by default. The map editor itself (<see cref="MapView"/> and
-/// everything else it owns) is wrapped here completely unchanged
-/// internally - this class only ever reparents/shows/hides it as one
-/// tab's content, and now also owns wiring its <see cref="MainMenuBar"/>
-/// up front since that's no longer part of the map document's own scene.
+/// toggling regardless of which container manages the strip) confined to
+/// the right of the browser's own column, above a shared content area
+/// occupying the same column below it. The menu bar and the strip both
+/// live on their own <c>CanvasLayer</c>s (15 and 20 respectively, both
+/// above every map document's own "UI" layer at 10) so they reliably
+/// render in front rather than fighting a map's own toolbar for draw
+/// order. <see cref="AlignMapToolbarBelowTabStrip"/> pushes that map's own
+/// "TopBar" (now just the toolbar) down by the menu bar's and strip's
+/// combined height, measured fresh rather than a guessed constant, so it
+/// never fights either of them for the same screen-space position
+/// <c>CanvasLayer</c> content would otherwise land at by default - and
+/// pushes <see cref="_resourceBrowserPanel"/> down by only the menu bar's
+/// own height, not the strip's too, since the browser's own column runs
+/// past the strip rather than starting below it (see
+/// <see cref="UpdateContentAreaLeftOffset"/> for the strip's own matching
+/// horizontal offset, kept past the browser's own column rather than
+/// spanning the full window width above it). The map editor itself
+/// (<see cref="MapView"/> and everything else it owns) is wrapped here
+/// completely unchanged internally - this class only ever reparents/
+/// shows/hides it as one tab's content, and now also owns wiring its
+/// <see cref="MainMenuBar"/> up front since that's no longer part of the
+/// map document's own scene.
 ///
 /// Exactly one Map tab exists today, created once on <see cref="_Ready"/>
 /// and not closable (there's no "no map open" empty state yet) - several
@@ -146,7 +154,7 @@ public partial class AppShell : Control
 
 		const float buttonWidth = 16f;
 		const float buttonHeight = 48f;
-		var topOfBrowser = _menuBarPanel.Size.Y + _tabStripPanel.Size.Y;
+		var topOfBrowser = _menuBarPanel.Size.Y;
 		var centerY = (topOfBrowser + Size.Y) / 2f;
 
 		_browserToggleButton.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
@@ -175,10 +183,24 @@ public partial class AppShell : Control
 		CreateTween().TweenProperty(_browserToggleButton, "modulate:a", revealed ? 1f : 0.25f, 0.12);
 	}
 
-	/// <summary>Reclaims the resource browser's own real measured width for <see cref="_contentArea"/> when collapsed, gives it back when expanded - never a hand-picked constant, same reasoning as <see cref="AlignMapToolbarBelowTabStrip"/>'s own vertical offset. Only ever relevant to <see cref="_contentArea"/>'s own Script tabs - the Map tab's <see cref="_mapViewportContainer"/> has its own, separate layout logic in <see cref="UpdateMapViewportLayout"/>.</summary>
+	/// <summary>
+	/// Reclaims the resource browser's own real measured width for
+	/// <see cref="_contentArea"/> and <see cref="_tabStripPanel"/> when
+	/// collapsed, gives it back when expanded - never a hand-picked
+	/// constant, same reasoning as <see cref="AlignMapToolbarBelowTabStrip"/>'s
+	/// own vertical offset. The tab strip only ever starts past the
+	/// browser's own column, not above it - the browser itself runs the
+	/// full height below the menu bar (see <see cref="AlignMapToolbarBelowTabStrip"/>'s
+	/// own <c>_resourceBrowserPanel.OffsetTop</c>), so it would otherwise
+	/// sit underneath a full-width tab strip rather than beside it.
+	/// <see cref="_mapViewportContainer"/> has its own, separate layout
+	/// logic in <see cref="UpdateMapViewportLayout"/>.
+	/// </summary>
 	private void UpdateContentAreaLeftOffset()
 	{
-		_contentArea.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+		var browserWidth = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+		_contentArea.OffsetLeft = browserWidth;
+		_tabStripPanel.OffsetLeft = browserWidth;
 	}
 
 	/// <summary>
@@ -227,6 +249,26 @@ public partial class AppShell : Control
 	{
 		var mapDocument = GD.Load<PackedScene>(MapDocumentScenePath).Instantiate<MapView>();
 
+		// Resolved by path, not via MapView.OpenMapMenu (null until
+		// mapDocument's own _Ready() runs) - and subscribed here, before
+		// mapDocument ever enters the tree below, so a MapLoaded fired
+		// synchronously from inside that _Ready() call is never missed.
+		// That's a real path, not a hypothetical one: the dev-only
+		// --file/--map command-line flags (see OpenMapMenu.LoadFromCommandLine)
+		// load a map synchronously from inside MapView._Ready() itself, which
+		// is exactly what AddChild(_mapViewportContainer) below triggers - a
+		// subscription added *after* that call, as this one used to be,
+		// misses that very first (and for this launch path, only) firing
+		// entirely, leaving the browser panel permanently empty despite a
+		// map genuinely being loaded. The normal, interactive File > Open
+		// Map... flow was never at risk - its MapLoaded fires from a dialog
+		// confirmation on a later frame, long after this method returns.
+		var openMapMenu = mapDocument.GetNode<OpenMapMenu>("UI/OpenMapMenu");
+		openMapMenu.MapLoaded += (_, _, _, resources) => _resourceBrowserPanel.Refresh(
+			resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
+		openMapMenu.MapResourcesChanged += (_, _, resources) => _resourceBrowserPanel.Refresh(
+			resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
+
 		var mapSubViewport = new SubViewport();
 		_mapViewportContainer = new SubViewportContainer
 		{
@@ -244,8 +286,6 @@ public partial class AppShell : Control
 		mapDocument.MainMenuBar = _mainMenuBar;
 		mapDocument.In3DChanged += OnMapIn3DChanged;
 		_mainMenuBar.Initialize(mapDocument.OpenMapMenu, mapDocument.Overlay);
-		mapDocument.OpenMapMenu.MapLoaded += (_, _, _, resources) => _resourceBrowserPanel.Refresh(resources);
-		mapDocument.OpenMapMenu.MapResourcesChanged += (_, _, resources) => _resourceBrowserPanel.Refresh(resources);
 
 		// Deferred: neither the menu bar's nor the tab strip panel's own
 		// height (its themed TabBar's natural minimum can exceed
@@ -274,6 +314,10 @@ public partial class AppShell : Control
 	/// by a Control-rooted tab like <c>ScriptDocument</c>) only has to clear
 	/// the strip, not the map's own toolbar below it; <see cref="_mapViewportContainer"/>'s
 	/// own equivalent offset is computed by <see cref="UpdateMapViewportLayout"/>.
+	/// <see cref="_resourceBrowserPanel"/> only clears the menu bar, not the
+	/// strip too - it runs the full height below the menu bar, VSCode-
+	/// Explorer-style, with the tab strip confined to the right of it
+	/// instead of spanning above it (see <see cref="UpdateContentAreaLeftOffset"/>).
 	/// </summary>
 	private void AlignMapToolbarBelowTabStrip(MapView mapDocument)
 	{
@@ -283,7 +327,7 @@ public partial class AppShell : Control
 		_tabStripPanel.OffsetTop = menuBarHeight;
 		mapDocument.GetNode<Control>("UI/TopBar").OffsetTop = menuBarHeight + tabStripHeight;
 		_contentArea.OffsetTop = menuBarHeight + tabStripHeight;
-		_resourceBrowserPanel.OffsetTop = menuBarHeight + tabStripHeight;
+		_resourceBrowserPanel.OffsetTop = menuBarHeight;
 		UpdateMapViewportLayout();
 	}
 

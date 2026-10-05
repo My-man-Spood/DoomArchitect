@@ -47,7 +47,15 @@ public partial class OpenMapMenu : PanelContainer
 	/// <summary>Fired after a successful Save/Save As/Save Into - lets <see cref="MainMenuBar"/> mark the undo stack clean without this class needing to know about it.</summary>
 	public event Action MapSaved;
 
-	private readonly record struct MapEntry(string Name, bool IsUdmf);
+	/// <summary>
+	/// <paramref name="SourceWadPath"/> is null for an entry found in an
+	/// already-loaded <see cref="_pendingWad"/> (the normal single-file open
+	/// flow) - non-null for one found while scanning a folder's own
+	/// <c>maps/*.wad</c> files (see <see cref="OnDirSelected"/>), where each
+	/// entry can come from a genuinely different little per-map WAD and none
+	/// of them is read until the user actually picks one.
+	/// </summary>
+	private readonly record struct MapEntry(string Name, bool IsUdmf, string SourceWadPath = null);
 
 	private FileDialog _fileDialog;
 	private FileDialog _saveFileDialog;
@@ -68,6 +76,18 @@ public partial class OpenMapMenu : PanelContainer
 	private string _pendingNamespace;
 	private IReadOnlyList<UdmfBlock> _pendingUnknownBlocks;
 	private bool _isRevisitingCurrentMap;
+
+	/// <summary>
+	/// Set only by <see cref="OnDirSelected"/>, consumed by
+	/// <see cref="PromptMapOptionsForPendingMap"/> to pre-fill the Map
+	/// Options resource list with the folder the map was opened from (so it
+	/// actually ends up configured as a resource, not just a path the map's
+	/// own data happened to be read from) - reset to null at the start of
+	/// every other entry point into this flow so a stale value from an
+	/// earlier, unrelated folder-open never leaks into one that didn't come
+	/// from a folder.
+	/// </summary>
+	private string _pendingFolderPath;
 
 	// The map actually loaded and displayed right now - distinct from the
 	// "_pending" load-in-progress state above, which only lives for the
@@ -109,7 +129,13 @@ public partial class OpenMapMenu : PanelContainer
 		_errorDialog.Exclusive = false;
 		_overwriteConfirmDialog.Exclusive = false;
 		_mapCollisionConfirmDialog.Exclusive = false;
+		// _fileDialog's own file_mode is OpenAny (set in MapDocument.tscn) -
+		// lets it also target a PK3-style resource folder directly, scanned
+		// for its own maps/*.wad files by OnDirSelected, rather than
+		// requiring the user to dig into it manually to find the one .wad
+		// file inside.
 		_fileDialog.FileSelected += OnFileSelected;
+		_fileDialog.DirSelected += OnDirSelected;
 		_saveFileDialog.FileSelected += OnSaveFileSelected;
 		_saveIntoFileDialog.FileSelected += OnSaveIntoFileSelected;
 		_overwriteConfirmDialog.Confirmed += OnOverwriteConfirmed;
@@ -138,6 +164,28 @@ public partial class OpenMapMenu : PanelContainer
 	public GameConfigurationKind CurrentGameConfigurationKind => _currentGameConfigurationKind;
 
 	public IReadOnlyList<string> CurrentResourcePaths => _currentResourcePaths;
+
+	/// <summary>
+	/// The exact <see cref="IResourceContainer"/> instance backing the
+	/// currently loaded map's own WAD - null for a brand-new, not-yet-saved
+	/// map. The same object reference this map's own entry in
+	/// <see cref="MapLoaded"/>'s <c>namedResources</c> list used (when it
+	/// has one at all - see <see cref="OnMapOptionsConfirmed"/>'s own
+	/// dedup), so a caller can identify "this resource IS the open map's
+	/// own file" by reference equality rather than by path string matching.
+	/// </summary>
+	public IResourceContainer CurrentMapContainer => _currentWad;
+
+	/// <summary>
+	/// The currently loaded map's own real backing file path - set even
+	/// when <see cref="CurrentMapContainer"/>'s own WAD has no top-level
+	/// entry of its own in the last-reported resource list (the folder-
+	/// dedup case - see <see cref="OnMapOptionsConfirmed"/>), which is
+	/// exactly the case a caller needs this for: finding the right nested
+	/// leaf by its own real path when there's no top-level entry to match
+	/// by reference instead.
+	/// </summary>
+	public string CurrentWadPath => _currentWadPath;
 
 	/// <summary>
 	/// The current map's own real saveable bytes, built with the exact same
@@ -173,6 +221,7 @@ public partial class OpenMapMenu : PanelContainer
 			_pendingWadPath = path;
 			_pendingMaps = maps;
 			_pendingFileName = Path.GetFileName(path);
+			_pendingFolderPath = null;
 			_isRevisitingCurrentMap = false;
 
 			if (maps.Count == 1)
@@ -191,6 +240,84 @@ public partial class OpenMapMenu : PanelContainer
 	}
 
 	/// <summary>
+	/// The folder-targeting counterpart of <see cref="OnFileSelected"/> -
+	/// picking a PK3-style resource folder directly (rather than a .wad/.pk3
+	/// file) scans its own <c>maps/</c> subfolder for the real GZDoom/ZDoom
+	/// convention of one little WAD per map (e.g. <c>maps/MAP01.wad</c>,
+	/// holding just that map's own geometry - everything else a map needs
+	/// still lives loosely in the folder's own namespace folders, following
+	/// the same convention <see cref="DirectoryResource"/> already reads).
+	/// Each found map can come from a different such WAD, so unlike
+	/// <see cref="OnFileSelected"/> nothing is actually read into
+	/// <see cref="_pendingWad"/> here - only once <see cref="PromptMapOptionsForPendingMap"/>
+	/// knows which single map was actually chosen.
+	/// </summary>
+	private void OnDirSelected(string dir)
+	{
+		try
+		{
+			var mapsFolder = FindMapsSubfolder(dir);
+			var maps = new List<MapEntry>();
+
+			if (mapsFolder != null)
+			{
+				foreach (var wadPath in Directory.EnumerateFiles(mapsFolder, "*.wad", SearchOption.TopDirectoryOnly))
+				{
+					WadFile wad;
+					try
+					{
+						wad = WadFile.Read(wadPath);
+					}
+					catch
+					{
+						// Not every *.wad sitting in maps/ need actually be a
+						// readable WAD (a stray, unrelated, or corrupt file) -
+						// skip it rather than aborting the whole folder scan.
+						continue;
+					}
+
+					foreach (var name in wad.FindUdmfMapNames()) maps.Add(new MapEntry(name, IsUdmf: true, wadPath));
+					foreach (var name in wad.FindClassicMapNames()) maps.Add(new MapEntry(name, IsUdmf: false, wadPath));
+				}
+			}
+
+			if (maps.Count == 0)
+			{
+				ShowError($"No supported maps found in '{Path.GetFileName(dir)}' (looked for maps{Path.DirectorySeparatorChar}*.wad).");
+				return;
+			}
+
+			_pendingMaps = maps;
+			_pendingFolderPath = dir;
+			_isRevisitingCurrentMap = false;
+
+			if (maps.Count == 1)
+			{
+				PromptMapOptionsForPendingMap(0);
+				return;
+			}
+
+			_mapSelectDialog.SetMaps(maps.Select(m => m.Name).ToList());
+			_mapSelectDialog.PopupCentered();
+		}
+		catch (Exception ex)
+		{
+			ShowError(ex.Message);
+		}
+	}
+
+	/// <summary>Case-insensitive match for the real GZDoom/ZDoom PK3 "maps" folder name - <see cref="DirectoryResource"/>'s own file index is already fully case-insensitive for the exact same reason.</summary>
+	private static string FindMapsSubfolder(string dir)
+	{
+		foreach (var sub in Directory.EnumerateDirectories(dir, "*", SearchOption.TopDirectoryOnly))
+		{
+			if (string.Equals(Path.GetFileName(sub), "maps", StringComparison.OrdinalIgnoreCase)) return sub;
+		}
+
+		return null;
+	}
+
+	/// <summary>
 	/// Parses the chosen map now (rather than waiting for the Map Options
 	/// prompt to be confirmed) so <see cref="GameConfigurationDetector"/>
 	/// can use its real Things as a signal, not just the map's name.
@@ -202,6 +329,16 @@ public partial class OpenMapMenu : PanelContainer
 
 		try
 		{
+			// A folder-sourced entry (see OnDirSelected) names its own real
+			// per-map WAD rather than reusing an already-loaded _pendingWad -
+			// only the one map actually picked ever gets read this way.
+			if (map.SourceWadPath != null)
+			{
+				_pendingWad = WadFile.Read(map.SourceWadPath);
+				_pendingWadPath = map.SourceWadPath;
+				_pendingFileName = Path.GetFileName(map.SourceWadPath);
+			}
+
 			if (map.IsUdmf)
 			{
 				var document = UdmfReader.Read(_pendingWad.ReadMapTextMap(map.Name));
@@ -218,7 +355,7 @@ public partial class OpenMapMenu : PanelContainer
 			}
 
 			_pendingMapName = map.Name;
-			ShowMapOptionsDialog(_pendingMapData, _pendingWadPath, map.Name, _pendingFileName);
+			ShowMapOptionsDialog(_pendingMapData, _pendingWadPath, map.Name, _pendingFileName, _pendingFolderPath);
 		}
 		catch (Exception ex)
 		{
@@ -246,6 +383,7 @@ public partial class OpenMapMenu : PanelContainer
 		_pendingWadPath = _currentWadPath;
 		_pendingMapData = _currentMapData;
 		_pendingMapName = _currentMapName;
+		_pendingFolderPath = null;
 		_isRevisitingCurrentMap = true;
 
 		ShowMapOptionsDialog(_currentMapData, _currentWadPath, _currentMapName, Path.GetFileName(_currentWadPath));
@@ -269,18 +407,28 @@ public partial class OpenMapMenu : PanelContainer
 		_pendingMapName = mapName;
 		_pendingNamespace = null;
 		_pendingUnknownBlocks = null;
+		_pendingFolderPath = null;
 		_isRevisitingCurrentMap = false;
 
 		ShowMapOptionsDialog(_pendingMapData, null, mapName, null);
 	}
 
-	private void ShowMapOptionsDialog(MapData mapData, string wadPath, string mapName, string fileNameHint)
+	private void ShowMapOptionsDialog(MapData mapData, string wadPath, string mapName, string fileNameHint, string additionalResourcePath = null)
 	{
-		PopulateMapOptionsDialogDefaults(mapData, wadPath, mapName, fileNameHint);
+		PopulateMapOptionsDialogDefaults(mapData, wadPath, mapName, fileNameHint, additionalResourcePath);
 		_mapOptionsDialog.PopupCentered();
 	}
 
-	private void PopulateMapOptionsDialogDefaults(MapData mapData, string wadPath, string mapName, string fileNameHint)
+	/// <summary>
+	/// <paramref name="additionalResourcePath"/> is only ever the folder a
+	/// map was just opened *from* (see <see cref="OnDirSelected"/>) - makes
+	/// sure that folder actually ends up configured as a resource by
+	/// default, rather than merely being where the map's own data happened
+	/// to be read from, which is what lets <see cref="OnMapOptionsConfirmed"/>'s
+	/// own <see cref="IResourceContainer.ContainsFile"/> dedup check
+	/// actually have something to find.
+	/// </summary>
+	private void PopulateMapOptionsDialogDefaults(MapData mapData, string wadPath, string mapName, string fileNameHint, string additionalResourcePath = null)
 	{
 		var mapSettings = MapSettingsFile.Load(wadPath);
 		var suggestion = mapSettings.GetGameConfiguration()
@@ -288,9 +436,16 @@ public partial class OpenMapMenu : PanelContainer
 		_mapOptionsDialog.SetGameConfiguration(suggestion);
 
 		var savedResources = mapSettings.GetResources(mapName);
-		var resourcePaths = savedResources.Count > 0
+		var resourcePaths = (savedResources.Count > 0
 			? savedResources
-			: AppSettingsFile.Load().GetDefaultResources(suggestion);
+			: AppSettingsFile.Load().GetDefaultResources(suggestion)).ToList();
+
+		if (additionalResourcePath != null
+			&& !resourcePaths.Contains(additionalResourcePath, StringComparer.OrdinalIgnoreCase))
+		{
+			resourcePaths.Add(additionalResourcePath);
+		}
+
 		_mapOptionsDialog.SetResourcePaths(resourcePaths);
 	}
 
@@ -343,6 +498,7 @@ public partial class OpenMapMenu : PanelContainer
 			_pendingFileName = Path.GetFileName(wadPath);
 			_pendingMapData = mapData;
 			_pendingMapName = match.Name;
+			_pendingFolderPath = null;
 			_isRevisitingCurrentMap = false;
 
 			PopulateMapOptionsDialogDefaults(mapData, wadPath, match.Name, _pendingFileName);
@@ -361,9 +517,20 @@ public partial class OpenMapMenu : PanelContainer
 		var kind = _mapOptionsDialog.GetGameConfiguration();
 		var resourcePaths = _mapOptionsDialog.GetResourcePaths();
 		var resourceContainers = _mapOptionsDialog.GetResourceContainers().ToList();
+
 		// A brand-new map (New Map) has no backing WAD of its own yet to
 		// append as a resource container - nothing to add in that case.
-		if (_pendingWad != null) resourceContainers.Add(_pendingWad);
+		// Also skipped when the map's own WAD physically lives inside one of
+		// the *other* chosen resources already (the real GZDoom/ZDoom
+		// maps/MAP01.wad-inside-a-resource-folder convention, same thing
+		// OnDirSelected's own folder-open flow produces by construction) -
+		// otherwise it would show up twice: once as that resource's own
+		// nested file, once again as its own separate, fully-expanded entry.
+		var wadAlreadyCoveredByAnotherResource = _pendingWad != null && _pendingWadPath != null
+			&& resourceContainers.Any(c => c.ContainsFile(_pendingWadPath));
+		var includePendingWadAsResource = _pendingWad != null && !wadAlreadyCoveredByAnotherResource;
+
+		if (includePendingWadAsResource) resourceContainers.Add(_pendingWad);
 		var resources = new ResourceSet(resourceContainers);
 		var textures = TextureSet.Load(resources);
 		// Layers in whatever the map's own resources' ZSCRIPT/DECORATE/
@@ -374,8 +541,8 @@ public partial class OpenMapMenu : PanelContainer
 
 		// Paired up in the same order the containers were appended above -
 		// the map's own file (no saved path entry of its own) always last,
-		// skipped entirely when there's no file yet.
-		var resourcePathsForNamedResources = _pendingWad != null ? resourcePaths.Append(_pendingWadPath) : resourcePaths;
+		// skipped entirely when there's no file yet or it's already covered.
+		var resourcePathsForNamedResources = includePendingWadAsResource ? resourcePaths.Append(_pendingWadPath) : resourcePaths;
 		var namedResources = resourcePathsForNamedResources
 			.Zip(resourceContainers, (path, container) => new NamedResource(Path.GetFileName(path), container))
 			.ToList();
@@ -386,13 +553,17 @@ public partial class OpenMapMenu : PanelContainer
 		}
 		else
 		{
-			MapLoaded?.Invoke(_pendingMapData, textures, gameConfiguration, namedResources);
+			// Updated before MapLoaded fires, not after - CurrentMapContainer/
+			// CurrentMapName need to already reflect the map that was just
+			// loaded by the time any subscriber (e.g. ResourceBrowserPanel,
+			// highlighting whichever tree item is the open map) reacts to it.
 			_currentWad = _pendingWad;
 			_currentWadPath = _pendingWadPath;
 			_currentMapName = _pendingMapName;
 			_currentMapData = _pendingMapData;
 			_currentNamespace = _pendingNamespace ?? DefaultNamespaceFor(kind);
 			_currentUnknownBlocks = _pendingUnknownBlocks ?? Array.Empty<UdmfBlock>();
+			MapLoaded?.Invoke(_pendingMapData, textures, gameConfiguration, namedResources);
 		}
 
 		// Applies to both branches - "Map Options..." on the already-loaded

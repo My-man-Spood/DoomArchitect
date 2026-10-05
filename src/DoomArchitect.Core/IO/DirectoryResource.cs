@@ -109,6 +109,22 @@ public sealed class DirectoryResource : IResourceContainer
     public ResourceTreeNode BuildTree(string displayName) =>
         PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.DirectoryContainer, _pathsByRelativePath.Keys);
 
+    /// <summary>Compares full, normalized paths rather than the raw string, so a differently-spelled but equivalent path (relative vs. absolute, a trailing separator, mixed slash direction) still matches.</summary>
+    public bool ContainsFile(string absolutePath)
+    {
+        var normalized = Path.GetFullPath(absolutePath);
+        foreach (var fullPath in _pathsByRelativePath.Values)
+        {
+            if (string.Equals(Path.GetFullPath(fullPath), normalized, StringComparison.OrdinalIgnoreCase)) return true;
+        }
+
+        return false;
+    }
+
+    /// <summary><paramref name="relativePath"/> is expected verbatim as <see cref="BuildTree"/>'s own output names it (one of this container's own <c>_pathsByRelativePath</c> keys) - a direct, case-insensitive dictionary lookup, nothing to normalize.</summary>
+    public string? ResolveAbsolutePath(string relativePath) =>
+        _pathsByRelativePath.TryGetValue(relativePath, out var fullPath) ? fullPath : null;
+
     private static bool TitleMatches(string relative, string name) =>
         Path.GetFileNameWithoutExtension(relative).Equals(name, StringComparison.OrdinalIgnoreCase);
 

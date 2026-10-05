@@ -106,4 +106,51 @@ public class DirectoryResourceTests
         Assert.Equal(ResourceTreeNodeKind.Folder, acsFolder.Children[0].Kind);
         Assert.Equal(ResourceTreeNodeKind.File, acsFolder.Children[1].Kind);
     }
+
+    [Fact]
+    public void ContainsFile_RealEntry_ReturnsTrue()
+    {
+        var (dir, root) = DirectoryTestBuilder.BuildWithRoot(("maps/MAP01.wad", Array.Empty<byte>()));
+
+        Assert.True(dir.ContainsFile(Path.Combine(root, "maps", "MAP01.wad")));
+    }
+
+    [Fact]
+    public void ContainsFile_DifferentCasingAndSeparators_StillMatches()
+    {
+        var (dir, root) = DirectoryTestBuilder.BuildWithRoot(("maps/MAP01.wad", Array.Empty<byte>()));
+
+        // Path.GetFullPath normalizes "./" and ".." segments, so this still
+        // resolves to the exact same file even though it's spelled
+        // differently than how DirectoryResource itself first saw it.
+        var differentlySpelledPath = Path.Combine(root, "maps", "..", "maps", "MAP01.WAD");
+
+        Assert.True(dir.ContainsFile(differentlySpelledPath));
+    }
+
+    [Fact]
+    public void ContainsFile_UnrelatedPath_ReturnsFalse()
+    {
+        var (dir, root) = DirectoryTestBuilder.BuildWithRoot(("maps/MAP01.wad", Array.Empty<byte>()));
+
+        Assert.False(dir.ContainsFile(Path.Combine(root, "maps", "MAP02.wad")));
+    }
+
+    [Fact]
+    public void ResolveAbsolutePath_RealEntry_ReturnsItsOwnOnDiskPath()
+    {
+        var (dir, root) = DirectoryTestBuilder.BuildWithRoot(("maps/MAP01.wad", Array.Empty<byte>()));
+
+        var resolved = dir.ResolveAbsolutePath("maps/MAP01.wad");
+
+        Assert.Equal(Path.Combine(root, "maps", "MAP01.wad"), resolved);
+    }
+
+    [Fact]
+    public void ResolveAbsolutePath_UnknownRelativePath_ReturnsNull()
+    {
+        var dir = DirectoryTestBuilder.Build(("maps/MAP01.wad", Array.Empty<byte>()));
+
+        Assert.Null(dir.ResolveAbsolutePath("maps/MAP02.wad"));
+    }
 }

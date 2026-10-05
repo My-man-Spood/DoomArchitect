@@ -69,11 +69,10 @@ script compiling/texture consolidation/"Bake".
   yet" stub dialog. New `ResourceTreeIcons.cs` is the one shared icon
   lookup (a curated set - container kinds, map-group/script lumps reuse
   the existing `document_map.svg`/`document_script.svg` for visual
-  continuity with the tabs; new `icon_wad.svg`/`icon_pk3.svg`/
-  `icon_folder.svg`/`icon_lump.svg`/`icon_geometry.svg`/
-  `icon_texture_def.svg`/`icon_chevron.svg` cover the rest - deliberately
-  not exhaustive, everything unrecognized falls back to the generic lump/
-  file icon).
+  continuity with the tabs; everything unrecognized falls back to the
+  generic lump/file icon). The rest of the set started as hand-rolled
+  SVGs this first pass, later replaced with real UDB-sourced icons -
+  see "Real icons instead of AI-generated ones" below.
 - **Wired into `AppShell`** as a permanent sibling of `ContentArea`
   (confirmed via exploration: `ContentArea`'s own children are the
   per-tab swap target, hidden en masse on tab switch - the panel has to
@@ -143,6 +142,93 @@ opacity while either it or the browser itself is hovered. Hidden
 entirely during immersive 3D mode (see
 [Map view SubViewport fix + immersive full-view 3D mode](ui-map-subviewport-immersive-3d.md)),
 same as every other piece of chrome that mode hides.
+
+## Bug fix: a map's own WAD could show up twice in the tree
+
+Reported after loading a map WAD that physically lives inside a folder
+*also* configured as a resource - the same file showed up twice, once
+as the folder's own flat nested entry, once again as its own separate,
+fully-expanded top-level entry. Fixed in `OpenMapMenu`, not here - see
+[Open Map... UI](mapio-open-map-ui.md)'s own "Update" section (new
+`IResourceContainer.ContainsFile`, plus a new ability to open a PK3-
+style resource folder directly from "Open Map...", scanning its own
+`maps/*.wad` files).
+
+## Highlighting the currently open map
+
+The tree now visually marks whichever `MapGroup` item is the map
+actually open right now - the app's own established accent color
+(`Color(0.85, 0.55, 0.3, 1)`, already used for a `LineEdit` focus border
+and a `Button`'s pressed-icon tint in `Assets/BaseTheme.tres`, reused
+rather than inventing a new one) plus a "Currently open" tooltip.
+`OpenMapMenu` gained `CurrentMapContainer` (the exact `IResourceContainer`
+instance backing the loaded map - mirrors the existing `CurrentMapName`)
+so `Refresh` can match by real object identity instead of a path string;
+`OnMapOptionsConfirmed` now updates its own `_current*` fields *before*
+firing `MapLoaded` rather than after, so this is accurate the moment the
+event reaches a subscriber, not one map load behind.
+
+**Update:** also now covers a map loaded from inside a folder (deduped
+per the section above), reported missing right after this first landed -
+a nested `maps/MAP01.wad` has no `MapGroup` entry of its own to mark
+(still just a flat, unexpanded file leaf), so matching by container
+reference doesn't apply there. New `IResourceContainer.ResolveAbsolutePath`
+(`DirectoryResource` resolves a relative path back to its own real
+on-disk path; `WadFile`/`Pk3File` always null, same reasoning as
+`ContainsFile`) plus a new `OpenMapMenu.CurrentWadPath` let the browser
+resolve a folder-nested `File` leaf's own real path and compare it
+directly against the open map's real file, independent of whether that
+file also has a top-level entry anywhere.
+
+## Bug fix: tree sometimes stayed empty despite a map being loaded
+
+`AppShell.AddMapTab()` subscribed to `OpenMapMenu.MapLoaded`/
+`MapResourcesChanged` *after* adding `mapDocument` to the (eventually)
+live tree - fine for the normal interactive File > Open Map... flow,
+whose confirmation fires from a dialog on a later frame, long after
+`AddMapTab()` has already returned. But the dev-only `--file`/`--map`
+command-line launch flags (`OpenMapMenu.LoadFromCommandLine`) load a
+map *synchronously*, from inside `MapView._Ready()` itself - which is
+exactly what entering the tree triggers. A subscription added after
+that point missed the one and only `MapLoaded` firing entirely,
+leaving the browser panel permanently empty despite a map genuinely
+being loaded and editable. Fixed by resolving `OpenMapMenu` directly
+via `GetNode` (not `MapView.OpenMapMenu`, which stays null until
+`_Ready()` runs) and subscribing before `mapDocument` ever enters the
+tree.
+
+## Real icons instead of AI-generated ones
+
+The original SVG icon set (`icon_wad`/`icon_pk3`/`icon_folder`/
+`icon_lump`/`icon_geometry`/`icon_texture_def`) was hand-rolled for the
+first pass. Replaced with real UDB assets, sourced two ways:
+
+- UDB's own `TextureBrowserForm` has a WAD/PK3/folder/texture-set tree
+  conceptually close to this one - but its icons are embedded in a
+  Windows-only `ImageListStreamer` blob inside the `.resx`, not
+  standalone files. Mono ships an actual runtime WinForms
+  implementation (confirmed present locally), so a small throwaway
+  Mono/C# program (`ResXResourceReader` + `ImageList.ImageStream` +
+  `Image.Save`) deserialized the real `ImageList` and dumped each
+  frame as a PNG. `icon_wad.png`/`icon_pk3.png`/`icon_folder.png`/
+  `icon_lump.png`/`icon_texture_def.png` are `WadTextureSet.png`/
+  `PK3TextureSet.ico`/`FolderTextureSet.ico`/`TextLump.png`/
+  `KnownTextureSet2.ico` from that form, extracted byte-for-byte.
+  `.import` files for all of these were generated the same way a
+  fresh asset normally would be, via `godot --headless --import`
+  (no Godot editor session was opened to do it).
+- VERTEXES/LINEDEFS/SIDEDEFS/SECTORS/THINGS lumps split from one
+  shared `icon_geometry` into four real, distinct icons -
+  `icon_vertices.png`/`icon_linedefs.png`/`icon_sectors.png`/
+  `icon_things.png`, copied directly from UDB's own classic edit-mode
+  toolbar (`VerticesMode.png`/`LinesMode.png`/`SectorsMode.png`/
+  `ThingsMode.png`) - real, standalone files this time, no extraction
+  needed. SIDEDEFS reuses the linedef icon; UDB has no separate
+  sidedef edit mode of its own to borrow from.
+
+`icon_chevron.svg` (the browser's own collapse/reopen toggle) stays
+the hand-rolled one - it's generic UI chrome, not a Doom-specific
+concept UDB would have an equivalent for.
 
 ## Explicitly deferred, not forgotten
 

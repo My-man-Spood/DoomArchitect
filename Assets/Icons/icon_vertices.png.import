@@ -2,16 +2,16 @@
 
 importer="texture"
 type="CompressedTexture2D"
-uid="uid://bhhb4yh6fsqvy"
-path="res://.godot/imported/icon_folder.svg-921e7447e5ebd4e86e6a1714e57858e8.ctex"
+uid="uid://wx5sox63flvq"
+path="res://.godot/imported/icon_vertices.png-6ec7f868e9ba60013a40c018bea04475.ctex"
 metadata={
 "vram_texture": false
 }
 
 [deps]
 
-source_file="res://Assets/Icons/icon_folder.svg"
-dest_files=["res://.godot/imported/icon_folder.svg-921e7447e5ebd4e86e6a1714e57858e8.ctex"]
+source_file="res://Assets/Icons/icon_vertices.png"
+dest_files=["res://.godot/imported/icon_vertices.png-6ec7f868e9ba60013a40c018bea04475.ctex"]
 
 [params]
 
@@ -38,6 +38,3 @@ process/hdr_as_srgb=false
 process/hdr_clamp_exposure=false
 process/size_limit=0
 detect_3d/compress_to=1
-svg/scale=1.0
-editor/scale_with_editor_scale=false
-editor/convert_colors_with_editor_theme=false

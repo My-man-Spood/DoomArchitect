@@ -141,6 +141,12 @@ public sealed class Pk3File : IResourceContainer, IDisposable
     public ResourceTreeNode BuildTree(string displayName) =>
         PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.Pk3Container, _entriesByPath.Keys);
 
+    /// <summary>A zip archive's own entries aren't independently addressable files on disk at all - never a match.</summary>
+    public bool ContainsFile(string absolutePath) => false;
+
+    /// <summary>A zip archive entry has no standalone on-disk path of its own to resolve to.</summary>
+    public string? ResolveAbsolutePath(string relativePath) => null;
+
     private static bool TitleMatches(string path, string name) =>
         Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase);
 
