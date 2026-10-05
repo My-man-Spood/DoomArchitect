@@ -332,7 +332,7 @@ public sealed class WadFile : IResourceContainer
 
             if (!isUdmf && !isClassic)
             {
-                root.Children.Add(new ResourceTreeNode { DisplayName = Lumps[i].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[i].Name });
+                root.Children.Add(new ResourceTreeNode { DisplayName = Lumps[i].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[i].Name, LumpIndex = i });
                 i++;
                 continue;
             }
@@ -343,10 +343,10 @@ public sealed class WadFile : IResourceContainer
                 ? FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP")
                 : FindGroupEnd(Lumps, bodyStart, WadMapLumpNames.Classic);
 
-            var mapNode = new ResourceTreeNode { DisplayName = markerName, Kind = ResourceTreeNodeKind.MapGroup, Path = markerName };
+            var mapNode = new ResourceTreeNode { DisplayName = markerName, Kind = ResourceTreeNodeKind.MapGroup, Path = markerName, LumpIndex = i };
             for (var j = bodyStart; j < bodyEnd; j++)
             {
-                mapNode.Children.Add(new ResourceTreeNode { DisplayName = Lumps[j].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[j].Name });
+                mapNode.Children.Add(new ResourceTreeNode { DisplayName = Lumps[j].Name, Kind = ResourceTreeNodeKind.Lump, Path = Lumps[j].Name, LumpIndex = j });
             }
 
             root.Children.Add(mapNode);
@@ -361,4 +361,25 @@ public sealed class WadFile : IResourceContainer
 
     /// <summary>A WAD lump has no standalone on-disk path of its own to resolve to.</summary>
     public string? ResolveAbsolutePath(string relativePath) => null;
+
+    /// <summary>
+    /// Replaces the data of the lump at <paramref name="index"/>, leaving
+    /// every other lump's name/position/bytes untouched - the one generic
+    /// "write this single lump back" primitive, deliberately separate from
+    /// <see cref="MapFileSaver"/>'s own splicing logic, which only ever
+    /// operates on a map's own marker-to-end group, not a standalone named
+    /// lump like <c>SCRIPTS</c>/<c>ZSCRIPT</c>. By index rather than name,
+    /// since a WAD can have more than one lump sharing a name (a Hexen-
+    /// format WAD's own per-map <c>SCRIPTS</c> lump, one per map) - matching
+    /// by name alone can't tell those apart. Callers hand the result to
+    /// <see cref="WadWriter.Write"/> for the actual on-disk rebuild, same as
+    /// every other save path in this project already does - never an
+    /// in-place binary patch.
+    /// </summary>
+    public static IReadOnlyList<WadLump> WithReplacedLumpData(IReadOnlyList<WadLump> lumps, int index, byte[] newData)
+    {
+        var result = new List<WadLump>(lumps);
+        result[index] = new WadLump(lumps[index].Name, newData);
+        return result;
+    }
 }

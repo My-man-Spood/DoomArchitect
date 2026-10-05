@@ -41,5 +41,19 @@ public sealed class ResourceTreeNode
     /// <summary>The lump name (WAD) or full relative path (PK3/directory) this node resolves to - null for a node that's purely structural (a container root, a <see cref="ResourceTreeNodeKind.MapGroup"/>, a <see cref="ResourceTreeNodeKind.Folder"/>).</summary>
     public string? Path { get; init; }
 
+    /// <summary>
+    /// This lump's own real position in its <see cref="WadFile"/>'s
+    /// <see cref="WadFile.Lumps"/> list - null for anything not sourced from
+    /// a WAD (<see cref="ResourceTreeNodeKind.Folder"/>/<see cref="ResourceTreeNodeKind.File"/>
+    /// nodes from a <see cref="Pk3File"/>/<see cref="DirectoryResource"/>
+    /// already identify themselves precisely enough via <see cref="Path"/>
+    /// alone). A WAD can have more than one lump with the same name (e.g.
+    /// a Hexen-format WAD's own per-map <c>SCRIPTS</c> lump, one per map) -
+    /// matching by name alone can't tell those apart, so anything that
+    /// needs to write back to this exact lump (not just read it) needs its
+    /// real index, not just its name.
+    /// </summary>
+    public int? LumpIndex { get; init; }
+
     public List<ResourceTreeNode> Children { get; } = new();
 }

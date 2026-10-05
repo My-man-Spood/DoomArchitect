@@ -1,21 +1,21 @@
+using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
 /// The app's own root shell: a static, always-present <see cref="MainMenuBar"/>
-/// (File/Edit/Map/Preferences - genuinely app-level chrome, since there's
-/// only ever one map open at a time and actions like "Save Map"/"Open
-/// Script..." apply regardless of which tab happens to be showing; it
-/// used to live inside <c>MapDocument.tscn</c> itself, which made it
-/// disappear along with the rest of that tab's content whenever a Script
-/// tab was active - a real, reported bug, not a deliberate choice) running
+/// (File/Edit/Map/Preferences - genuinely app-level chrome; actions like
+/// "Save Map"/"Open Script..." should stay reachable no matter which tab
+/// happens to be showing, which a menu bar living inside a map document's
+/// own tab couldn't do - a real, reported bug: it disappeared along with
+/// the rest of that tab's content whenever a Script tab was active) running
 /// the full window width, with everything else below it split into two
 /// columns, VSCode-Explorer-style: <see cref="_resourceBrowserPanel"/> on
 /// the left, running the full remaining height; a tab strip
 /// (<see cref="TabBar"/> - the plain label/icon/close-button strip, not
 /// <c>TabContainer</c>, which only manages <see cref="Control"/>-type
-/// children as pages - the map document's own root is a <c>Node3D</c>,
+/// children as pages - a map document's own root is a <c>Node3D</c>,
 /// since only one <see cref="Camera3D"/> can be <see cref="Camera3D.Current"/>
 /// across the whole viewport at a time and <c>CanvasLayer</c> content
 /// renders independently of normal scene-tree visibility either way, so
@@ -36,17 +36,23 @@ using Godot;
 /// past the strip rather than starting below it (see
 /// <see cref="UpdateContentAreaLeftOffset"/> for the strip's own matching
 /// horizontal offset, kept past the browser's own column rather than
-/// spanning the full window width above it). The map editor itself
-/// (<see cref="MapView"/> and everything else it owns) is wrapped here
-/// completely unchanged internally - this class only ever reparents/
-/// shows/hides it as one tab's content, and now also owns wiring its
-/// <see cref="MainMenuBar"/> up front since that's no longer part of the
-/// map document's own scene.
+/// spanning the full window width above it).
 ///
-/// Exactly one Map tab exists today, created once on <see cref="_Ready"/>
-/// and not closable (there's no "no map open" empty state yet) - several
-/// simultaneous Map tabs, a WAD-browser tab type, and a sprite-editor tab
-/// type are all real, tracked future work - see TODO/documents-and-tabs.md.
+/// More than one Map tab can exist at once - each gets its own
+/// <see cref="SubViewportContainer"/>/<see cref="SubViewport"/> wrapper
+/// (tracked in <see cref="_mapViewportContainers"/>, keyed by the
+/// <see cref="MapView"/> it hosts), since two <see cref="MapView"/>s can't
+/// safely share one <see cref="SubViewport"/> - each owns its own
+/// <c>TopDownCamera</c>/<c>PerspectiveCamera</c>, and only one
+/// <see cref="Camera3D"/> can be <see cref="Camera3D.Current"/> per
+/// <see cref="Viewport"/> at a time. Every tab (Map or Script) is
+/// closable, including closing down to zero tabs entirely - there's no
+/// "no map open" empty-state UI, a plain background is the accepted
+/// state. <see cref="MainMenuBar.SetActiveMap"/> is re-pointed at
+/// whichever Map tab is actually active (or cleared to null when none
+/// is) every time the active tab changes, so "Save Map"/"Map Options..."/
+/// etc. always act on whichever map the user is actually looking at - see
+/// <see cref="Activate"/>/<see cref="Deactivate"/>/<see cref="OnTabClosePressed"/>.
 /// </summary>
 public partial class AppShell : Control
 {
@@ -61,12 +67,13 @@ public partial class AppShell : Control
 	private ResourceBrowserPanel _resourceBrowserPanel;
 	private TextureButton _browserToggleButton;
 	private FileDialog _openScriptDialog;
-	private SubViewportContainer _mapViewportContainer;
 
-	private readonly System.Collections.Generic.List<Node> _tabContents = new();
+	/// <summary>Each Map tab's own SubViewport wrapper - see this class's own remarks.</summary>
+	private readonly Dictionary<MapView, SubViewportContainer> _mapViewportContainers = new();
+
+	private readonly List<Node> _tabContents = new();
 	private int _activeTab = -1;
 
-	private bool _in3D;
 	private bool _immersive3DEnabled;
 	private bool _isImmersive;
 	private bool _resourceBrowserVisibleBeforeImmersive;
@@ -88,13 +95,26 @@ public partial class AppShell : Control
 		_tabBar.TabChanged += OnTabChanged;
 		_tabBar.TabCloseDisplayPolicy = TabBar.CloseButtonDisplayPolicy.ShowActiveOnly;
 		_openScriptDialog.FileSelected += OnScriptFileSelected;
+
+		_mainMenuBar.BuildMenus();
 		_mainMenuBar.OpenScriptRequested = () => _openScriptDialog.PopupCentered();
+		// No existing OpenMapMenu instance to act on when no Map tab is
+		// active (one lives inside each MapView's own scene, nowhere
+		// else) - create a fresh, blank one first, then show the dialog
+		// the user actually asked for on it.
+		_mainMenuBar.CreateMapTabRequested = showOpenDialog =>
+		{
+			var mapView = CreateMapViewTab();
+			if (showOpenDialog) mapView.OpenMapMenu.ShowOpenFileDialog();
+			else mapView.OpenMapMenu.ShowNewMapDialog();
+		};
 
 		_browserToggleButton.Pressed += OnToggleResourceBrowser;
 		_browserToggleButton.MouseEntered += () => SetBrowserToggleHover(true);
 		_browserToggleButton.MouseExited += () => SetBrowserToggleHover(false);
 		_resourceBrowserPanel.MouseEntered += () => SetBrowserPanelHover(true);
 		_resourceBrowserPanel.MouseExited += () => SetBrowserPanelHover(false);
+		_resourceBrowserPanel.OpenRequested += OnResourceOpenRequested;
 		Resized += UpdateBrowserToggleButton;
 
 		_immersive3DEnabled = AppSettingsFile.Load().GetImmersive3DView();
@@ -104,7 +124,7 @@ public partial class AppShell : Control
 			UpdateMapViewportLayout();
 		};
 
-		AddMapTab();
+		CreateMapViewTab();
 		CallDeferred(MethodName.UpdateContentAreaLeftOffset);
 	}
 
@@ -135,11 +155,11 @@ public partial class AppShell : Control
 	/// toggle button down with it, leaving only the undiscoverable
 	/// keybinding; a second, separately-added button fixed reachability
 	/// but, being a plain sibling <c>Control</c> added to the tree before
-	/// the Map tab's own code-created <see cref="_mapViewportContainer"/>,
-	/// still ended up drawn *behind* it once the map view expanded to
-	/// reclaim the browser's space - a real, reported bug, not a guess).
-	/// Tracks the browser's own right edge (so it sits just outside it
-	/// when open, and at the screen's left edge when closed), vertically
+	/// a Map tab's own code-created <c>SubViewportContainer</c>, still
+	/// ended up drawn *behind* it once the map view expanded to reclaim
+	/// the browser's space - a real, reported bug, not a guess). Tracks
+	/// the browser's own right edge (so it sits just outside it when
+	/// open, and at the screen's left edge when closed), vertically
 	/// centered on the browser's own height, and - per request - reads as
 	/// an almost-invisible edge handle rather than a normal toolbar
 	/// button: nearly transparent at rest, fading to full opacity while
@@ -192,8 +212,8 @@ public partial class AppShell : Control
 	/// browser's own column, not above it - the browser itself runs the
 	/// full height below the menu bar (see <see cref="AlignMapToolbarBelowTabStrip"/>'s
 	/// own <c>_resourceBrowserPanel.OffsetTop</c>), so it would otherwise
-	/// sit underneath a full-width tab strip rather than beside it.
-	/// <see cref="_mapViewportContainer"/> has its own, separate layout
+	/// sit underneath a full-width tab strip rather than beside it. Each
+	/// Map tab's own viewport container has its own, separate layout
 	/// logic in <see cref="UpdateMapViewportLayout"/>.
 	/// </summary>
 	private void UpdateContentAreaLeftOffset()
@@ -204,19 +224,28 @@ public partial class AppShell : Control
 	}
 
 	/// <summary>
-	/// Docks <see cref="_mapViewportContainer"/> beside the resource browser
-	/// and below the tab strip/menu bar - or, in immersive mode, expands it
-	/// to the full window and hides everything else - re-run on every input
-	/// that could change either: <see cref="MapView.In3DChanged"/>, the
-	/// "Immersive 3D View" preference being toggled, and the resource
-	/// browser's own collapse state changing. <see cref="_mapViewportContainer"/>'s
-	/// right/bottom anchors are fixed at 1 once in <see cref="AddMapTab"/> -
-	/// only its left/top offsets ever need recomputing here, so window
-	/// resizes alone don't need to trigger this.
+	/// Docks the *active* Map tab's own viewport container beside the
+	/// resource browser and below the tab strip/menu bar - or, in
+	/// immersive mode, expands it to the full window and hides everything
+	/// else - re-run on every input that could change either:
+	/// <see cref="MapView.In3DChanged"/>, the "Immersive 3D View"
+	/// preference being toggled, the active tab itself changing, and the
+	/// resource browser's own collapse state changing. Immersive mode is
+	/// derived fresh from whichever tab is active right now
+	/// (<see cref="MapView.In3D"/>), not a sticky field of its own - a
+	/// background tab's own 3D state (if any) is irrelevant, and a sticky
+	/// field would otherwise go stale the moment the active tab changes to
+	/// something that isn't a <see cref="MapView"/> at all. A container's
+	/// own right/bottom anchors are fixed at 1 once in
+	/// <see cref="CreateMapViewTab"/> - only its left/top offsets ever need
+	/// recomputing here, so window resizes alone don't need to trigger
+	/// this.
 	/// </summary>
 	private void UpdateMapViewportLayout()
 	{
-		var wantImmersive = _in3D && _immersive3DEnabled;
+		var activeMapView = _activeTab >= 0 && _activeTab < _tabContents.Count ? _tabContents[_activeTab] as MapView : null;
+		var container = activeMapView != null ? _mapViewportContainers.GetValueOrDefault(activeMapView) : null;
+		var wantImmersive = activeMapView != null && activeMapView.In3D && _immersive3DEnabled;
 
 		if (wantImmersive && !_isImmersive)
 		{
@@ -233,19 +262,29 @@ public partial class AppShell : Control
 		if (wantImmersive) _resourceBrowserPanel.Visible = false;
 		UpdateBrowserToggleButton();
 
+		if (container == null) return;
+
 		if (wantImmersive)
 		{
-			_mapViewportContainer.OffsetLeft = 0;
-			_mapViewportContainer.OffsetTop = 0;
+			container.OffsetLeft = 0;
+			container.OffsetTop = 0;
 		}
 		else
 		{
-			_mapViewportContainer.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
-			_mapViewportContainer.OffsetTop = _menuBarPanel.Size.Y + _tabStripPanel.Size.Y;
+			container.OffsetLeft = _resourceBrowserPanel.Visible ? _resourceBrowserPanel.Size.X : 0;
+			container.OffsetTop = _menuBarPanel.Size.Y + _tabStripPanel.Size.Y;
 		}
 	}
 
-	private void AddMapTab()
+	/// <summary>
+	/// Instantiates a blank <see cref="MapView"/> (its own <c>_Ready()</c>
+	/// creates a sample map, same as every Map tab has always started
+	/// with), wraps it in its own <see cref="SubViewportContainer"/>/
+	/// <see cref="SubViewport"/>, wires it up, adds a tab, and switches to
+	/// it. Shared by the initial startup tab and every subsequently opened
+	/// one (<see cref="OpenMapTab"/>, <see cref="MainMenuBar.CreateMapTabRequested"/>).
+	/// </summary>
+	private MapView CreateMapViewTab()
 	{
 		var mapDocument = GD.Load<PackedScene>(MapDocumentScenePath).Instantiate<MapView>();
 
@@ -256,21 +295,27 @@ public partial class AppShell : Control
 		// That's a real path, not a hypothetical one: the dev-only
 		// --file/--map command-line flags (see OpenMapMenu.LoadFromCommandLine)
 		// load a map synchronously from inside MapView._Ready() itself, which
-		// is exactly what AddChild(_mapViewportContainer) below triggers - a
-		// subscription added *after* that call, as this one used to be,
-		// misses that very first (and for this launch path, only) firing
-		// entirely, leaving the browser panel permanently empty despite a
-		// map genuinely being loaded. The normal, interactive File > Open
-		// Map... flow was never at risk - its MapLoaded fires from a dialog
-		// confirmation on a later frame, long after this method returns.
+		// is exactly what AddChild(mapViewportContainer) below triggers - a
+		// subscription added *after* that call misses that very first (and
+		// for this launch path, only) firing entirely, leaving the browser
+		// panel permanently empty despite a map genuinely being loaded. The
+		// normal, interactive File > Open Map... flow was never at risk -
+		// its MapLoaded fires from a dialog confirmation on a later frame,
+		// long after this method returns.
 		var openMapMenu = mapDocument.GetNode<OpenMapMenu>("UI/OpenMapMenu");
-		openMapMenu.MapLoaded += (_, _, _, resources) => _resourceBrowserPanel.Refresh(
-			resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
-		openMapMenu.MapResourcesChanged += (_, _, resources) => _resourceBrowserPanel.Refresh(
-			resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
+		openMapMenu.MapLoaded += (_, _, _, resources) =>
+		{
+			_resourceBrowserPanel.Refresh(resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
+			UpdateMapTabTitle(mapDocument);
+		};
+		openMapMenu.MapResourcesChanged += (_, _, resources) =>
+		{
+			_resourceBrowserPanel.Refresh(resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
+			UpdateMapTabTitle(mapDocument);
+		};
 
 		var mapSubViewport = new SubViewport();
-		_mapViewportContainer = new SubViewportContainer
+		var mapViewportContainer = new SubViewportContainer
 		{
 			Stretch = true,
 			AnchorRight = 1f,
@@ -278,14 +323,14 @@ public partial class AppShell : Control
 			OffsetRight = 0f,
 			OffsetBottom = 0f,
 		};
-		_mapViewportContainer.AddChild(mapSubViewport);
+		mapViewportContainer.AddChild(mapSubViewport);
 		mapSubViewport.AddChild(mapDocument);
-		AddChild(_mapViewportContainer);
+		AddChild(mapViewportContainer);
+		_mapViewportContainers[mapDocument] = mapViewportContainer;
 		_tabContents.Add(mapDocument);
 
 		mapDocument.MainMenuBar = _mainMenuBar;
-		mapDocument.In3DChanged += OnMapIn3DChanged;
-		_mainMenuBar.Initialize(mapDocument.OpenMapMenu, mapDocument.Overlay);
+		mapDocument.In3DChanged += _ => UpdateMapViewportLayout();
 
 		// Deferred: neither the menu bar's nor the tab strip panel's own
 		// height (its themed TabBar's natural minimum can exceed
@@ -294,15 +339,65 @@ public partial class AppShell : Control
 		CallDeferred(MethodName.AlignMapToolbarBelowTabStrip, mapDocument);
 
 		_tabBar.AddTab("Map", GD.Load<Texture2D>("res://Assets/Icons/document_map.svg"));
+		SwitchTo(_tabContents.Count - 1);
 
-		SwitchTo(0);
+		return mapDocument;
 	}
 
-	private void OnMapIn3DChanged(bool in3D)
+	/// <summary>
+	/// Reflects whichever real map a tab actually holds in its own tab
+	/// label (e.g. "MAP01") instead of the generic "Map" every tab starts
+	/// with - needed now that more than one Map tab can be open at once,
+	/// where "Map" alone no longer tells them apart. Harmless to also run
+	/// on a resource-only change (the map name itself never changes then)
+	/// - simpler than trying to only wire it for a genuine fresh load.
+	/// </summary>
+	private void UpdateMapTabTitle(MapView mapDocument)
 	{
-		_in3D = in3D;
-		UpdateMapViewportLayout();
+		var index = _tabContents.IndexOf(mapDocument);
+		if (index >= 0) _tabBar.SetTabTitle(index, mapDocument.OpenMapMenu.CurrentMapName ?? "Map");
 	}
+
+	/// <summary>
+	/// Opens a specific, already-known map (the resource browser's own
+	/// "Open" action on a <c>MapGroup</c> tree node) - focuses its
+	/// existing tab if it's already open (matched by real WAD path + map
+	/// name, same normalized-path comparison <c>DirectoryResource.ContainsFile</c>
+	/// already uses elsewhere), otherwise creates a brand-new blank tab
+	/// and loads it there via <see cref="OpenMapMenu.OpenSpecificMap"/> -
+	/// the same interactive Map Options confirmation every other "open a
+	/// map" entry point already shows, not a silent auto-confirm.
+	/// </summary>
+	private void OpenMapTab(string wadPath, string mapName)
+	{
+		var existing = _tabContents.OfType<MapView>().FirstOrDefault(mapView =>
+			mapView.OpenMapMenu.CurrentWadPath != null
+			&& string.Equals(
+				System.IO.Path.GetFullPath(mapView.OpenMapMenu.CurrentWadPath), System.IO.Path.GetFullPath(wadPath),
+				System.StringComparison.OrdinalIgnoreCase)
+			&& string.Equals(mapView.OpenMapMenu.CurrentMapName, mapName, System.StringComparison.OrdinalIgnoreCase));
+
+		if (existing != null)
+		{
+			SwitchTo(_tabContents.IndexOf(existing));
+			return;
+		}
+
+		var mapView = CreateMapViewTab();
+		// Deferred, not immediate: this new tab's own SubViewport (created
+		// moments ago, inside CreateMapViewTab) hasn't been laid out yet
+		// this same frame - same reason AlignMapToolbarBelowTabStrip is
+		// already deferred. Popping the Map Options dialog before then
+		// (confirmed live - Godot errors "Window spawned at invalid
+		// position") centers it against that not-yet-sized viewport
+		// instead of the real one. Queued after CreateMapViewTab's own
+		// AlignMapToolbarBelowTabStrip call, so the layout is already
+		// correct by the time this runs.
+		CallDeferred(MethodName.OpenSpecificMapDeferred, mapView, wadPath, mapName);
+	}
+
+	private void OpenSpecificMapDeferred(MapView mapView, string wadPath, string mapName) =>
+		mapView.OpenMapMenu.OpenSpecificMap(wadPath, mapName);
 
 	/// <summary>
 	/// The menu bar and tab strip both already sit above everything else on
@@ -312,8 +407,8 @@ public partial class AppShell : Control
 	/// screen-space-position conflict a <c>CanvasLayer</c> would otherwise
 	/// produce. <see cref="_contentArea"/> (today only ever actually filled
 	/// by a Control-rooted tab like <c>ScriptDocument</c>) only has to clear
-	/// the strip, not the map's own toolbar below it; <see cref="_mapViewportContainer"/>'s
-	/// own equivalent offset is computed by <see cref="UpdateMapViewportLayout"/>.
+	/// the strip, not the map's own toolbar below it; a Map tab's own
+	/// equivalent offset is computed by <see cref="UpdateMapViewportLayout"/>.
 	/// <see cref="_resourceBrowserPanel"/> only clears the menu bar, not the
 	/// strip too - it runs the full height below the menu bar, VSCode-
 	/// Explorer-style, with the tab strip confined to the right of it
@@ -379,13 +474,63 @@ public partial class AppShell : Control
 		target.NavigateTo(line, column);
 	}
 
+	/// <summary>
+	/// Dispatches a real "Open" action from the resource browser - a
+	/// <c>MapGroup</c> node opens (or focuses) a dedicated Map tab; a
+	/// <c>File</c>/<c>Lump</c> node opens (or focuses) a script tab.
+	/// </summary>
+	private void OnResourceOpenRequested(ResourceOpenRequest request)
+	{
+		if (request.MapName != null)
+		{
+			OpenMapTab(request.SourcePath, request.MapName);
+			return;
+		}
+
+		if (request.FilePath != null)
+		{
+			var existingFile = _tabContents.OfType<ScriptDocument>()
+				.FirstOrDefault(d => string.Equals(d.FilePath, request.FilePath, System.StringComparison.OrdinalIgnoreCase));
+			SwitchTo(_tabContents.IndexOf(existingFile ?? OpenScriptTab(request.FilePath)));
+			return;
+		}
+
+		var existingLump = _tabContents.OfType<ScriptDocument>()
+			.FirstOrDefault(d => d.IsLumpFrom(request.SourcePath, request.LumpIndex));
+		SwitchTo(_tabContents.IndexOf(existingLump ?? OpenLumpScriptTab(request)));
+	}
+
+	/// <summary>Lump-backed counterpart of <see cref="OpenScriptTab"/> - same tab-strip wiring, populated from already-read bytes (<see cref="ScriptDocument.LoadLump"/>) instead of a disk path.</summary>
+	private ScriptDocument OpenLumpScriptTab(ResourceOpenRequest request)
+	{
+		var scriptDocument = GD.Load<PackedScene>(ScriptDocumentScenePath).Instantiate<ScriptDocument>();
+		scriptDocument.Visible = false;
+		_contentArea.AddChild(scriptDocument);
+		scriptDocument.LoadLump(request.SourcePath, request.LumpIndex, request.LumpName, request.LumpData);
+		_tabContents.Add(scriptDocument);
+
+		_tabBar.AddTab(scriptDocument.DisplayName, GD.Load<Texture2D>("res://Assets/Icons/document_script.svg"));
+
+		return scriptDocument;
+	}
+
 	private void OnTabChanged(long tab) => SwitchTo((int)tab);
 
+	/// <summary>
+	/// <paramref name="index"/> can arrive from Godot's own <see cref="TabBar.TabChanged"/>
+	/// signal (<see cref="OnTabChanged"/>), not just this class's own
+	/// calls - bounds-checked defensively since <c>TabBar</c> can fire
+	/// that signal on its own, synchronously, as a side effect of other
+	/// operations (confirmed live for <see cref="TabBar.RemoveTab"/> - see
+	/// <see cref="OnTabClosePressed"/>'s own remarks), with no guarantee
+	/// its own idea of "current" matches this class's <see cref="_tabContents"/>
+	/// at that exact moment.
+	/// </summary>
 	private void SwitchTo(int index)
 	{
-		if (_activeTab == index) return;
+		if (_activeTab == index || index < 0 || index >= _tabContents.Count) return;
 
-		if (_activeTab >= 0) Deactivate(_tabContents[_activeTab]);
+		if (_activeTab >= 0 && _activeTab < _tabContents.Count) Deactivate(_tabContents[_activeTab]);
 		_activeTab = index;
 		_tabBar.CurrentTab = index;
 		Activate(_tabContents[index]);
@@ -396,13 +541,28 @@ public partial class AppShell : Control
 		if (content is MapView mapView)
 		{
 			mapView.SetTabActive(true);
-			_mapViewportContainer.Visible = true;
+			if (_mapViewportContainers.TryGetValue(mapView, out var container)) container.Visible = true;
+			_mainMenuBar.SetActiveMap(mapView.OpenMapMenu, mapView.Overlay);
 			UpdateMapViewportLayout();
+			// Re-shows *this* tab's own resources/highlight - without this,
+			// switching between two already-loaded Map tabs left whichever
+			// one loaded/changed its resources *last* showing in the
+			// browser, regardless of which tab was actually now active.
+			_resourceBrowserPanel.Refresh(
+				mapView.OpenMapMenu.CurrentNamedResources, mapView.OpenMapMenu.CurrentMapContainer,
+				mapView.OpenMapMenu.CurrentMapName, mapView.OpenMapMenu.CurrentWadPath);
 		}
 		else if (content is Control control)
 		{
 			control.Visible = true;
 			control.ProcessMode = Node.ProcessModeEnum.Inherit;
+			// Not a map tab (or no tab at all) - "Save Map"/"Map Options..."
+			// etc. would otherwise keep silently targeting whichever map
+			// tab was active before this one.
+			_mainMenuBar.SetActiveMap(null, null);
+			// Same reasoning for the browser's own "currently open" highlight
+			// - a Script tab has no map of its own to show as open.
+			_resourceBrowserPanel.ClearCurrentMapHighlight();
 		}
 	}
 
@@ -411,7 +571,7 @@ public partial class AppShell : Control
 		if (content is MapView mapView)
 		{
 			mapView.SetTabActive(false);
-			_mapViewportContainer.Visible = false;
+			if (_mapViewportContainers.TryGetValue(mapView, out var container)) container.Visible = false;
 		}
 		else if (content is Control control)
 		{
@@ -420,23 +580,53 @@ public partial class AppShell : Control
 		}
 	}
 
-	/// <summary>The Map tab (index 0) never closes - there's no "no map open" empty state yet.</summary>
+	/// <summary>Every tab is closable, including the last one - closing down to zero just leaves a plain background, which is fine; there's no "no map open" empty-state UI to build for it.</summary>
 	private void OnTabClosePressed(long tab)
 	{
-		if (tab == 0) return;
-
 		var index = (int)tab;
 		var content = _tabContents[index];
 		if (_activeTab == index) Deactivate(content);
 
-		content.QueueFree();
+		// A Map tab's own SubViewportContainer wrapper is a *parent* of
+		// the MapView (AppShell -> container -> SubViewport -> MapView),
+		// not a sibling of it - freeing the MapView alone would leave the
+		// wrapper (and the SubViewport inside it) behind.
+		if (content is MapView mapView && _mapViewportContainers.Remove(mapView, out var container))
+		{
+			container.QueueFree();
+		}
+		else
+		{
+			content.QueueFree();
+		}
+
 		_tabContents.RemoveAt(index);
+
+		// RemoveTab can itself synchronously emit TabChanged (confirmed
+		// live - Godot's own TabBar auto-reselects a neighboring tab when
+		// the removed one was the current one, and signals it) *before*
+		// this method's own bookkeeping below has updated _activeTab -
+		// OnTabChanged/SwitchTo would then run against a stale _activeTab
+		// against the already-shrunk _tabContents, indexing past its end.
+		// Disconnected for the duration so this method stays the one,
+		// consistent source of truth for what happens next; restored
+		// right after regardless of which branch below actually runs.
+		_tabBar.TabChanged -= OnTabChanged;
 		_tabBar.RemoveTab(index);
+		_tabBar.TabChanged += OnTabChanged;
 
 		if (_activeTab == index)
 		{
 			_activeTab = -1;
-			SwitchTo(Mathf.Clamp(index - 1, 0, _tabContents.Count - 1));
+			if (_tabContents.Count > 0)
+			{
+				SwitchTo(Mathf.Clamp(index - 1, 0, _tabContents.Count - 1));
+			}
+			else
+			{
+				_mainMenuBar.SetActiveMap(null, null);
+				_resourceBrowserPanel.ClearCurrentMapHighlight();
+			}
 		}
 		else if (_activeTab > index)
 		{

@@ -10,6 +10,7 @@ using DoomArchitect.Core.Undo;
 using DoomArchitect.Input;
 using DoomArchitect.Interop;
 using DoomArchitect.Rendering;
+using DoomArchitect.Settings;
 using Godot;
 using MapVector2 = System.Numerics.Vector2;
 
@@ -67,15 +68,23 @@ public partial class MapView : Node3D
 	public OpenMapMenu OpenMapMenu => _openMapMenu;
 	public MapOverlay Overlay => _overlay;
 
+	/// <summary>Whether this specific tab is currently showing its 3D view - with more than one Map tab possible, <c>AppShell</c> needs this on-demand (not just the change event below) to know whether *the currently active* tab is in 3D, regardless of which tab last fired <see cref="In3DChanged"/>.</summary>
+	public bool In3D => _in3D;
+
 	/// <summary>Fired whenever the 2D/3D toggle actually flips - <c>AppShell</c>'s own reason to care: an immersive full-view 3D mode (hiding the resource browser/tab strip/menu bar) needs to know the instant this happens, not poll for it.</summary>
 	public event Action<bool> In3DChanged;
 
 	private MapData _map;
 	private TextureCache _textureCache;
 	private TextureSet _textureSet;
-	private readonly TextureIconCache _textureIconCache = new();
+	// Not readonly: LoadMap/RefreshResources swap this out for a shared
+	// instance from TextureIconCacheRegistry (keyed by the TextureSet
+	// reference) rather than re-seeding this one in place, so two tabs on
+	// the same mod share the already-decoded icons instead of each paying
+	// their own full warm-up pass.
+	private TextureIconCache _textureIconCache = new();
 	private const int TextureIconDecodeBudgetPerFrame = 8;
-	private readonly SpriteIconCache _spriteIconCache = new();
+	private SpriteIconCache _spriteIconCache = new();
 	private const int SpriteIconDecodeBudgetPerFrame = 8;
 	private IReadOnlyList<NamedResource> _namedResources = Array.Empty<NamedResource>();
 	private UndoStack _undoStack = new();
@@ -692,10 +701,10 @@ public partial class MapView : Node3D
 	{
 		_textureCache = new TextureCache(textures);
 		_textureSet = textures;
-		_textureIconCache.SeedAll(textures);
-		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
-		_spriteIconCache.SeedAll(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
+		_textureIconCache = TextureIconCacheRegistry.GetOrCreate(textures);
+		_spriteIconCache = SpriteIconCacheRegistry.GetOrCreate(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
+		_namedResources = namedResources;
 		_map = newMap;
 
 		RebuildAllMeshes();
@@ -718,10 +727,10 @@ public partial class MapView : Node3D
 	{
 		_textureCache = new TextureCache(textures);
 		_textureSet = textures;
-		_textureIconCache.SeedAll(textures);
-		_namedResources = namedResources;
 		_gameConfiguration = gameConfiguration;
-		_spriteIconCache.SeedAll(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
+		_textureIconCache = TextureIconCacheRegistry.GetOrCreate(textures);
+		_spriteIconCache = SpriteIconCacheRegistry.GetOrCreate(textures, _gameConfiguration.GetThingTypes().Select(t => t.SpriteName));
+		_namedResources = namedResources;
 
 		RebuildAllMeshes();
 	}

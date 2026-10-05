@@ -63,4 +63,45 @@ public class MapSettingsTests
         // The unmodeled "scriptcompiler" field survives the round-trip untouched.
         Assert.Contains("scriptcompiler", updated.ToText());
     }
+
+    [Fact]
+    public void GetFolderResources_NothingSet_ReturnsEmpty()
+    {
+        Assert.Empty(MapSettings.Empty().GetFolderResources());
+    }
+
+    [Fact]
+    public void WithFolderSettings_ThenGet_RoundTripsGameConfigurationAndResources()
+    {
+        var settings = MapSettings.Empty()
+            .WithFolderSettings(GameConfigurationKind.GZDoomDoom2UDMF, new[] { "/mods/mymod" });
+
+        Assert.Equal(GameConfigurationKind.GZDoomDoom2UDMF, settings.GetGameConfiguration());
+        Assert.Equal(new[] { "/mods/mymod" }, settings.GetFolderResources());
+    }
+
+    [Fact]
+    public void FolderSettings_ToText_ThenParse_RoundTrips()
+    {
+        var settings = MapSettings.Empty()
+            .WithFolderSettings(GameConfigurationKind.Doom2, new[] { "/mods/mymod", "/iwads/doom2.wad" });
+
+        var reloaded = MapSettings.Parse(settings.ToText());
+
+        Assert.Equal(GameConfigurationKind.Doom2, reloaded.GetGameConfiguration());
+        Assert.Equal(new[] { "/mods/mymod", "/iwads/doom2.wad" }, reloaded.GetFolderResources());
+    }
+
+    /// <summary>Folder-scoped and per-map-name resources coexist in the same .dbs shape without clobbering each other - only "gameconfig" is ever genuinely shared between them, same as it already is across different maps today.</summary>
+    [Fact]
+    public void FolderResources_AndPerMapResources_DoNotInterfere()
+    {
+        var settings = MapSettings.Empty()
+            .WithMapSettings("MAP01", GameConfigurationKind.Doom, new[] { "/a.wad" })
+            .WithFolderSettings(GameConfigurationKind.Doom2, new[] { "/mods/mymod" });
+
+        Assert.Equal(new[] { "/a.wad" }, settings.GetResources("MAP01"));
+        Assert.Equal(new[] { "/mods/mymod" }, settings.GetFolderResources());
+        Assert.Equal(GameConfigurationKind.Doom2, settings.GetGameConfiguration());
+    }
 }

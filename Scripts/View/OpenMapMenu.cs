@@ -27,12 +27,16 @@ using Godot;
 /// A WAD with only one map skips straight to the Map Options prompt; one
 /// with several (like a real IWAD) first pops a small map picker. The Map
 /// Options prompt itself always appears regardless of map count, rather
-/// than silently auto-picking - pre-filled from this WAD's own remembered <c>.dbs</c>
-/// settings if present, else from the game configuration's app-wide
-/// default resources, but always requiring confirmation. Confirming saves
-/// both back, so opening the same map again remembers its resources, and
-/// opening a different, previously-unopened map for the same game
-/// configuration is pre-filled with the same default.
+/// than silently auto-picking - pre-filled from this map's own real mod
+/// root's remembered <c>.dbs</c> settings if present (<see cref="ModRootDetector"/> -
+/// the enclosing pk3-style folder for the real GZDoom/ZDoom per-map-WAD
+/// convention, or the WAD itself for a true standalone WAD), else from
+/// the game configuration's app-wide default resources, but always
+/// requiring confirmation. Confirming saves both back, so opening the
+/// same map again remembers its resources, opening a *different* map
+/// from the same mod folder already gets that folder's own shared
+/// resources for free, and opening a different, previously-unopened mod
+/// for the same game configuration is pre-filled with the same default.
 ///
 /// <see cref="LoadFromCommandLine"/> is a separate, fully non-interactive
 /// entry point for the dev-only <c>--file</c>/<c>--map</c> launch
@@ -78,16 +82,22 @@ public partial class OpenMapMenu : PanelContainer
 	private bool _isRevisitingCurrentMap;
 
 	/// <summary>
-	/// Set only by <see cref="OnDirSelected"/>, consumed by
-	/// <see cref="PromptMapOptionsForPendingMap"/> to pre-fill the Map
-	/// Options resource list with the folder the map was opened from (so it
-	/// actually ends up configured as a resource, not just a path the map's
-	/// own data happened to be read from) - reset to null at the start of
-	/// every other entry point into this flow so a stale value from an
-	/// earlier, unrelated folder-open never leaks into one that didn't come
-	/// from a folder.
+	/// The real "mod root" this map's own settings should be scoped to -
+	/// <see cref="ModRootDetector.DetectFrom"/>, computed once in
+	/// <see cref="PromptMapOptionsForPendingMap"/> right after
+	/// <see cref="_pendingWadPath"/> is finalized, so it covers every entry
+	/// point that routes through there (a plain file pick, a folder scan,
+	/// <see cref="OpenSpecificMap"/>) without each needing its own copy of
+	/// the detection logic. Either the enclosing pk3-style mod folder (a
+	/// real GZDoom/ZDoom convention of one small per-map WAD per map, no
+	/// UDB precedent for treating the whole folder as one resource at all)
+	/// or, for a true standalone WAD, the exact same path as
+	/// <see cref="_pendingWadPath"/> itself - "per-WAD" and "per-mod" are
+	/// the same thing there. Null only for a brand-new, not-yet-saved map
+	/// (<see cref="OnNewMapNameEntered"/>), which has no WAD path to detect
+	/// a root from yet.
 	/// </summary>
-	private string _pendingFolderPath;
+	private string _pendingModRootPath;
 
 	// The map actually loaded and displayed right now - distinct from the
 	// "_pending" load-in-progress state above, which only lives for the
@@ -96,12 +106,14 @@ public partial class OpenMapMenu : PanelContainer
 	// map regardless of what's mid-flight (or aborted) since.
 	private WadFile _currentWad;
 	private string _currentWadPath;
+	private string _currentModRootPath;
 	private string _currentMapName;
 	private MapData _currentMapData;
 	private string _currentNamespace;
 	private IReadOnlyList<UdmfBlock> _currentUnknownBlocks;
 	private GameConfigurationKind _currentGameConfigurationKind;
 	private IReadOnlyList<string> _currentResourcePaths = Array.Empty<string>();
+	private IReadOnlyList<NamedResource> _currentNamedResources = Array.Empty<NamedResource>();
 
 	// The chosen Save As destination while the "this file already exists"
 	// confirmation is showing - set by OnSaveFileSelected, consumed (and
@@ -188,6 +200,16 @@ public partial class OpenMapMenu : PanelContainer
 	public string CurrentWadPath => _currentWadPath;
 
 	/// <summary>
+	/// The exact resource list the resource browser last showed for this
+	/// map - empty until a map genuinely loads. Lets a caller re-show "what
+	/// this specific map tab's own browser content looked like" without
+	/// needing to catch the next <see cref="MapLoaded"/>/<see cref="MapResourcesChanged"/>
+	/// firing (e.g. <c>AppShell</c> re-running <c>ResourceBrowserPanel.Refresh</c>
+	/// on every tab switch, not just on an actual load/resource change).
+	/// </summary>
+	public IReadOnlyList<NamedResource> CurrentNamedResources => _currentNamedResources;
+
+	/// <summary>
 	/// The current map's own real saveable bytes, built with the exact same
 	/// construction <see cref="WriteMapToFile"/> uses for a genuine save -
 	/// Test Map's own temp-WAD content, without touching disk or any of
@@ -200,6 +222,49 @@ public partial class OpenMapMenu : PanelContainer
 	}
 
 	public void ShowOpenFileDialog() => _fileDialog.PopupCentered();
+
+	/// <summary>
+	/// Opens a specific, already-known map by name from a specific WAD path -
+	/// skips the file picker and (if the WAD has more than one map) the map
+	/// picker, since both are already decided, but still shows the normal
+	/// interactive Map Options confirmation (game config + resources)
+	/// before actually loading - the same safety net every other "open a
+	/// map" entry point already has, deliberately not a silent auto-
+	/// confirm like <see cref="LoadFromCommandLine"/>'s own dev-only
+	/// shortcut. Used by the resource browser's own "Open" action on a
+	/// <c>MapGroup</c> tree node, where the file and map name are already
+	/// known exactly from the tree itself.
+	/// </summary>
+	public void OpenSpecificMap(string wadPath, string mapName)
+	{
+		try
+		{
+			var wad = WadFile.Read(wadPath);
+
+			var maps = new List<MapEntry>();
+			foreach (var name in wad.FindUdmfMapNames()) maps.Add(new MapEntry(name, IsUdmf: true));
+			foreach (var name in wad.FindClassicMapNames()) maps.Add(new MapEntry(name, IsUdmf: false));
+
+			var match = maps.FirstOrDefault(m => string.Equals(m.Name, mapName, StringComparison.OrdinalIgnoreCase));
+			if (match.Name == null)
+			{
+				ShowError($"Map '{mapName}' not found in '{Path.GetFileName(wadPath)}'.");
+				return;
+			}
+
+			_pendingWad = wad;
+			_pendingWadPath = wadPath;
+			_pendingMaps = new List<MapEntry> { match };
+			_pendingFileName = Path.GetFileName(wadPath);
+			_isRevisitingCurrentMap = false;
+
+			PromptMapOptionsForPendingMap(0);
+		}
+		catch (Exception ex)
+		{
+			ShowError(ex.Message);
+		}
+	}
 
 	private void OnFileSelected(string path)
 	{
@@ -221,7 +286,6 @@ public partial class OpenMapMenu : PanelContainer
 			_pendingWadPath = path;
 			_pendingMaps = maps;
 			_pendingFileName = Path.GetFileName(path);
-			_pendingFolderPath = null;
 			_isRevisitingCurrentMap = false;
 
 			if (maps.Count == 1)
@@ -288,7 +352,6 @@ public partial class OpenMapMenu : PanelContainer
 			}
 
 			_pendingMaps = maps;
-			_pendingFolderPath = dir;
 			_isRevisitingCurrentMap = false;
 
 			if (maps.Count == 1)
@@ -355,12 +418,41 @@ public partial class OpenMapMenu : PanelContainer
 			}
 
 			_pendingMapName = map.Name;
-			ShowMapOptionsDialog(_pendingMapData, _pendingWadPath, map.Name, _pendingFileName, _pendingFolderPath);
+			// Computed here, not by each caller individually - covers a
+			// plain file pick, a folder scan, and OpenSpecificMap in one
+			// place, since all three already funnel through this method.
+			_pendingModRootPath = ModRootDetector.DetectFrom(_pendingWadPath);
+
+			// A folder-rooted mod's own resources/game config are already
+			// confirmed once they're saved at all - every other map from the
+			// same mod shares them by definition (see MapSettings.GetFolderResources'
+			// own remarks), so re-asking for every single one is pure
+			// friction, not a real decision each time. A true standalone
+			// WAD's own per-map-name resources stay interactively confirmed
+			// every time, unchanged - different maps *can* legitimately want
+			// different resources there.
+			if (HasSavedFolderSettings(_pendingModRootPath))
+			{
+				PopulateMapOptionsDialogDefaults(_pendingMapData, _pendingModRootPath, map.Name, _pendingFileName);
+				OnMapOptionsConfirmed();
+				return;
+			}
+
+			ShowMapOptionsDialog(_pendingMapData, _pendingModRootPath, map.Name, _pendingFileName);
 		}
 		catch (Exception ex)
 		{
 			ShowError(ex.Message);
 		}
+	}
+
+	/// <summary>Whether <paramref name="modRootPath"/> is a folder mod root that already has both a game configuration and at least one resource saved - the two things the Map Options dialog would otherwise ask for, so there's nothing left to confirm.</summary>
+	private static bool HasSavedFolderSettings(string modRootPath)
+	{
+		if (modRootPath == null || !Directory.Exists(modRootPath)) return false;
+
+		var mapSettings = MapSettingsFile.Load(modRootPath);
+		return mapSettings.GetGameConfiguration() != null && mapSettings.GetFolderResources().Count > 0;
 	}
 
 	/// <summary>
@@ -383,10 +475,13 @@ public partial class OpenMapMenu : PanelContainer
 		_pendingWadPath = _currentWadPath;
 		_pendingMapData = _currentMapData;
 		_pendingMapName = _currentMapName;
-		_pendingFolderPath = null;
+		// Reuses the already-known current mod root rather than resetting
+		// to null - a revisit of a folder-rooted map needs to keep reading/
+		// writing that same shared .dbs, not fall back to a per-WAD one.
+		_pendingModRootPath = _currentModRootPath;
 		_isRevisitingCurrentMap = true;
 
-		ShowMapOptionsDialog(_currentMapData, _currentWadPath, _currentMapName, Path.GetFileName(_currentWadPath));
+		ShowMapOptionsDialog(_currentMapData, _currentModRootPath, _currentMapName, Path.GetFileName(_currentWadPath));
 	}
 
 	/// <summary>
@@ -407,43 +502,51 @@ public partial class OpenMapMenu : PanelContainer
 		_pendingMapName = mapName;
 		_pendingNamespace = null;
 		_pendingUnknownBlocks = null;
-		_pendingFolderPath = null;
+		_pendingModRootPath = null;
 		_isRevisitingCurrentMap = false;
 
 		ShowMapOptionsDialog(_pendingMapData, null, mapName, null);
 	}
 
-	private void ShowMapOptionsDialog(MapData mapData, string wadPath, string mapName, string fileNameHint, string additionalResourcePath = null)
+	private void ShowMapOptionsDialog(MapData mapData, string modRootPath, string mapName, string fileNameHint)
 	{
-		PopulateMapOptionsDialogDefaults(mapData, wadPath, mapName, fileNameHint, additionalResourcePath);
+		PopulateMapOptionsDialogDefaults(mapData, modRootPath, mapName, fileNameHint);
 		_mapOptionsDialog.PopupCentered();
 	}
 
 	/// <summary>
-	/// <paramref name="additionalResourcePath"/> is only ever the folder a
-	/// map was just opened *from* (see <see cref="OnDirSelected"/>) - makes
-	/// sure that folder actually ends up configured as a resource by
-	/// default, rather than merely being where the map's own data happened
-	/// to be read from, which is what lets <see cref="OnMapOptionsConfirmed"/>'s
-	/// own <see cref="IResourceContainer.ContainsFile"/> dedup check
-	/// actually have something to find.
+	/// <paramref name="modRootPath"/> is the real mod root this map's
+	/// settings are scoped to (<see cref="ModRootDetector"/>) - a folder
+	/// for the real GZDoom/ZDoom per-map-WAD convention, or the WAD itself
+	/// for a true standalone WAD, where that's the same thing anyway. When
+	/// it's a folder, its own resources are shared flat across every map
+	/// from it (<see cref="MapSettings.GetFolderResources"/> - no
+	/// legitimate case for one map in a folder wanting different resources
+	/// than another), and it's always ensured to be in the pre-filled
+	/// resource list itself, not just the place the map's own data
+	/// happened to be read from - which is what lets
+	/// <see cref="OnMapOptionsConfirmed"/>'s own
+	/// <see cref="IResourceContainer.ContainsFile"/> dedup check actually
+	/// have something to find. For a true standalone WAD, resources stay
+	/// scoped per map name (<see cref="MapSettings.GetResources"/>) - real,
+	/// confirmed UDB behavior, unrelated to the folder case.
 	/// </summary>
-	private void PopulateMapOptionsDialogDefaults(MapData mapData, string wadPath, string mapName, string fileNameHint, string additionalResourcePath = null)
+	private void PopulateMapOptionsDialogDefaults(MapData mapData, string modRootPath, string mapName, string fileNameHint)
 	{
-		var mapSettings = MapSettingsFile.Load(wadPath);
+		var mapSettings = MapSettingsFile.Load(modRootPath);
 		var suggestion = mapSettings.GetGameConfiguration()
 			?? GameConfigurationDetector.Detect(mapData, mapName, fileNameHint);
 		_mapOptionsDialog.SetGameConfiguration(suggestion);
 
-		var savedResources = mapSettings.GetResources(mapName);
+		var isFolderRoot = modRootPath != null && Directory.Exists(modRootPath);
+		var savedResources = isFolderRoot ? mapSettings.GetFolderResources() : mapSettings.GetResources(mapName);
 		var resourcePaths = (savedResources.Count > 0
 			? savedResources
 			: AppSettingsFile.Load().GetDefaultResources(suggestion)).ToList();
 
-		if (additionalResourcePath != null
-			&& !resourcePaths.Contains(additionalResourcePath, StringComparer.OrdinalIgnoreCase))
+		if (isFolderRoot && !resourcePaths.Contains(modRootPath, StringComparer.OrdinalIgnoreCase))
 		{
-			resourcePaths.Add(additionalResourcePath);
+			resourcePaths.Add(modRootPath);
 		}
 
 		_mapOptionsDialog.SetResourcePaths(resourcePaths);
@@ -498,10 +601,13 @@ public partial class OpenMapMenu : PanelContainer
 			_pendingFileName = Path.GetFileName(wadPath);
 			_pendingMapData = mapData;
 			_pendingMapName = match.Name;
-			_pendingFolderPath = null;
+			// Doesn't route through PromptMapOptionsForPendingMap (this is a
+			// separate, fully non-interactive entry point) - computed here
+			// directly instead.
+			_pendingModRootPath = ModRootDetector.DetectFrom(wadPath);
 			_isRevisitingCurrentMap = false;
 
-			PopulateMapOptionsDialogDefaults(mapData, wadPath, match.Name, _pendingFileName);
+			PopulateMapOptionsDialogDefaults(mapData, _pendingModRootPath, match.Name, _pendingFileName);
 			OnMapOptionsConfirmed();
 		}
 		catch (Exception ex)
@@ -532,7 +638,21 @@ public partial class OpenMapMenu : PanelContainer
 
 		if (includePendingWadAsResource) resourceContainers.Add(_pendingWad);
 		var resources = new ResourceSet(resourceContainers);
-		var textures = TextureSet.Load(resources);
+
+		// The trailing pending-WAD entry (if present) is always a fresh
+		// WadFile.Read object, even for the exact same unmodified file - a
+		// reference-based identity would almost never hit the cache. A
+		// path+last-write-time+length token stays equal across repeated
+		// opens of the same file but correctly changes on an edit/save;
+		// every other entry is already a stable, shared instance (see
+		// ResourceContainerCache) and is used as its own identity.
+		var identity = new List<object>(resourceContainers);
+		if (includePendingWadAsResource)
+		{
+			identity[^1] = (_pendingWadPath, File.GetLastWriteTimeUtc(_pendingWadPath), new FileInfo(_pendingWadPath).Length);
+		}
+
+		var textures = TextureSetCache.Load(resources, identity);
 		// Layers in whatever the map's own resources' ZSCRIPT/DECORATE/
 		// MAPINFO define on top of the static, `.cfg`-driven game
 		// configuration - so a mod's own custom actors show up as
@@ -544,7 +664,7 @@ public partial class OpenMapMenu : PanelContainer
 		// skipped entirely when there's no file yet or it's already covered.
 		var resourcePathsForNamedResources = includePendingWadAsResource ? resourcePaths.Append(_pendingWadPath) : resourcePaths;
 		var namedResources = resourcePathsForNamedResources
-			.Zip(resourceContainers, (path, container) => new NamedResource(Path.GetFileName(path), container))
+			.Zip(resourceContainers, (path, container) => new NamedResource(Path.GetFileName(path), container, path))
 			.ToList();
 
 		if (_isRevisitingCurrentMap)
@@ -559,6 +679,7 @@ public partial class OpenMapMenu : PanelContainer
 			// highlighting whichever tree item is the open map) reacts to it.
 			_currentWad = _pendingWad;
 			_currentWadPath = _pendingWadPath;
+			_currentModRootPath = _pendingModRootPath;
 			_currentMapName = _pendingMapName;
 			_currentMapData = _pendingMapData;
 			_currentNamespace = _pendingNamespace ?? DefaultNamespaceFor(kind);
@@ -571,14 +692,21 @@ public partial class OpenMapMenu : PanelContainer
 		// freshly opened one.
 		_currentGameConfigurationKind = kind;
 		_currentResourcePaths = resourcePaths;
+		_currentNamedResources = namedResources;
 
-		// A brand-new map has no WAD path to key .dbs settings off of yet -
+		// A brand-new map has no mod root to key .dbs settings off of yet -
 		// that persistence only starts to make sense once it's been saved
-		// somewhere for the first time.
-		if (_pendingWadPath != null)
+		// somewhere for the first time. Directory.Exists is the folder-vs-
+		// WAD discriminator - true only for a detected mod folder, false
+		// for a plain standalone WAD path (where "per-WAD" and "per-mod"
+		// are the same thing anyway).
+		if (_pendingModRootPath != null)
 		{
-			var mapSettings = MapSettingsFile.Load(_pendingWadPath).WithMapSettings(_pendingMapName, kind, resourcePaths);
-			MapSettingsFile.Save(_pendingWadPath, mapSettings);
+			var mapSettings = MapSettingsFile.Load(_pendingModRootPath);
+			var updatedSettings = Directory.Exists(_pendingModRootPath)
+				? mapSettings.WithFolderSettings(kind, resourcePaths)
+				: mapSettings.WithMapSettings(_pendingMapName, kind, resourcePaths);
+			MapSettingsFile.Save(_pendingModRootPath, updatedSettings);
 		}
 
 		var appSettings = AppSettingsFile.Load().WithDefaultResources(kind, resourcePaths);

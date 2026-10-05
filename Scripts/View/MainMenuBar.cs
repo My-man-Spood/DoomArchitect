@@ -10,15 +10,18 @@ using Godot;
 /// native Godot 4.4+ <see cref="MenuBar"/>, whose children are the
 /// <see cref="PopupMenu"/>s shown as its top-level entries (each child's
 /// node name is its label). Lives in <c>Main.tscn</c> as app-level chrome
-/// rather than inside <c>MapDocument.tscn</c> - there's only ever one map
-/// open at a time, and actions here ("Save Map", "Open Script...") should
-/// stay reachable no matter which tab is currently showing, which a menu
-/// bar living inside the map document's own tab couldn't do (a real,
-/// reported bug: it disappeared along with the rest of that tab's content
-/// whenever a Script tab was active). <see cref="Initialize"/> is called
-/// by <c>AppShell</c> once it has resolved <see cref="OpenMapMenu"/> and
-/// <c>MapOverlay</c> off the one Map tab, keeping node-path lookups
-/// centralized there rather than duplicated here.
+/// rather than inside any one map document's own scene - actions here
+/// ("Save Map", "Open Script...") should stay reachable no matter which
+/// tab is currently showing, which a menu bar living inside a map
+/// document's own tab couldn't do (a real, reported bug: it disappeared
+/// along with the rest of that tab's content whenever a Script tab was
+/// active). Since more than one Map tab can exist at once,
+/// <see cref="BuildMenus"/> (the one-time menu-structure/event-handler
+/// construction - called once by <c>AppShell</c> at startup) is kept
+/// separate from <see cref="SetActiveMap"/> (re-callable, just re-points
+/// which map's own <see cref="OpenMapMenu"/>/<c>MapOverlay</c> every
+/// action here actually targets - called by <c>AppShell</c> every time a
+/// Map tab becomes the active one, not just the first).
 /// </summary>
 public partial class MainMenuBar : MenuBar
 {
@@ -30,6 +33,15 @@ public partial class MainMenuBar : MenuBar
 	private ThingEditDialog _thingEditDialog;
 	private AcceptDialog _errorDialog;
 	private ConfirmationDialog _discardChangesDialog;
+
+	/// <summary>
+	/// Every <see cref="OpenMapMenu"/> <see cref="SetActiveMap"/> has ever
+	/// been pointed at - its own per-instance event wiring (<see cref="OpenMapMenu.MapSaved"/>,
+	/// the <c>MapOverlay</c> edit-request events below) only needs doing
+	/// once per map tab, not once per *switch back to* an already-visited
+	/// one, or those events would fire their own handlers more than once.
+	/// </summary>
+	private readonly HashSet<OpenMapMenu> _wiredMapMenus = new();
 
 	// Which File-menu action the discard-unsaved-changes prompt should
 	// actually perform once confirmed - set right before showing it.
@@ -47,12 +59,29 @@ public partial class MainMenuBar : MenuBar
 	/// <summary>Fired with the new value whenever "Immersive 3D View" is toggled from the Preferences menu - <c>AppShell</c> owns what that actually does to its own layout (see its own remarks), this menu only owns persisting the setting and reflecting its checked state.</summary>
 	public Action<bool> Immersive3DViewToggled { get; set; }
 
-	public void Initialize(OpenMapMenu openMapMenu, MapOverlay overlay)
-	{
-		_openMapMenu = openMapMenu;
-		_overlay = overlay;
-		_openMapMenu.MapSaved += () => _overlay.UndoStack?.MarkSaved();
+	/// <summary>
+	/// Fired when "New Map..."/"Open Map..." is pressed while no map tab is
+	/// active (<see cref="_openMapMenu"/> is null) - there's no existing
+	/// <see cref="OpenMapMenu"/> instance to act on yet, since one only
+	/// ever exists inside a <c>MapView</c>'s own scene. <c>AppShell</c>
+	/// creates a fresh, blank Map tab and immediately shows that tab's own
+	/// Open Map file dialog (<paramref name="showOpenDialog"/> true) or New
+	/// Map name prompt (false) on it.
+	/// </summary>
+	public Action<bool> CreateMapTabRequested { get; set; }
 
+	/// <summary>
+	/// Builds every menu's own items and <c>IdPressed</c> dispatch exactly
+	/// once, independent of any specific map tab - every handler below
+	/// reads <see cref="_openMapMenu"/>/<see cref="_overlay"/> as fields at
+	/// the moment it actually runs (not whatever they were when this method
+	/// ran), so building this structure before either field is ever set is
+	/// fine, the same way it already worked when both were assigned here
+	/// too. Call <see cref="SetActiveMap"/> separately once a map tab
+	/// exists to actually point these actions at it.
+	/// </summary>
+	public void BuildMenus()
+	{
 		var fileMenu = GetNode<PopupMenu>("File");
 		fileMenu.AddItem("New Map...", 0);
 		fileMenu.AddItem("Open Map...", 1);
@@ -63,6 +92,24 @@ public partial class MainMenuBar : MenuBar
 		fileMenu.AddItem("Open Script...", 5);
 		fileMenu.IdPressed += id =>
 		{
+			// Reachable now that zero active map tabs is a real, supported
+			// state (every tab, including the original one, is closable),
+			// not just a transient moment during startup - "New Map..."/
+			// "Open Map..." have no existing OpenMapMenu instance to act on
+			// in that state (one lives inside each MapView's own scene,
+			// nowhere else), so they go through AppShell to create a fresh
+			// Map tab first. Save/Save As/Save Into fundamentally need an
+			// already-loaded map's data to act on - no tab means nothing to
+			// save, so those (and "Map Options..." in the Map menu below)
+			// stay graceful no-ops; visually disabling them while inactive
+			// is a reasonable follow-up, not required for this pass.
+			if (_openMapMenu == null)
+			{
+				if (id == 0 || id == 1) CreateMapTabRequested?.Invoke(id == 1);
+				else if (id == 5) OpenScriptRequested?.Invoke();
+				return;
+			}
+
 			switch (id)
 			{
 				case 0:
@@ -90,17 +137,14 @@ public partial class MainMenuBar : MenuBar
 		editMenu.AddItem("Edit Selection...", 0);
 		editMenu.IdPressed += id =>
 		{
-			if (id == 0) OpenEditSelectionDialog();
+			if (id == 0 && _overlay != null) OpenEditSelectionDialog();
 		};
-		_overlay.EditSectorsRequested += OpenSectorEditDialogFor;
-		_overlay.EditLinedefsRequested += OpenLinedefEditDialogFor;
-		_overlay.EditThingsRequested += OpenThingEditDialogFor;
 
 		var mapMenu = GetNode<PopupMenu>("Map");
 		mapMenu.AddItem("Map Options...", 0);
 		mapMenu.IdPressed += id =>
 		{
-			if (id == 0) _openMapMenu.ShowMapOptionsForCurrentMap();
+			if (id == 0) _openMapMenu?.ShowMapOptionsForCurrentMap();
 		};
 
 		var preferencesMenu = GetNode<PopupMenu>("Preferences");
@@ -117,6 +161,36 @@ public partial class MainMenuBar : MenuBar
 		};
 
 		InitializeSelectionBoxMenu(preferencesMenu);
+	}
+
+	/// <summary>
+	/// Points every action this menu bar owns at a specific map tab -
+	/// called by <c>AppShell</c> every time a Map tab becomes the active
+	/// one (not just the first), so "Save Map"/"Map Options..."/etc.
+	/// always act on whichever map the user is actually looking at. Each
+	/// <see cref="OpenMapMenu"/>'s own per-instance event wiring
+	/// (<see cref="OpenMapMenu.MapSaved"/>, the three <c>MapOverlay</c>
+	/// edit-request events) only happens the first time this is ever
+	/// called for it - re-subscribing on every switch back to an already-
+	/// visited tab would fire those handlers more than once per real event.
+	/// </summary>
+	public void SetActiveMap(OpenMapMenu openMapMenu, MapOverlay overlay)
+	{
+		_openMapMenu = openMapMenu;
+		_overlay = overlay;
+
+		// null is a legitimate argument here (AppShell clears both fields
+		// when the active tab isn't a map at all, or none is active) -
+		// HashSet<T>.Add(null) itself would happily succeed and report
+		// "newly added", so this has to be checked explicitly rather than
+		// relying on that call alone to guard the wiring below.
+		if (openMapMenu != null && _wiredMapMenus.Add(openMapMenu))
+		{
+			openMapMenu.MapSaved += () => overlay.UndoStack?.MarkSaved();
+			overlay.EditSectorsRequested += OpenSectorEditDialogFor;
+			overlay.EditLinedefsRequested += OpenLinedefEditDialogFor;
+			overlay.EditThingsRequested += OpenThingEditDialogFor;
+		}
 	}
 
 	/// <summary>
@@ -300,7 +374,7 @@ public partial class MainMenuBar : MenuBar
 
 		selectionBoxMenu.IdPressed += id =>
 		{
-			_overlay.MarqueeSelectTouching = id == 1;
+			if (_overlay != null) _overlay.MarqueeSelectTouching = id == 1;
 			selectionBoxMenu.SetItemChecked(0, id == 0);
 			selectionBoxMenu.SetItemChecked(1, id == 1);
 		};

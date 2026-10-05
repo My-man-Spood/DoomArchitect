@@ -284,4 +284,58 @@ public class WadFileTests
         Assert.Equal(new[] { "TEXTMAP", "ENDMAP" }, mapNode.Children.Select(c => c.DisplayName));
         Assert.All(mapNode.Children, c => Assert.Equal(ResourceTreeNodeKind.Lump, c.Kind));
     }
+
+    [Fact]
+    public void BuildTree_LumpIndex_MatchesEachNodesRealPositionInLumps()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("PLAYPAL", new byte[] { 1 }),
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", WadTestBuilder.TextLump("namespace = \"doom\";")),
+            ("ENDMAP", Array.Empty<byte>()),
+            ("COLORMAP", new byte[] { 2 }));
+
+        var wad = WadFile.Read(new MemoryStream(bytes));
+        var tree = wad.BuildTree("my.wad");
+
+        Assert.Equal(0, tree.Children[0].LumpIndex); // PLAYPAL
+        Assert.Equal(1, tree.Children[1].LumpIndex); // MAP01 marker
+        Assert.Equal(2, tree.Children[1].Children[0].LumpIndex); // TEXTMAP
+        Assert.Equal(3, tree.Children[1].Children[1].LumpIndex); // ENDMAP
+        Assert.Equal(4, tree.Children[2].LumpIndex); // COLORMAP
+    }
+
+    [Fact]
+    public void WithReplacedLumpData_ReplacesOnlyTheTargetIndex()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("SCRIPTS", new byte[] { 1 }),
+            ("BEHAVIOR", new byte[] { 2 }));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var result = WadFile.WithReplacedLumpData(wad.Lumps, 0, new byte[] { 9, 9 });
+
+        Assert.Equal(2, result.Count);
+        Assert.Equal("SCRIPTS", result[0].Name);
+        Assert.Equal(new byte[] { 9, 9 }, result[0].Data);
+        Assert.Equal("BEHAVIOR", result[1].Name);
+        Assert.Equal(new byte[] { 2 }, result[1].Data);
+    }
+
+    /// <summary>The whole reason lump identity needs an index, not just a name - a Hexen-format WAD can have more than one map, each with its own SCRIPTS lump sharing the same name.</summary>
+    [Fact]
+    public void WithReplacedLumpData_SameNamedLumpAtDifferentIndices_TargetsExactIndexOnly()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("SCRIPTS", new byte[] { 1 }),
+            ("MAP02", Array.Empty<byte>()),
+            ("SCRIPTS", new byte[] { 2 }));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var result = WadFile.WithReplacedLumpData(wad.Lumps, 3, new byte[] { 99 });
+
+        Assert.Equal(new byte[] { 1 }, result[1].Data);
+        Assert.Equal(new byte[] { 99 }, result[3].Data);
+    }
 }

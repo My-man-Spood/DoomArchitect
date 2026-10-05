@@ -5,6 +5,7 @@ using System.Linq;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.ZDoom;
+using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
@@ -68,7 +69,7 @@ public partial class ResourceListEditor : VBoxContainer
 		_addFileDialog.DirSelected += OnFileSelected;
 	}
 
-	/// <summary>Replaces the whole list, loading each path via <see cref="ResourceContainerFactory"/> (a WAD or a PK3) - one that fails to load (e.g. moved on disk) is skipped and reported, not fatal to the rest.</summary>
+	/// <summary>Replaces the whole list, loading each path via <see cref="ResourceContainerCache"/> (a WAD or a PK3, reused if another tab already opened the same path) - one that fails to load (e.g. moved on disk) is skipped and reported, not fatal to the rest.</summary>
 	public void SetResourcePaths(IReadOnlyList<string> paths)
 	{
 		_resources.Clear();
@@ -78,7 +79,7 @@ public partial class ResourceListEditor : VBoxContainer
 		{
 			try
 			{
-				_resources.Add(new ResourceEntry(path, ResourceContainerFactory.Open(path)));
+				_resources.Add(new ResourceEntry(path, ResourceContainerCache.Open(path)));
 			}
 			catch (Exception)
 			{
@@ -102,7 +103,7 @@ public partial class ResourceListEditor : VBoxContainer
 	{
 		try
 		{
-			_resources.Add(new ResourceEntry(path, ResourceContainerFactory.Open(path)));
+			_resources.Add(new ResourceEntry(path, ResourceContainerCache.Open(path)));
 			Refresh();
 		}
 		catch (Exception ex)

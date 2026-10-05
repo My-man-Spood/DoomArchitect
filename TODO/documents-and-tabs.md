@@ -100,26 +100,25 @@ get built) and a new, deliberately simple generic text/script tab type.
 
 ## Deferred, tracked, not cut
 
-- **Multi-map tabs** - several Map tabs open simultaneously, "File >
-  Open Map" creating a *new* tab instead of resetting the current one in
-  place (today's existing single-map reset-in-place behavior, untouched,
-  stays the only way to load a different map). `MainMenuBar` being
-  app-level now actually makes this easier than originally scoped - the
-  remaining blocker is `MainMenuBar.Initialize` being wired to one
-  specific Map tab's `OpenMapMenu`/`MapOverlay` rather than "whichever Map
-  tab is currently focused."
 - **A WAD-browser tab type** (SLADE-style) and **a sprite-editor tab
   type** - both named in the long-term vision, neither started.
-- **ACS/BCS syntax highlighting and compiler integration inside
-  `ScriptDocument`** - this session's own ACS/BCS exploration (bundled
-  `acc`/`bcc`/`zt-bcc` compilers, `#include`/`#import` multi-file
-  support, the MIT-licensed `zt-bcc` source as a real port target) is
-  real, scoped future work layered on top of this plain-text tab, not
-  built here.
-- **Per-tab close button visibility** - `TabBar.TabCloseDisplayPolicy` is
-  a strip-wide setting, not per-tab; the Map tab's own close button
-  (index 0) is visually present once any script tab exists but is a
-  no-op when pressed (guarded in `AppShell.OnTabClosePressed`). A real
-  per-tab "can't close this one" visual affordance would need a custom
-  `TabBar` draw override - not worth it for the one fixed tab this pass
-  has.
+
+## Update: multi-Map-tab support landed
+
+The "Multi-map tabs" item this entry originally deferred (several Map
+tabs open at once, the exact blocker named below) landed as a
+prerequisite of [Open files/lumps from the resource browser](browser-open-action.md) -
+opening a map lump from the browser needed somewhere real to open it
+*into*. `MainMenuBar.Initialize` (the named blocker - wired to one
+specific Map tab's `OpenMapMenu`/`MapOverlay`, no way to re-point it)
+split into `BuildMenus()` (one-time structure) and the re-callable
+`SetActiveMap` - see that entry's own "Multi-Map-tab support" section
+for the rest (per-tab `SubViewportContainer`, every tab now closable
+down to zero including the original one, ACS/BCS syntax highlighting
+inside `ScriptDocument` also landed there alongside it, scoped to
+`SCRIPTS` lumps and `.acs`/`.bcs` files specifically - still no ZScript
+highlighting, and still no compiler integration).
+
+"Per-tab close button visibility" is also moot now - every tab,
+including the original Map tab, is genuinely closable, so the no-op
+guard that entry described no longer exists at all.

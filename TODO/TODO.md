@@ -130,6 +130,7 @@ so it isn't lost, not because it belongs in the tables below.
 | Load a real map end to end | WAD -> UDMF text -> `MapData` -> rendered, opening a real id Software WAD works. |
 | [Open Map... UI](mapio-open-map-ui.md) | |
 | [Saving maps / creating new maps](mapio-save-new-maps.md) | |
+| [Scope map settings (.dbs) to the whole mod, not the individual WAD](mapio-mod-scoped-settings.md) | Fixes per-map-WAD-in-a-folder settings never being shared. |
 
 ### Textures
 
@@ -168,6 +169,7 @@ so it isn't lost, not because it belongs in the tables below.
 | [Multi-resource support (WadResourceSet)](resources-multi-resource-support.md) | |
 | [PK3 resource loading](resources-pk3-loading.md) | |
 | [Resource browser panel (VSCode-style source tree)](resources-browser-panel.md) | First pass - visibility/structure only, no UDB equivalent exists. |
+| [Open files/lumps from the resource browser](browser-open-action.md) | Double-click/"Open"; brought real multi-Map-tab support with it. |
 
 ### Input
 

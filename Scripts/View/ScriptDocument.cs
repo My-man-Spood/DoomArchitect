@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Core.IO;
 using DoomArchitect.Core.ZDoom.Bcs;
 using Godot;
 
@@ -8,21 +9,33 @@ using Godot;
 /// A text editing tab - one <see cref="CodeEdit"/> (Godot's own built-in
 /// code-editing control: line numbers, folding, basic editing all come
 /// for free, no custom widget needed), a header showing the open file's
-/// path, and load/save-to-disk. Language-aware only for <c>.bcs</c> files
-/// so far (real syntax highlighting via <see cref="BcsSyntaxHighlighter"/>
+/// path, and load/save-back. File-backed (<see cref="LoadFile"/>, a real
+/// path on disk) or lump-backed (<see cref="LoadLump"/>, a byte array
+/// already read from a specific lump inside a specific WAD - the
+/// resource browser's own "Open" on a <c>SCRIPTS</c>/<c>ZSCRIPT</c> lump)
+/// - exactly one of <see cref="FilePath"/>/<see cref="_wadSourcePath"/>
+/// is ever set for a given tab. Language-aware only for BCS/ACS source so
+/// far (real syntax highlighting via <see cref="BcsSyntaxHighlighter"/>
 /// and inline diagnostic line markers via <see cref="BcsParser"/>, both
 /// driven in-process by the same library the standalone
 /// <c>DoomArchitect.LanguageServer</c> project uses over LSP - see
-/// TODO/bcs-lsp-foundation.md) - every other extension still opens as
-/// plain text, same as before. "Script" just names the kind of file this
-/// tab is for, the same way UDB's own script editor opens plain text
-/// regardless of what's eventually compiled from it.
+/// TODO/bcs-lsp-foundation.md) - triggered by a <c>.bcs</c>/<c>.acs</c>
+/// extension for a file-backed tab, or a <c>SCRIPTS</c> lump name for a
+/// lump-backed one (its content *is* genuine ACS source, same grammar) -
+/// every other extension/lump name still opens as plain text, same as
+/// before (a <c>ZSCRIPT</c> lump included - no ZScript highlighting
+/// exists in this project yet). "Script" just names the kind of file
+/// this tab is for, the same way UDB's own script editor opens plain
+/// text regardless of what's eventually compiled from it.
 /// </summary>
 public partial class ScriptDocument : VBoxContainer
 {
 	private Label _pathLabel;
 	private CodeEdit _codeEdit;
 	private string _filePath;
+	private string _wadSourcePath;
+	private int _lumpIndex;
+	private string _lumpName;
 	private BcsSyntaxHighlighter _bcsHighlighter;
 	private readonly HashSet<int> _diagnosticLines = new();
 	private List<BcsDiagnostic> _diagnostics = new();
@@ -31,11 +44,18 @@ public partial class ScriptDocument : VBoxContainer
 	private static readonly Color ErrorLineColor = new(1, 0, 0, 0.15f);
 	private static readonly Color WarningLineColor = new(1, 1, 0, 0.12f);
 
-	/// <summary>Null until <see cref="LoadFile"/> is called - an unsaved, as-yet-nameless document.</summary>
+	/// <summary>Null for a lump-backed tab (see <see cref="LoadLump"/>) or an unsaved, as-yet-nameless document.</summary>
 	public string FilePath => _filePath;
 
-	/// <summary>The tab title - just the file's own name, matching how every other editor names an open-file tab.</summary>
-	public string DisplayName => _filePath == null ? "untitled" : System.IO.Path.GetFileName(_filePath);
+	/// <summary>The tab title - the file's own name for a file-backed tab, "LUMPNAME (wad.wad)" for a lump-backed one, matching how every other editor names an open-file tab.</summary>
+	public string DisplayName => _filePath != null
+		? System.IO.Path.GetFileName(_filePath)
+		: _lumpName != null ? $"{_lumpName} ({System.IO.Path.GetFileName(_wadSourcePath)})" : "untitled";
+
+	/// <summary>Whether this tab is already the lump at <paramref name="lumpIndex"/> inside the WAD at <paramref name="wadSourcePath"/> - the lump-backed counterpart of comparing <see cref="FilePath"/> directly, used the same way to focus an already-open tab instead of duplicating it.</summary>
+	public bool IsLumpFrom(string wadSourcePath, int lumpIndex) =>
+		_wadSourcePath != null && _lumpIndex == lumpIndex
+		&& string.Equals(System.IO.Path.GetFullPath(_wadSourcePath), System.IO.Path.GetFullPath(wadSourcePath), StringComparison.OrdinalIgnoreCase);
 
 	/// <summary>
 	/// Raised when go-to-definition (<see cref="OnBcsSymbolLookup"/>)
@@ -80,29 +100,65 @@ public partial class ScriptDocument : VBoxContainer
 		if (extension.Equals(".bcs", System.StringComparison.OrdinalIgnoreCase) ||
 			extension.Equals(".acs", System.StringComparison.OrdinalIgnoreCase))
 		{
-			_bcsHighlighter = new BcsSyntaxHighlighter();
-			_codeEdit.SyntaxHighlighter = _bcsHighlighter;
-			_codeEdit.TextChanged += RefreshBcsHighlightingAndDiagnostics;
-			_codeEdit.SetTooltipRequestFunc(Callable.From<string, string>(GetBcsTooltip));
-
-			_codeEdit.CodeCompletionEnabled = true; // false by default on a bare CodeEdit node
-			_codeEdit.CodeCompletionRequested += OnBcsCodeCompletionRequested;
-			_codeEdit.TextChanged += RequestBcsCodeCompletionIfWordLongEnough;
-
-			// Godot's own Ctrl/Cmd+Click-to-navigate mechanism (confirmed from
-			// scene/gui/code_edit.cpp): SymbolValidate fires on Ctrl/Cmd-held
-			// mouse motion over a word (no position - same mouse-position
-			// derivation GetBcsTooltip already needs), answered via
-			// SetSymbolLookupWordAsValid; SymbolLookup then fires only on an
-			// actual Ctrl/Cmd+Click on a word already marked valid, handing
-			// over the click's own position directly - no custom word/hit
-			// detection needed on this side at all.
-			_codeEdit.SymbolLookupOnClick = true;
-			_codeEdit.SymbolValidate += OnBcsSymbolValidate;
-			_codeEdit.SymbolLookup += OnBcsSymbolLookup;
-
-			RefreshBcsHighlightingAndDiagnostics();
+			InitializeBcsLanguageSupport();
 		}
+	}
+
+	/// <summary>
+	/// Lump-backed counterpart of <see cref="LoadFile"/> - populates the
+	/// editor directly from already-read bytes (no disk read at all), for
+	/// a lump the resource browser's own "Open" action resolved (see
+	/// <c>AppShell.OnResourceOpenRequested</c>). <paramref name="lumpIndex"/>
+	/// is the lump's own real position in <paramref name="wadPath"/>'s own
+	/// lump list (<c>ResourceTreeNode.LumpIndex</c>) - needed, not just
+	/// <paramref name="lumpName"/>, since a WAD can have more than one lump
+	/// sharing a name (a Hexen-format WAD's own per-map <c>SCRIPTS</c>
+	/// lump, one per map) - <see cref="Save"/> has to write back to this
+	/// exact lump, not just "the first/any lump with this name".
+	/// </summary>
+	public void LoadLump(string wadPath, int lumpIndex, string lumpName, byte[] data)
+	{
+		_wadSourcePath = wadPath;
+		_lumpIndex = lumpIndex;
+		_lumpName = lumpName;
+		_pathLabel.Text = $"{lumpName} ({System.IO.Path.GetFileName(wadPath)})";
+		_codeEdit.Text = System.Text.Encoding.UTF8.GetString(data);
+
+		// SCRIPTS lump content is genuine ACS source, same grammar .acs/
+		// .bcs already use - ZSCRIPT (or anything else) falls through to
+		// plain text, same as every other currently-unrecognized
+		// extension/lump name already does (no ZScript highlighting
+		// exists in this project yet).
+		if (lumpName.Equals("SCRIPTS", System.StringComparison.OrdinalIgnoreCase))
+		{
+			InitializeBcsLanguageSupport();
+		}
+	}
+
+	private void InitializeBcsLanguageSupport()
+	{
+		_bcsHighlighter = new BcsSyntaxHighlighter();
+		_codeEdit.SyntaxHighlighter = _bcsHighlighter;
+		_codeEdit.TextChanged += RefreshBcsHighlightingAndDiagnostics;
+		_codeEdit.SetTooltipRequestFunc(Callable.From<string, string>(GetBcsTooltip));
+
+		_codeEdit.CodeCompletionEnabled = true; // false by default on a bare CodeEdit node
+		_codeEdit.CodeCompletionRequested += OnBcsCodeCompletionRequested;
+		_codeEdit.TextChanged += RequestBcsCodeCompletionIfWordLongEnough;
+
+		// Godot's own Ctrl/Cmd+Click-to-navigate mechanism (confirmed from
+		// scene/gui/code_edit.cpp): SymbolValidate fires on Ctrl/Cmd-held
+		// mouse motion over a word (no position - same mouse-position
+		// derivation GetBcsTooltip already needs), answered via
+		// SetSymbolLookupWordAsValid; SymbolLookup then fires only on an
+		// actual Ctrl/Cmd+Click on a word already marked valid, handing
+		// over the click's own position directly - no custom word/hit
+		// detection needed on this side at all.
+		_codeEdit.SymbolLookupOnClick = true;
+		_codeEdit.SymbolValidate += OnBcsSymbolValidate;
+		_codeEdit.SymbolLookup += OnBcsSymbolLookup;
+
+		RefreshBcsHighlightingAndDiagnostics();
 	}
 
 	/// <summary>
@@ -312,10 +368,33 @@ public partial class ScriptDocument : VBoxContainer
 
 	public void Save()
 	{
-		if (_filePath == null) return;
+		if (_filePath != null)
+		{
+			using var file = Godot.FileAccess.Open(_filePath, Godot.FileAccess.ModeFlags.Write);
+			file.StoreString(_codeEdit.Text);
+			return;
+		}
 
-		using var file = Godot.FileAccess.Open(_filePath, Godot.FileAccess.ModeFlags.Write);
-		file.StoreString(_codeEdit.Text);
+		if (_wadSourcePath != null) SaveLump();
+	}
+
+	/// <summary>
+	/// Re-reads the WAD fresh (not holding some stale in-memory copy from
+	/// whenever this tab was opened), splices in this lump's new bytes via
+	/// the generic <see cref="WadFile.WithReplacedLumpData"/>, rebuilds via
+	/// <see cref="WadWriter.Write"/>, backs up (<c>.bak</c>) then
+	/// overwrites - the exact same pattern <c>OpenMapMenu.WriteMapToFile</c>
+	/// already uses for every map save, not a new one; never an in-place
+	/// binary patch.
+	/// </summary>
+	private void SaveLump()
+	{
+		var wad = WadFile.Read(_wadSourcePath);
+		var newLumps = WadFile.WithReplacedLumpData(wad.Lumps, _lumpIndex, System.Text.Encoding.UTF8.GetBytes(_codeEdit.Text));
+		var bytes = WadWriter.Write(newLumps);
+
+		if (System.IO.File.Exists(_wadSourcePath)) System.IO.File.Move(_wadSourcePath, _wadSourcePath + ".bak", overwrite: true);
+		System.IO.File.WriteAllBytes(_wadSourcePath, bytes);
 	}
 
 	/// <summary>
