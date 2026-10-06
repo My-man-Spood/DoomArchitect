@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.ZDoom.Bcs;
+using DoomArchitect.Settings;
 using Godot;
 
 /// <summary>
@@ -10,11 +11,13 @@ using Godot;
 /// code-editing control: line numbers, folding, basic editing all come
 /// for free, no custom widget needed), a header showing the open file's
 /// path, and load/save-back. File-backed (<see cref="LoadFile"/>, a real
-/// path on disk) or lump-backed (<see cref="LoadLump"/>, a byte array
+/// path on disk), lump-backed (<see cref="LoadLump"/>, a byte array
 /// already read from a specific lump inside a specific WAD - the
-/// resource browser's own "Open" on a <c>SCRIPTS</c>/<c>ZSCRIPT</c> lump)
-/// - exactly one of <see cref="FilePath"/>/<see cref="_wadSourcePath"/>
-/// is ever set for a given tab. Language-aware only for BCS/ACS source so
+/// resource browser's own "Open" on a <c>SCRIPTS</c>/<c>ZSCRIPT</c> lump),
+/// or PK3-entry-backed (<see cref="LoadPk3Entry"/>, a byte array already
+/// read from a specific entry inside a real <c>.pk3</c> zip archive) -
+/// exactly one of <see cref="FilePath"/>/<see cref="_wadSourcePath"/>/
+/// <see cref="_pk3SourcePath"/> is ever set for a given tab. Language-aware only for BCS/ACS source so
 /// far (real syntax highlighting via <see cref="BcsSyntaxHighlighter"/>
 /// and inline diagnostic line markers via <see cref="BcsParser"/>, both
 /// driven in-process by the same library the standalone
@@ -36,6 +39,8 @@ public partial class ScriptDocument : VBoxContainer
 	private string _wadSourcePath;
 	private int _lumpIndex;
 	private string _lumpName;
+	private string _pk3SourcePath;
+	private string _pk3EntryPath;
 	private BcsSyntaxHighlighter _bcsHighlighter;
 	private readonly HashSet<int> _diagnosticLines = new();
 	private List<BcsDiagnostic> _diagnostics = new();
@@ -47,15 +52,22 @@ public partial class ScriptDocument : VBoxContainer
 	/// <summary>Null for a lump-backed tab (see <see cref="LoadLump"/>) or an unsaved, as-yet-nameless document.</summary>
 	public string FilePath => _filePath;
 
-	/// <summary>The tab title - the file's own name for a file-backed tab, "LUMPNAME (wad.wad)" for a lump-backed one, matching how every other editor names an open-file tab.</summary>
+	/// <summary>The tab title - the file's own name for a file-backed tab, "LUMPNAME (wad.wad)" for a lump-backed one, "entry/path (mod.pk3)" for a PK3-entry-backed one, matching how every other editor names an open-file tab.</summary>
 	public string DisplayName => _filePath != null
 		? System.IO.Path.GetFileName(_filePath)
-		: _lumpName != null ? $"{_lumpName} ({System.IO.Path.GetFileName(_wadSourcePath)})" : "untitled";
+		: _lumpName != null ? $"{_lumpName} ({System.IO.Path.GetFileName(_wadSourcePath)})"
+		: _pk3EntryPath != null ? $"{_pk3EntryPath} ({System.IO.Path.GetFileName(_pk3SourcePath)})"
+		: "untitled";
 
 	/// <summary>Whether this tab is already the lump at <paramref name="lumpIndex"/> inside the WAD at <paramref name="wadSourcePath"/> - the lump-backed counterpart of comparing <see cref="FilePath"/> directly, used the same way to focus an already-open tab instead of duplicating it.</summary>
 	public bool IsLumpFrom(string wadSourcePath, int lumpIndex) =>
 		_wadSourcePath != null && _lumpIndex == lumpIndex
 		&& string.Equals(System.IO.Path.GetFullPath(_wadSourcePath), System.IO.Path.GetFullPath(wadSourcePath), StringComparison.OrdinalIgnoreCase);
+
+	/// <summary>The PK3-entry-backed counterpart of <see cref="IsLumpFrom"/> - whether this tab is already the entry at <paramref name="entryPath"/> inside the PK3 at <paramref name="pk3SourcePath"/>.</summary>
+	public bool IsPk3EntryFrom(string pk3SourcePath, string entryPath) =>
+		_pk3SourcePath != null && string.Equals(_pk3EntryPath, entryPath, StringComparison.OrdinalIgnoreCase)
+		&& string.Equals(System.IO.Path.GetFullPath(_pk3SourcePath), System.IO.Path.GetFullPath(pk3SourcePath), StringComparison.OrdinalIgnoreCase);
 
 	/// <summary>
 	/// Raised when go-to-definition (<see cref="OnBcsSymbolLookup"/>)
@@ -66,6 +78,12 @@ public partial class ScriptDocument : VBoxContainer
 	/// owns the tab strip - handles it instead.
 	/// </summary>
 	public event Action<string, int, int> NavigateToFileRequested;
+
+	/// <summary>Whether this tab has unsaved changes - a plain bool, unlike <c>MapView</c>'s own undo-stack-version-based <c>IsDirty</c> (<see cref="CodeEdit"/> has its own native undo/redo this project doesn't drive, so there's no version to track against); set on every edit, cleared on load or a successful save.</summary>
+	public bool IsDirty => _dirty;
+
+	/// <summary>Fired whenever <see cref="IsDirty"/>'s result changes - <c>AppShell</c>'s own reason to care: refreshing this tab's own dirty-dot indicator the instant it happens, not poll for it.</summary>
+	public event Action DirtyChanged;
 
 	/// <summary>Moves the caret to a declaration's own position and centers the viewport on it - the same thing <see cref="OnBcsSymbolLookup"/> already does for a same-file match, extracted so <c>AppShell</c> can also call it once it's switched to (or just opened) this tab for a cross-file jump.</summary>
 	public void NavigateTo(int line, int column)
@@ -79,6 +97,19 @@ public partial class ScriptDocument : VBoxContainer
 	{
 		_pathLabel = GetNode<Label>("Header/PathLabel");
 		_codeEdit = GetNode<CodeEdit>("CodeEdit");
+		// Unconditional (unlike InitializeBcsLanguageSupport's own
+		// TextChanged subscription, which only fires for BCS-highlighted
+		// tabs) - every tab's dirty state needs tracking, not just those.
+		_codeEdit.TextChanged += () => SetDirty(true);
+	}
+
+	private bool _dirty;
+
+	private void SetDirty(bool dirty)
+	{
+		if (_dirty == dirty) return;
+		_dirty = dirty;
+		DirtyChanged?.Invoke();
 	}
 
 	public void LoadFile(string path)
@@ -102,6 +133,12 @@ public partial class ScriptDocument : VBoxContainer
 		{
 			InitializeBcsLanguageSupport();
 		}
+
+		// Last, not first: setting _codeEdit.Text above may itself fire
+		// TextChanged (Godot's own CodeEdit, not this project's concern to
+		// predict precisely) - this is what corrects that back to clean
+		// regardless, rather than relying on it not happening.
+		SetDirty(false);
 	}
 
 	/// <summary>
@@ -133,6 +170,42 @@ public partial class ScriptDocument : VBoxContainer
 		{
 			InitializeBcsLanguageSupport();
 		}
+
+		SetDirty(false);
+	}
+
+	/// <summary>
+	/// PK3-entry-backed counterpart of <see cref="LoadFile"/>/<see cref="LoadLump"/> -
+	/// populates the editor directly from already-read bytes, for an entry
+	/// the resource browser's own "Open" action resolved from inside a real
+	/// <c>.pk3</c> zip archive. <paramref name="entryPath"/> is the entry's
+	/// own full in-archive path (e.g. <c>"scripts/mylib.acs"</c> or the
+	/// bare root-level <c>"SCRIPTS"</c>) - a PK3's own entries are already
+	/// uniquely identified by path (unlike a WAD lump), so no separate
+	/// index is needed the way <see cref="LoadLump"/> needs one.
+	/// </summary>
+	public void LoadPk3Entry(string pk3Path, string entryPath, byte[] data)
+	{
+		_pk3SourcePath = pk3Path;
+		_pk3EntryPath = entryPath;
+		_pathLabel.Text = $"{entryPath} ({System.IO.Path.GetFileName(pk3Path)})";
+		_codeEdit.Text = System.Text.Encoding.UTF8.GetString(data);
+
+		// Combines LoadFile's extension check and LoadLump's bare-name
+		// check, since a PK3 entry can legitimately be shaped either way -
+		// a real .acs/.bcs file, or a bare SCRIPTS entry mirroring the WAD
+		// lump name convention. ZSCRIPT (bare or .zs) falls through to
+		// plain text, same as everywhere else.
+		var extension = System.IO.Path.GetExtension(entryPath);
+		var baseName = System.IO.Path.GetFileNameWithoutExtension(entryPath);
+		if (extension.Equals(".bcs", System.StringComparison.OrdinalIgnoreCase) ||
+			extension.Equals(".acs", System.StringComparison.OrdinalIgnoreCase) ||
+			baseName.Equals("SCRIPTS", System.StringComparison.OrdinalIgnoreCase))
+		{
+			InitializeBcsLanguageSupport();
+		}
+
+		SetDirty(false);
 	}
 
 	private void InitializeBcsLanguageSupport()
@@ -372,10 +445,22 @@ public partial class ScriptDocument : VBoxContainer
 		{
 			using var file = Godot.FileAccess.Open(_filePath, Godot.FileAccess.ModeFlags.Write);
 			file.StoreString(_codeEdit.Text);
+			SetDirty(false);
 			return;
 		}
 
-		if (_wadSourcePath != null) SaveLump();
+		if (_wadSourcePath != null)
+		{
+			SaveLump();
+			SetDirty(false);
+			return;
+		}
+
+		if (_pk3SourcePath != null)
+		{
+			SavePk3Entry();
+			SetDirty(false);
+		}
 	}
 
 	/// <summary>
@@ -395,6 +480,33 @@ public partial class ScriptDocument : VBoxContainer
 
 		if (System.IO.File.Exists(_wadSourcePath)) System.IO.File.Move(_wadSourcePath, _wadSourcePath + ".bak", overwrite: true);
 		System.IO.File.WriteAllBytes(_wadSourcePath, bytes);
+	}
+
+	/// <summary>
+	/// The PK3 counterpart of <see cref="SaveLump"/>: opens a fresh,
+	/// independent read of the archive, splices in this entry's new bytes
+	/// via <see cref="Pk3File.WithReplacedEntry"/>, rebuilds the whole
+	/// archive via <see cref="Pk3Writer.Write"/>, then overwrites - no
+	/// <c>.bak</c> backup here, unlike <see cref="SaveLump"/>, matching
+	/// UDB's own real <c>PK3Reader.SaveFile</c> (confirmed by reading its
+	/// source directly), which backs up WAD/map saves but not PK3 saves.
+	/// The fresh read is disposed (end of the <c>using</c> block) before
+	/// the overwrite runs - sequential, never a concurrent read+write
+	/// handle on the same path. <see cref="ResourceContainerCache.Invalidate"/>
+	/// drops any stale cached container for this path so the next tab
+	/// that opens it sees the saved change.
+	/// </summary>
+	private void SavePk3Entry()
+	{
+		IReadOnlyList<(string Path, byte[] Data)> entries;
+		using (var pk3 = Pk3File.Open(_pk3SourcePath))
+		{
+			entries = pk3.WithReplacedEntry(_pk3EntryPath, System.Text.Encoding.UTF8.GetBytes(_codeEdit.Text));
+		}
+
+		var bytes = Pk3Writer.Write(entries);
+		System.IO.File.WriteAllBytes(_pk3SourcePath, bytes);
+		ResourceContainerCache.Invalidate(_pk3SourcePath);
 	}
 
 	/// <summary>

@@ -10,9 +10,10 @@
 /// as a <c>MapGroup</c>, but it isn't one) it's that one file's own
 /// resolved path instead, since the owning *folder's* path wouldn't mean
 /// anything to <c>OpenMapMenu.OpenSpecificMap</c>. Exactly one of
-/// <see cref="MapName"/>/<see cref="FilePath"/>/<see cref="LumpName"/> is
-/// set, matching which of the openable kinds this request represents (see
-/// <see cref="ResourceBrowserPanel"/>'s own "What's openable" gating).
+/// <see cref="MapName"/>/<see cref="FilePath"/>/<see cref="LumpName"/>/
+/// <see cref="Pk3EntryPath"/> is set, matching which of the openable
+/// kinds this request represents (see <see cref="ResourceBrowserPanel"/>'s
+/// own "What's openable" gating).
 /// </summary>
 public sealed class ResourceOpenRequest
 {
@@ -21,7 +22,7 @@ public sealed class ResourceOpenRequest
 	/// <summary>Set for a <c>MapGroup</c> node, or a nested <c>maps/MAP01.wad</c>-style <c>File</c> leaf resolved to the map it holds - either way, the map name to open/focus.</summary>
 	public string MapName { get; init; }
 
-	/// <summary>Set only for a <c>File</c> node - its own resolved real path (distinct from <see cref="SourcePath"/>, which stays the owning folder's own path, not this one file's).</summary>
+	/// <summary>Set only for a loose, on-disk <c>File</c> node - its own resolved real path (distinct from <see cref="SourcePath"/>, which stays the owning folder's own path, not this one file's).</summary>
 	public string FilePath { get; init; }
 
 	/// <summary>Set only for a <c>Lump</c> node, alongside <see cref="LumpIndex"/> and <see cref="LumpData"/>.</summary>
@@ -31,4 +32,9 @@ public sealed class ResourceOpenRequest
 	public int LumpIndex { get; init; }
 
 	public byte[] LumpData { get; init; }
+
+	/// <summary>Set only for a <c>File</c> node backed by a <c>Pk3Container</c> - its own full in-archive path (e.g. <c>"scripts/SCRIPTS.txt"</c>), alongside <see cref="Pk3EntryData"/>. <see cref="SourcePath"/> is the owning <c>.pk3</c>'s own real path.</summary>
+	public string Pk3EntryPath { get; init; }
+
+	public byte[] Pk3EntryData { get; init; }
 }

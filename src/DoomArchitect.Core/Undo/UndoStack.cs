@@ -38,6 +38,14 @@ public sealed class UndoStack
     /// </summary>
     public bool IsDirty => version != savedVersion;
 
+    /// <summary>
+    /// Raised whenever <see cref="IsDirty"/>'s result might have changed -
+    /// after <see cref="Record"/>, <see cref="Undo"/>, <see cref="Redo"/>,
+    /// and <see cref="MarkSaved"/>. A UI layer (e.g. a tab's own dirty
+    /// indicator) subscribes to this instead of polling every frame.
+    /// </summary>
+    public event Action? Changed;
+
     /// <summary>Performs a command and adds it to the undo history.</summary>
     public void Execute(ICommand command)
     {
@@ -58,6 +66,7 @@ public sealed class UndoStack
         if (undoStack.Count > MaxHistory) undoStack.RemoveAt(0);
         redoStack.Clear();
         version = nextVersion;
+        Changed?.Invoke();
     }
 
     public void Undo()
@@ -69,6 +78,7 @@ public sealed class UndoStack
         command.Undo();
         redoStack.Add((command, version));
         version = undoStack.Count > 0 ? undoStack[^1].Version : 0;
+        Changed?.Invoke();
     }
 
     public void Redo()
@@ -80,11 +90,13 @@ public sealed class UndoStack
         command.Do();
         undoStack.Add((command, redoneVersion));
         version = redoneVersion;
+        Changed?.Invoke();
     }
 
     /// <summary>Snapshots the current version as "saved" - <see cref="IsDirty"/> reads false until the next edit.</summary>
     public void MarkSaved()
     {
         savedVersion = version;
+        Changed?.Invoke();
     }
 }

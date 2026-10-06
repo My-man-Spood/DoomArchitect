@@ -147,6 +147,34 @@ public sealed class Pk3File : IResourceContainer, IDisposable
     /// <summary>A zip archive entry has no standalone on-disk path of its own to resolve to.</summary>
     public string? ResolveAbsolutePath(string relativePath) => null;
 
+    /// <summary>
+    /// The PK3 counterpart of <see cref="WadFile.WithReplacedLumpData"/> -
+    /// "replace this one entry's data, leave everything else untouched",
+    /// keyed by path since <see cref="_entriesByPath"/> already uniquely
+    /// identifies every entry that way (unlike a WAD lump, a PK3 entry has
+    /// no duplicate-name ambiguity to resolve). Decompresses every *other*
+    /// entry's bytes too, not just the one being replaced - a full rebuild
+    /// (<see cref="Pk3Writer.Write"/>) needs every entry's real bytes,
+    /// matching UDB's own real <c>PK3Reader.SaveFile</c>, which does the
+    /// same full read-modify-rebuild rather than an in-place archive patch
+    /// (confirmed by reading its source directly, not guessed).
+    /// </summary>
+    public IReadOnlyList<(string Path, byte[] Data)> WithReplacedEntry(string path, byte[] newData)
+    {
+        var normalized = Normalize(path);
+        var result = new List<(string Path, byte[] Data)>();
+
+        foreach (var (entryPath, entry) in _entriesByPath)
+        {
+            var data = string.Equals(entryPath, normalized, StringComparison.OrdinalIgnoreCase)
+                ? newData
+                : ReadLump(entryPath, entry).Data;
+            result.Add((entryPath, data));
+        }
+
+        return result;
+    }
+
     private static bool TitleMatches(string path, string name) =>
         Path.GetFileNameWithoutExtension(path).Equals(name, StringComparison.OrdinalIgnoreCase);
 

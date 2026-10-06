@@ -122,3 +122,56 @@ highlighting, and still no compiler integration).
 "Per-tab close button visibility" is also moot now - every tab,
 including the original Map tab, is genuinely closable, so the no-op
 guard that entry described no longer exists at all.
+
+## Update: unsaved-changes dirty indicator, for every tab type
+
+A small filled-circle prefix (`●`) on a tab's own label while it has
+unsaved changes - the VSCode convention, requested directly, applied
+uniformly across Map and Script tabs via a single, generalized
+`AppShell.UpdateTabTitle(Node content)` (the old `UpdateMapTabTitle`,
+widened - was already the one place either tab type's title text gets
+set).
+
+- **Map tabs reuse an already-built primitive**, not a new one:
+  `UndoStack.IsDirty`/`MarkSaved` already existed (version-based - undo
+  back to exactly the last-saved point reads clean again, redo past it
+  re-dirties it) and were already driving a "discard unsaved changes?"
+  confirmation dialog (`MainMenuBar.RunWithDiscardConfirmationIfDirty`).
+  New `MapView.IsDirty` is a thin pass-through; new `UndoStack.Changed`
+  event (fired from `Record`/`Undo`/`Redo`/`MarkSaved`) is what lets
+  `MapView` forward it as its own `DirtyChanged` without `AppShell`
+  having to poll every frame.
+- **Script tabs had no dirty concept at all** - `ScriptDocument` gained a
+  plain bool (`IsDirty`/`DirtyChanged`), set on `CodeEdit.TextChanged`,
+  cleared at the end of each `Load*` method and after a successful
+  `Save()`. Deliberately simpler than the Map side's version-based
+  model - `CodeEdit` has its own native undo/redo this project doesn't
+  drive, so there's no "version" to track against; "undo back to the
+  exact saved text clears the dot" isn't replicated for scripts, a
+  known, accepted scope difference, not an oversight.
+- **A real ordering hazard, found and fixed before it could ever be
+  user-visible**: `AppShell`'s own `MapLoaded` subscriber (which calls
+  `UpdateTabTitle`) is registered *before* `MapView._Ready()` subscribes
+  its own `LoadMap` to that same event - so on an interactive (dialog-
+  confirmed, not command-line) map load, `UpdateTabTitle` can run
+  *before* `LoadMap` has replaced `_undoStack` with a fresh one, reading
+  the old, about-to-be-discarded stack's dirty state. A fresh
+  `UndoStack` doesn't fire `Changed` on construction (nothing's been
+  recorded/undone/saved on it yet), so `LoadMap` fires `DirtyChanged`
+  explicitly, right after the reassignment - self-correcting within the
+  same synchronous call chain, before anything is actually rendered.
+
+## Verification
+
+- `dotnet build DoomArchitect.sln` and
+  `dotnet test src/DoomArchitect.Core.Tests/DoomArchitect.Core.Tests.csproj`
+  (1058 tests - new coverage for `UndoStack.Changed` firing on
+  `Record`/`Undo`/`Redo`/`MarkSaved` and not firing on a no-op
+  `Undo`/`Redo`).
+- Needs a manual pass - no automated coverage for the Godot-layer
+  wiring: edit a map, confirm its tab shows the dot; save (Ctrl+S/File
+  menu), confirm it clears; undo back to exactly the last-saved state,
+  confirm it clears there too (not just on an explicit save); edit a
+  script tab (loose file, WAD lump, and PK3 entry), confirm the dot
+  appears and clears on save for each; switch between several dirty and
+  clean tabs and confirm each one's own indicator is independent.

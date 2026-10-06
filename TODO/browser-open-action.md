@@ -6,17 +6,54 @@
 Double-click or right-click > "Open" in the resource browser now does
 something real, for four kinds of content: loose `.acs`/`.bcs`/`.zs`/
 `zscript` files, a WAD's `SCRIPTS` lump, a WAD's map lumps (e.g.
-`MAP01`), and a WAD's `ZSCRIPT` lump. `.pk3`-embedded scripts are
-deliberately out of scope this pass - `Pk3File` has no write path
+`MAP01`), and a WAD's `ZSCRIPT` lump. `.pk3`-embedded scripts were
+deliberately out of scope this pass - `Pk3File` had no write path
 anywhere in this codebase, and opening something you can't save back is
-worse than not offering it; revisit as a separate follow-up.
+worse than not offering it.
+
+**Update:** that follow-up landed - see
+[PK3 write-back: open and save scripts inside a real .pk3](mapio-pk3-write-back.md).
 
 **Update:** opening a map lump this way surfaced a related, separate
 bug - two maps from the same pk3-style folder (split across
 `maps/MAP01.wad`/`maps/MAP02.wad`) each got their own, unrelated
 `.dbs` settings file, so configuring the folder as a resource for one
 did nothing for the other. Fixed, not here - see
-[Scope map settings (.dbs) to the whole mod, not the individual WAD](mapio-mod-scoped-settings.md).
+[Scope map settings (.dbs) to the whole mod, not the individual WAD](mapio-mod-scoped-settings.md)
+(which also covers two further refinements and a shared resource/
+texture caching pass on top of all this, reported in later testing).
+
+**Update:** the startup tab specifically (not any tab opened
+afterward) kept showing the placeholder `"Map"` title even once a real
+map loaded into it via the dev-only `--file`/`--map` command-line
+flags. `AppShell.CreateMapViewTab` did its tab bookkeeping
+(`_tabContents.Add`/`_tabBar.AddTab`) *after* `AddChild(mapViewportContainer)` -
+but that `AddChild` call is exactly what synchronously fires
+`MapLoaded` for that one launch path (already called out in the
+method's own remarks, for a different reason - it's also why the
+`MapLoaded`/`MapResourcesChanged` subscriptions themselves are wired
+before `AddChild`). `UpdateMapTabTitle`'s `_tabContents.IndexOf(mapDocument)`
+came back `-1` at that point, silently no-opped, and that one-time
+synchronous load was the only `MapLoaded` the startup tab would ever
+get - nothing left to correct the title afterward. Every
+later-opened tab was never at risk: their own `MapLoaded` always fires
+from a dialog confirmation on a later frame, long after
+`CreateMapViewTab` has already returned. Fixed by moving the tab
+bookkeeping before `AddChild` - which traded it for a *different*
+crash, reported live immediately after: `_tabBar.AddTab("Map", ...)`
+going from zero tabs to one makes `TabBar` auto-select the new tab as
+current and synchronously emit its own `TabChanged` signal, which now
+(moved earlier) ran `OnTabChanged`/`SwitchTo`/`Activate` against
+`mapDocument` before it had even entered the tree - `MapView.SetTabActive`
+null-referenced on fields `_Ready()` hadn't set up yet
+(`_overlayLayer`). Exact same class of problem, same fix, as
+`OnTabClosePressed`'s own `RemoveTab` call (its own remarks cover the
+general pattern: `TabBar` can synchronously emit signals as a side
+effect of its own mutation methods, independent of and before a
+caller's own bookkeeping) - `TabChanged` disconnected for the
+duration of the `AddTab` call, reconnected right after; the method
+already calls `SwitchTo` explicitly once `mapDocument` is actually
+ready, so the signal-driven path was never needed here anyway.
 
 ## Multi-Map-tab support (a real prerequisite, not a side effect)
 

@@ -306,13 +306,20 @@ public partial class AppShell : Control
 		openMapMenu.MapLoaded += (_, _, _, resources) =>
 		{
 			_resourceBrowserPanel.Refresh(resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
-			UpdateMapTabTitle(mapDocument);
+			UpdateTabTitle(mapDocument);
 		};
 		openMapMenu.MapResourcesChanged += (_, _, resources) =>
 		{
 			_resourceBrowserPanel.Refresh(resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
-			UpdateMapTabTitle(mapDocument);
+			UpdateTabTitle(mapDocument);
 		};
+		// Subscribed here, not after AddChild below - same reasoning as the
+		// two subscriptions above (catches a synchronous dev --file/--map
+		// load); see MapView.LoadMap's own remarks on why it additionally
+		// fires DirtyChanged explicitly right after reassigning its undo
+		// stack, correcting a real multi-subscriber ordering hazard this
+		// lambda would otherwise be exposed to.
+		mapDocument.DirtyChanged += () => UpdateTabTitle(mapDocument);
 
 		var mapSubViewport = new SubViewport();
 		var mapViewportContainer = new SubViewportContainer
@@ -325,9 +332,33 @@ public partial class AppShell : Control
 		};
 		mapViewportContainer.AddChild(mapSubViewport);
 		mapSubViewport.AddChild(mapDocument);
-		AddChild(mapViewportContainer);
+
+		// Tab bookkeeping before AddChild, not after: AddChild below can
+		// itself synchronously fire MapLoaded (the same --file/--map
+		// command-line path the remarks above already call out), and
+		// UpdateTabTitle needs _tabContents/_tabBar to already know
+		// about this tab by then - otherwise IndexOf comes back -1, the
+		// title update silently no-ops, and the tab is stuck reading the
+		// placeholder "Map" forever, since that one-time synchronous load
+		// is the only MapLoaded this tab will ever get. Confirmed live -
+		// exactly what the startup tab hit under that launch path.
 		_mapViewportContainers[mapDocument] = mapViewportContainer;
 		_tabContents.Add(mapDocument);
+
+		// AddTab can itself synchronously emit TabChanged (confirmed live -
+		// going from zero tabs to one, Godot's own TabBar auto-selects the
+		// new tab as current and signals it) - which would run
+		// OnTabChanged/SwitchTo/Activate against mapDocument before it's
+		// even entered the tree (AddChild hasn't run yet), crashing in
+		// MapView.SetTabActive on fields _Ready() hasn't set up. Same
+		// problem, same fix as OnTabClosePressed's own RemoveTab - this
+		// method already calls SwitchTo explicitly once mapDocument is
+		// actually ready, so the signal-driven path is never needed here.
+		_tabBar.TabChanged -= OnTabChanged;
+		_tabBar.AddTab("Map", GD.Load<Texture2D>("res://Assets/Icons/document_map.svg"));
+		_tabBar.TabChanged += OnTabChanged;
+
+		AddChild(mapViewportContainer);
 
 		mapDocument.MainMenuBar = _mainMenuBar;
 		mapDocument.In3DChanged += _ => UpdateMapViewportLayout();
@@ -338,24 +369,48 @@ public partial class AppShell : Control
 		// until this frame's layout pass finishes.
 		CallDeferred(MethodName.AlignMapToolbarBelowTabStrip, mapDocument);
 
-		_tabBar.AddTab("Map", GD.Load<Texture2D>("res://Assets/Icons/document_map.svg"));
 		SwitchTo(_tabContents.Count - 1);
 
 		return mapDocument;
 	}
 
 	/// <summary>
-	/// Reflects whichever real map a tab actually holds in its own tab
-	/// label (e.g. "MAP01") instead of the generic "Map" every tab starts
-	/// with - needed now that more than one Map tab can be open at once,
-	/// where "Map" alone no longer tells them apart. Harmless to also run
-	/// on a resource-only change (the map name itself never changes then)
-	/// - simpler than trying to only wire it for a genuine fresh load.
+	/// A small, filled-circle prefix on a tab's own label while it has
+	/// unsaved changes - the same "dirty indicator" convention VSCode and
+	/// most other editors use, applied uniformly across every tab type
+	/// here (see <see cref="UpdateTabTitle"/>), not just one.
 	/// </summary>
-	private void UpdateMapTabTitle(MapView mapDocument)
+	private const string DirtyIndicatorPrefix = "● ";
+
+	/// <summary>
+	/// Reflects a tab's current content in its own label - whichever real
+	/// map it actually holds (e.g. "MAP01") instead of the generic "Map"
+	/// every Map tab starts with, or a Script tab's own file/lump/pk3-entry
+	/// name - prefixed with <see cref="DirtyIndicatorPrefix"/> while it has
+	/// unsaved changes. Needed for Map tabs now that more than one can be
+	/// open at once, where "Map" alone no longer tells them apart; harmless
+	/// to also run on a resource-only change (the map name itself never
+	/// changes then) - simpler than trying to only wire it for a genuine
+	/// fresh load. Returns silently for a tab that's already been removed
+	/// (or any content kind that doesn't have a tab label at all) -
+	/// <see cref="ResourceOpenRequest"/> and <see cref="MapView.DirtyChanged"/>/
+	/// <see cref="ScriptDocument.DirtyChanged"/> can all legitimately fire
+	/// after a tab's own close has already run.
+	/// </summary>
+	private void UpdateTabTitle(Node content)
 	{
-		var index = _tabContents.IndexOf(mapDocument);
-		if (index >= 0) _tabBar.SetTabTitle(index, mapDocument.OpenMapMenu.CurrentMapName ?? "Map");
+		var index = _tabContents.IndexOf(content);
+		if (index < 0) return;
+
+		var (baseTitle, isDirty) = content switch
+		{
+			MapView mapView => (mapView.OpenMapMenu.CurrentMapName ?? "Map", mapView.IsDirty),
+			ScriptDocument scriptDocument => (scriptDocument.DisplayName, scriptDocument.IsDirty),
+			_ => ((string)null, false),
+		};
+		if (baseTitle == null) return;
+
+		_tabBar.SetTabTitle(index, isDirty ? DirtyIndicatorPrefix + baseTitle : baseTitle);
 	}
 
 	/// <summary>
@@ -451,6 +506,7 @@ public partial class AppShell : Control
 		_contentArea.AddChild(scriptDocument);
 		scriptDocument.LoadFile(path);
 		scriptDocument.NavigateToFileRequested += OnScriptNavigationRequested;
+		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
 		_tabContents.Add(scriptDocument);
 
 		_tabBar.AddTab(scriptDocument.DisplayName, GD.Load<Texture2D>("res://Assets/Icons/document_script.svg"));
@@ -495,6 +551,14 @@ public partial class AppShell : Control
 			return;
 		}
 
+		if (request.Pk3EntryPath != null)
+		{
+			var existingEntry = _tabContents.OfType<ScriptDocument>()
+				.FirstOrDefault(d => d.IsPk3EntryFrom(request.SourcePath, request.Pk3EntryPath));
+			SwitchTo(_tabContents.IndexOf(existingEntry ?? OpenPk3EntryScriptTab(request)));
+			return;
+		}
+
 		var existingLump = _tabContents.OfType<ScriptDocument>()
 			.FirstOrDefault(d => d.IsLumpFrom(request.SourcePath, request.LumpIndex));
 		SwitchTo(_tabContents.IndexOf(existingLump ?? OpenLumpScriptTab(request)));
@@ -507,6 +571,22 @@ public partial class AppShell : Control
 		scriptDocument.Visible = false;
 		_contentArea.AddChild(scriptDocument);
 		scriptDocument.LoadLump(request.SourcePath, request.LumpIndex, request.LumpName, request.LumpData);
+		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
+		_tabContents.Add(scriptDocument);
+
+		_tabBar.AddTab(scriptDocument.DisplayName, GD.Load<Texture2D>("res://Assets/Icons/document_script.svg"));
+
+		return scriptDocument;
+	}
+
+	/// <summary>PK3-entry-backed counterpart of <see cref="OpenLumpScriptTab"/> - same tab-strip wiring, populated from already-read bytes (<see cref="ScriptDocument.LoadPk3Entry"/>) instead of a WAD lump.</summary>
+	private ScriptDocument OpenPk3EntryScriptTab(ResourceOpenRequest request)
+	{
+		var scriptDocument = GD.Load<PackedScene>(ScriptDocumentScenePath).Instantiate<ScriptDocument>();
+		scriptDocument.Visible = false;
+		_contentArea.AddChild(scriptDocument);
+		scriptDocument.LoadPk3Entry(request.SourcePath, request.Pk3EntryPath, request.Pk3EntryData);
+		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
 		_tabContents.Add(scriptDocument);
 
 		_tabBar.AddTab(scriptDocument.DisplayName, GD.Load<Texture2D>("res://Assets/Icons/document_script.svg"));

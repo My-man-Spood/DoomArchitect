@@ -21,15 +21,18 @@ using Godot;
 /// template - is explicitly follow-up work, not part of this pass; both
 /// currently just surface <see cref="ShowNotYetImplemented"/>. "Open"
 /// (double-click or the context menu - see <see cref="OpenRequested"/>) is
-/// real: a <c>MapGroup</c> node, a <c>SCRIPTS</c>/<c>ZSCRIPT</c> lump, or a
-/// loose <c>.acs</c>/<c>.bcs</c>/<c>.zs</c>/<c>zscript</c> file - see
-/// <see cref="BuildOpenRequest"/> for the exact gating. Deliberately
-/// excludes anything living inside a <c>.pk3</c> archive this pass - no
-/// write path exists for one anywhere in this codebase yet, and opening
-/// something you can't save back is worse than not offering it; that's
-/// also why <see cref="BuildOpenRequest"/> gates a loose file by whether
-/// <see cref="IResourceContainer.ResolveAbsolutePath"/> actually resolves
-/// it, which a <c>Pk3Container</c> entry never does.
+/// real: a <c>MapGroup</c> node, a <c>SCRIPTS</c>/<c>ZSCRIPT</c> lump, a
+/// loose <c>.acs</c>/<c>.bcs</c>/<c>.zs</c>/<c>zscript</c>/<c>SCRIPTS</c>
+/// file (on disk or inside a real <c>.pk3</c> zip archive, via
+/// <see cref="Pk3File.WithReplacedEntry"/>/<see cref="Pk3Writer"/> - see
+/// <see cref="BuildOpenRequest"/> for the exact gating). A nested
+/// <c>maps/MAP01.wad</c>-style file *inside* a zipped <c>.pk3</c> (as
+/// opposed to a loose folder, which already works via
+/// <see cref="BuildNestedMapWadRequest"/>) is explicitly still out of
+/// scope - not a meaningful real-world case for a pre-zipped pk3
+/// distribution, and <see cref="IResourceContainer.ResolveAbsolutePath"/>
+/// returning null for a <c>Pk3Container</c> entry already excludes it
+/// with no extra special-casing needed.
 /// </summary>
 public partial class ResourceBrowserPanel : PanelContainer
 {
@@ -324,6 +327,21 @@ public partial class ResourceBrowserPanel : PanelContainer
 
 			case ResourceTreeNodeKind.File when IsOpenableFileName(node.DisplayName):
 			{
+				// A Pk3Container entry has no standalone on-disk path to
+				// resolve (ResolveAbsolutePath always returns null for one -
+				// see Pk3File's own remarks), so it needs its own branch here
+				// rather than falling through to the loose-file one below;
+				// FindByPath already does the exact normalized-path lookup
+				// and decompression this needs, no new container method
+				// required.
+				if (context.Container is Pk3File pk3)
+				{
+					var data = pk3.FindByPath(node.Path);
+					return data != null
+						? new ResourceOpenRequest { SourcePath = context.SourcePath, Pk3EntryPath = node.Path, Pk3EntryData = data }
+						: null;
+				}
+
 				var resolved = context.Container.ResolveAbsolutePath(node.Path);
 				return resolved != null ? new ResourceOpenRequest { SourcePath = context.SourcePath, FilePath = resolved } : null;
 			}
@@ -364,14 +382,27 @@ public partial class ResourceBrowserPanel : PanelContainer
 		}
 	}
 
-	/// <summary>A recognized script-file extension, or the bare GZDoom-convention ZScript entry-point name (with or without a <c>.txt</c> extension) - matches <c>zscript</c>/<c>zscript.txt</c> case-insensitively, same as every other name match in this codebase.</summary>
+	/// <summary>
+	/// A recognized script-file extension, or a bare GZDoom-convention
+	/// entry-point name (with or without a <c>.txt</c> extension) -
+	/// matches <c>zscript</c>/<c>zscript.txt</c> and <c>scripts</c>/
+	/// <c>scripts.txt</c> case-insensitively, same as every other name
+	/// match in this codebase. The bare-<c>scripts</c> case was a
+	/// pre-existing gap until the PK3 write-back pass (a PK3's own
+	/// root-level <c>SCRIPTS</c> file, mirroring the WAD lump name
+	/// convention, needs exactly this) - it equally fixes a loose
+	/// <c>SCRIPTS</c> file sitting in a <c>DirectoryContainer</c>-backed
+	/// folder mod, which was never openable either.
+	/// </summary>
 	private static bool IsOpenableFileName(string displayName)
 	{
 		var extension = System.IO.Path.GetExtension(displayName);
 		if (OpenableFileExtensions.Any(e => e.Equals(extension, StringComparison.OrdinalIgnoreCase))) return true;
 
 		var baseName = System.IO.Path.GetFileNameWithoutExtension(displayName);
-		return baseName.Equals("zscript", StringComparison.OrdinalIgnoreCase)
+		var isBareEntryPointName = baseName.Equals("zscript", StringComparison.OrdinalIgnoreCase)
+			|| baseName.Equals("scripts", StringComparison.OrdinalIgnoreCase);
+		return isBareEntryPointName
 			&& (extension.Length == 0 || extension.Equals(".txt", StringComparison.OrdinalIgnoreCase));
 	}
 

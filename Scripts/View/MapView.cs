@@ -74,6 +74,12 @@ public partial class MapView : Node3D
 	/// <summary>Fired whenever the 2D/3D toggle actually flips - <c>AppShell</c>'s own reason to care: an immersive full-view 3D mode (hiding the resource browser/tab strip/menu bar) needs to know the instant this happens, not poll for it.</summary>
 	public event Action<bool> In3DChanged;
 
+	/// <summary>Whether this map has unsaved changes - a thin pass-through to <see cref="UndoStack.IsDirty"/>, which already tracks exactly this (version-based, so undoing back to the last-saved point reads clean again).</summary>
+	public bool IsDirty => _undoStack.IsDirty;
+
+	/// <summary>Fired whenever <see cref="IsDirty"/>'s result might have changed - <c>AppShell</c>'s own reason to care: refreshing this tab's own dirty-dot indicator the instant an edit (or a save) happens, not poll for it.</summary>
+	public event Action DirtyChanged;
+
 	private MapData _map;
 	private TextureCache _textureCache;
 	private TextureSet _textureSet;
@@ -186,6 +192,8 @@ public partial class MapView : Node3D
 		{
 			CreateThingMeshInstance(thing);
 		}
+
+		_undoStack.Changed += () => DirtyChanged?.Invoke();
 
 		_overlay.Map = _map;
 		_overlay.Camera = _topDownCamera;
@@ -710,7 +718,19 @@ public partial class MapView : Node3D
 		RebuildAllMeshes();
 
 		_undoStack = new UndoStack();
+		_undoStack.Changed += () => DirtyChanged?.Invoke();
 		_overlay.UndoStack = _undoStack;
+		// AppShell's own MapLoaded subscriber (which refreshes this tab's
+		// title, dirty-dot included) is registered before this class's own
+		// _Ready() subscribes LoadMap to the same event - so on this exact
+		// call, it can run *before* this line replaces _undoStack, reading
+		// the old, about-to-be-discarded one's dirty state. A fresh
+		// UndoStack doesn't fire Changed on construction (nothing's been
+		// recorded/undone/saved on it yet), so this explicit fire is what
+		// corrects that stale read within the same synchronous call chain,
+		// rather than leaving the tab showing a leftover dot from whatever
+		// was loaded here before.
+		DirtyChanged?.Invoke();
 
 		FitTopDownCameraToMap(newMap);
 	}
@@ -1239,6 +1259,8 @@ public partial class MapView : Node3D
 			_undoStack.Redo();
 			return;
 		}
+
+		if (key.IsActionPressed("save_map")) { _openMapMenu.SaveMap(); return; }
 
 		if (_in3D && key.IsActionPressed("texture_auto_align"))
 		{

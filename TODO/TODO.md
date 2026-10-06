@@ -170,6 +170,7 @@ so it isn't lost, not because it belongs in the tables below.
 | [PK3 resource loading](resources-pk3-loading.md) | |
 | [Resource browser panel (VSCode-style source tree)](resources-browser-panel.md) | First pass - visibility/structure only, no UDB equivalent exists. |
 | [Open files/lumps from the resource browser](browser-open-action.md) | Double-click/"Open"; brought real multi-Map-tab support with it. |
+| [PK3 write-back (open/save scripts inside a real .pk3)](mapio-pk3-write-back.md) | Closes the pk3-embedded-scripts gap `browser-open-action.md` deferred. |
 
 ### Input
 

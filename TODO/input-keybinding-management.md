@@ -104,3 +104,17 @@
       back" safety hatch, not meant to be rebindable away), the latter
       became a real action (`pan_view_modifier`, UDB's own real action
       name).
+
+**Update:** reported live - Ctrl+S did nothing for a Map tab. Turned out
+there never was a `save_map` action at all - only `save_document`
+("Saves the active script tab's file to disk", explicitly scoped to
+script tabs), so saving a map was reachable only through the File > Save
+Map menu item, no shortcut, and nobody had noticed. Added `save_map`
+(`KeyBindingRegistry`, defaults to Ctrl+S - same physical key as
+`save_document` on purpose, matching this registry's own stated
+convention that two actions never simultaneously active may legitimately
+share a default, like `mode_draw`/`camera_forward` already do, since a
+Map tab and a Script tab can never both be the active one), checked in
+`MapView`'s own key-handling alongside `undo`/`redo`, calling
+`OpenMapMenu.SaveMap()` directly - works in both 2D and 3D, not gated by
+`_in3D`, matching `undo`/`redo`/`test_map`'s own unconditional checks.

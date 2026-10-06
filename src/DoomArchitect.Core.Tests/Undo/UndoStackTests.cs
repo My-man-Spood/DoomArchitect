@@ -259,4 +259,39 @@ public class UndoStackTests
 
         Assert.True(stack.IsDirty);
     }
+
+    [Fact]
+    public void Changed_FiresOnExecuteUndoRedoAndMarkSaved()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        var stack = new UndoStack();
+        var fireCount = 0;
+        stack.Changed += () => fireCount++;
+
+        stack.Execute(new MoveVertexCommand(map, vertex, new Vector2(0, 0), new Vector2(10, 10)));
+        Assert.Equal(1, fireCount);
+
+        stack.Undo();
+        Assert.Equal(2, fireCount);
+
+        stack.Redo();
+        Assert.Equal(3, fireCount);
+
+        stack.MarkSaved();
+        Assert.Equal(4, fireCount);
+    }
+
+    [Fact]
+    public void Changed_DoesNotFireOnAnEmptyUndoOrRedo()
+    {
+        var stack = new UndoStack();
+        var fireCount = 0;
+        stack.Changed += () => fireCount++;
+
+        stack.Undo();
+        stack.Redo();
+
+        Assert.Equal(0, fireCount);
+    }
 }

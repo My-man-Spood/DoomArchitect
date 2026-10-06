@@ -125,4 +125,30 @@ public class Pk3FileTests
         Assert.Equal(ResourceTreeNodeKind.File, mainAcs.Kind);
         Assert.Equal("acs/main.acs", mainAcs.Path);
     }
+
+    [Fact]
+    public void WithReplacedEntry_ReplacesOnlyTheTargetPath_LeavesOthersUntouched()
+    {
+        var pk3 = Pk3TestBuilder.Build(
+            ("SCRIPTS", "old script"u8.ToArray()),
+            ("flats/MYFLAT.png", new byte[] { 1, 2, 3 }),
+            ("zscript.zs", "class Actor {}"u8.ToArray()));
+
+        var entries = pk3.WithReplacedEntry("SCRIPTS", "new script"u8.ToArray());
+
+        Assert.Equal(3, entries.Count);
+        Assert.Equal("new script"u8.ToArray(), entries.Single(e => e.Path == "SCRIPTS").Data);
+        Assert.Equal(new byte[] { 1, 2, 3 }, entries.Single(e => e.Path == "flats/MYFLAT.png").Data);
+        Assert.Equal("class Actor {}"u8.ToArray(), entries.Single(e => e.Path == "zscript.zs").Data);
+    }
+
+    [Fact]
+    public void WithReplacedEntry_PathMatchIsCaseInsensitive()
+    {
+        var pk3 = Pk3TestBuilder.Build(("Scripts/Main.acs", "old"u8.ToArray()));
+
+        var entries = pk3.WithReplacedEntry("scripts/main.acs", "new"u8.ToArray());
+
+        Assert.Equal("new"u8.ToArray(), Assert.Single(entries).Data);
+    }
 }

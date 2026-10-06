@@ -33,6 +33,10 @@ public class KeyBindingRegistryTests
     [Fact]
     public void All_ContainsExactlyTheDesignedActionCount()
     {
-        Assert.Equal(44, KeyBindingRegistry.All.Count);
+        // 45, not 44: save_map was added - map saving had no keyboard
+        // shortcut at all before (only save_document, scoped to script
+        // tabs), a real reported gap, not a count anyone meant to change
+        // casually.
+        Assert.Equal(45, KeyBindingRegistry.All.Count);
     }
 }
