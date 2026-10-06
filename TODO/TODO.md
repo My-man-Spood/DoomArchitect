@@ -73,6 +73,7 @@ so it isn't lost, not because it belongs in the tables below.
 |---|---|
 | [Sector boundary tracing (SectorTracer)](geometry-sector-boundary-tracing.md) | |
 | Polygon triangulation for floor/ceiling meshes | `PolygonNesting`/`PolygonCutter`/`EarClipper` - full trace -> nest -> cut -> ear-clip pipeline, holes included. |
+| [Auto-remove orphaned vertices when a linedef is removed](geometry-vertex-auto-cleanup.md) | Fixes a real reported bug - `DeleteSectorsCommand`/`DeleteLinedefsCommand` left orphaned vertices behind. |
 | [Slopes / 3D floors](geometry-slopes-3d-floors.md) | **Pending** - see Open table above. |
 
 ### Rendering

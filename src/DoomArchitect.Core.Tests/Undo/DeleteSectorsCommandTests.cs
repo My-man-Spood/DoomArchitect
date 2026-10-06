@@ -37,8 +37,17 @@ public class DeleteSectorsCommandTests
         return (map, left, right, shared);
     }
 
+    /// <summary>
+    /// The reported bug: a fully isolated sector's boundary walls become
+    /// fully orphaned (both sides null, per the sector-delete cascade),
+    /// and so do their vertices - they get removed too
+    /// (<see cref="MapData.RemoveLinedef"/>'s own cascade, UDB's real
+    /// <c>Vertex.DetachLinedefP</c>). This test used to assert
+    /// <c>Assert.Equal(4, map.Vertices.Count)</c> with a comment claiming
+    /// that matched UDB - confirmed wrong by testing real UDB directly.
+    /// </summary>
     [Fact]
-    public void Do_IsolatedSector_RemovesTheSectorAndEveryOneSidedBoundaryWall()
+    public void Do_IsolatedSector_RemovesTheSectorEveryBoundaryWallAndTheirOrphanedVertices()
     {
         var map = new MapData();
         var (sector, vertices) = map.CreateClosedSector(0, 128,
@@ -50,7 +59,8 @@ public class DeleteSectorsCommandTests
         Assert.DoesNotContain(sector, map.Sectors);
         Assert.Empty(map.Linedefs);
         Assert.All(boundaryWalls, w => Assert.DoesNotContain(w, map.Linedefs));
-        Assert.Equal(4, map.Vertices.Count); // no vertex cascade, matching DeleteLinedefsCommand
+        Assert.Empty(map.Vertices);
+        Assert.All(vertices, v => Assert.DoesNotContain(v, map.Vertices));
     }
 
     [Fact]
@@ -157,10 +167,10 @@ public class DeleteSectorsCommandTests
     }
 
     [Fact]
-    public void Undo_IsolatedSector_RestoresSectorAndEveryBoundaryWall()
+    public void Undo_IsolatedSector_RestoresSectorEveryBoundaryWallAndTheirVertices()
     {
         var map = new MapData();
-        var (sector, _) = map.CreateClosedSector(0, 128,
+        var (sector, vertices) = map.CreateClosedSector(0, 128,
             new Vector2(0, 0), new Vector2(0, 10), new Vector2(10, 10), new Vector2(10, 0));
         var boundaryWalls = map.Linedefs.ToList();
 
@@ -171,5 +181,7 @@ public class DeleteSectorsCommandTests
         Assert.Contains(sector, map.Sectors);
         Assert.All(boundaryWalls, w => Assert.Contains(w, map.Linedefs));
         Assert.Equal(boundaryWalls.Count, sector.Sidedefs.Count);
+        Assert.All(vertices, v => Assert.Contains(v, map.Vertices));
+        Assert.Equal(vertices.Length, map.Vertices.Count);
     }
 }

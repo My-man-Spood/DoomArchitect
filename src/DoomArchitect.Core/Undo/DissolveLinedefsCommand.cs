@@ -66,7 +66,7 @@ public sealed class DissolveLinedefsCommand : ICommand
             }
 
             linedef.MarkAdjacentSectorsDirty();
-            map.RemoveLinedef(linedef);
+            map.RemoveLinedef(linedef, undoActions);
             undoActions.Add(() =>
             {
                 map.RestoreLinedef(linedef);

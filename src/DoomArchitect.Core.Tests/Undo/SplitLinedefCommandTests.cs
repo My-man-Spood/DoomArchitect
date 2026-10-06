@@ -27,6 +27,16 @@ public class SplitLinedefCommandTests
         Assert.Same(command.CreatedVertex, linedef.End);
     }
 
+    /// <summary>
+    /// <paramref name="end"/> has no linedef of its own besides the one
+    /// being split here (a dead-end wall) - after the split it has only
+    /// <c>newHalf</c>, so undoing (which removes <c>newHalf</c>) orphans
+    /// it for a moment before <c>linedef</c> is reattached. This is
+    /// exactly the case <c>SplitLinedefCommand.Undo</c>'s own defensive
+    /// <c>RestoreVertex</c> call exists for - <c>map.Vertices.Count</c>
+    /// below would read 1, not 2, without it (not just a theoretical
+    /// case this comment is guessing at).
+    /// </summary>
     [Fact]
     public void Undo_FullyRestoresTheOriginalLinedef()
     {
@@ -41,6 +51,7 @@ public class SplitLinedefCommandTests
         command.Undo();
 
         Assert.Equal(2, map.Vertices.Count);
+        Assert.Contains(end, map.Vertices);
         var remaining = Assert.Single(map.Linedefs);
         Assert.Same(linedef, remaining);
         Assert.Same(start, linedef.Start);

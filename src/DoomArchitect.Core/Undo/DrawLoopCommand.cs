@@ -419,7 +419,7 @@ public sealed class DrawLoopCommand : ICommand
 
     private void RemoveSidelessLinedefTracked(Linedef linedef)
     {
-        map.RemoveLinedef(linedef);
+        map.RemoveLinedef(linedef, undoActions);
         undoActions.Add(() => map.RestoreLinedef(linedef));
     }
 

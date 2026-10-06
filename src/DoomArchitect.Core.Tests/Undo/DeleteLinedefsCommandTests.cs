@@ -8,8 +8,16 @@ namespace DoomArchitect.Core.Tests.Undo;
 
 public class DeleteLinedefsCommandTests
 {
+    /// <summary>
+    /// A standalone linedef with nothing else attached to either endpoint -
+    /// removing it orphans both vertices, which get removed too
+    /// (<see cref="MapData.RemoveLinedef"/>'s own cascade, UDB's real
+    /// <c>Vertex.DetachLinedefP</c>). This test used to be named
+    /// "...ButLeavesItsVerticesAlone" and assert the opposite - that was
+    /// the actual reported bug, confirmed wrong against real UDB directly.
+    /// </summary>
     [Fact]
-    public void Do_RemovesTheLinedefButLeavesItsVerticesAlone()
+    public void Do_RemovesTheLinedefAndItsNowOrphanedVertices()
     {
         var map = new MapData();
         var a = map.CreateVertex(new Vector2(0, 0));
@@ -19,10 +27,44 @@ public class DeleteLinedefsCommandTests
         new DeleteLinedefsCommand(map, new[] { line }).Do();
 
         Assert.DoesNotContain(line, map.Linedefs);
+        Assert.DoesNotContain(a, map.Vertices);
+        Assert.DoesNotContain(b, map.Vertices);
+    }
+
+    /// <summary>Negative case - confirms the fix is scoped to actually-orphaned vertices, not over-eager: a vertex shared with a surviving linedef must not be removed.</summary>
+    [Fact]
+    public void Do_VertexStillUsedByAnotherLinedef_IsNotRemoved()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(10, 0));
+        var c = map.CreateVertex(new Vector2(20, 0));
+        var line1 = map.CreateLinedef(a, b, null, null);
+        map.CreateLinedef(b, c, null, null);
+
+        new DeleteLinedefsCommand(map, new[] { line1 }).Do();
+
+        Assert.DoesNotContain(a, map.Vertices);
+        Assert.Contains(b, map.Vertices);
+        Assert.Contains(c, map.Vertices);
+    }
+
+    [Fact]
+    public void Undo_OfAnOrphaningDelete_RestoresBothVertices()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(10, 0));
+        var line = map.CreateLinedef(a, b, null, null);
+
+        var command = new DeleteLinedefsCommand(map, new[] { line });
+        command.Do();
+        command.Undo();
+
+        Assert.Contains(line, map.Linedefs);
         Assert.Contains(a, map.Vertices);
         Assert.Contains(b, map.Vertices);
-        Assert.Empty(a.Linedefs);
-        Assert.Empty(b.Linedefs);
+        Assert.Equal(2, map.Vertices.Count);
     }
 
     [Fact]

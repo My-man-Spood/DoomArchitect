@@ -5,12 +5,14 @@ namespace DoomArchitect.Core.Undo;
 /// <summary>
 /// Linedefs mode's Delete action - UDB's real <c>LinedefsMode.DeleteItem</c>
 /// (<c>ClassicModes/LinedefsMode.cs</c>), which really is this simple: just
-/// removes each selected linedef, full stop. No vertex left with zero
-/// remaining linedefs is cleaned up, and no sector left missing one of its
-/// walls is repaired - both are simply left as-is, exactly like real UDB
-/// (its own gentler <c>DissolveItem</c>, which does try to join the
-/// sectors on either side back together, is a distinct, not-yet-ported
-/// action - see TODO/TODO.md).
+/// removes each selected linedef, full stop. No sector left missing one of
+/// its walls is repaired - left as-is, exactly like real UDB (its own
+/// gentler <c>DissolveItem</c>, which does try to join the sectors on
+/// either side back together, is a distinct, not-yet-ported action - see
+/// TODO/TODO.md). A vertex left with zero remaining linedefs *is* cleaned
+/// up, via <see cref="MapData.RemoveLinedef"/>'s own cascade (UDB's real
+/// <c>Vertex.DetachLinedefP</c>) - this comment used to claim otherwise,
+/// which was wrong; see TODO/geometry-vertex-auto-cleanup.md.
 /// </summary>
 public sealed class DeleteLinedefsCommand : ICommand
 {
@@ -31,7 +33,7 @@ public sealed class DeleteLinedefsCommand : ICommand
         foreach (var linedef in linedefs)
         {
             linedef.MarkAdjacentSectorsDirty();
-            map.RemoveLinedef(linedef);
+            map.RemoveLinedef(linedef, undoActions);
             undoActions.Add(() =>
             {
                 map.RestoreLinedef(linedef);

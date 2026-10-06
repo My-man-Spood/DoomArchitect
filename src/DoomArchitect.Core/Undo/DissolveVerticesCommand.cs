@@ -109,7 +109,7 @@ public sealed class DissolveVerticesCommand : ICommand
         foreach (var linedef in vertex.Linedefs.ToList())
         {
             linedef.MarkAdjacentSectorsDirty();
-            map.RemoveLinedef(linedef);
+            map.RemoveLinedef(linedef, undoActions);
             undoActions.Add(() =>
             {
                 map.RestoreLinedef(linedef);
@@ -143,7 +143,7 @@ public sealed class DissolveVerticesCommand : ICommand
         if (ld1WasStart) ld1.Start = v2; else ld1.End = v2;
         ld1.MarkAdjacentSectorsDirty();
 
-        map.RemoveLinedef(ld2);
+        map.RemoveLinedef(ld2, undoActions);
         undoActions.Add(() =>
         {
             map.RestoreLinedef(ld2);
@@ -187,7 +187,7 @@ public sealed class DissolveVerticesCommand : ICommand
             var start = ld1.Start;
             var end = ld1.End;
 
-            map.RemoveLinedef(ld1);
+            map.RemoveLinedef(ld1, undoActions);
             undoActions.Add(() => map.RestoreLinedef(ld1));
 
             var newLinedef = map.CreateLinedef(start, end, null, null);

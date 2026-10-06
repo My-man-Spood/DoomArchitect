@@ -904,6 +904,43 @@ public class MapDataTests
         Assert.Empty(v1.Linedefs);
     }
 
+    /// <summary>
+    /// UDB's real <c>Vertex.DetachLinedefP</c> (confirmed directly against
+    /// its source): a vertex left with zero remaining linedefs after a
+    /// removal is removed too, not just detached from the one that's
+    /// gone. The reported bug was this cascade missing entirely.
+    /// </summary>
+    [Fact]
+    public void RemoveLinedef_BothEndpointsNowOrphaned_RemovesBothVertices()
+    {
+        var map = new MapData();
+        var v0 = map.CreateVertex(new Vector2(0, 0));
+        var v1 = map.CreateVertex(new Vector2(64, 0));
+        var linedef = map.CreateLinedef(v0, v1, null, null);
+
+        map.RemoveLinedef(linedef);
+
+        Assert.DoesNotContain(v0, map.Vertices);
+        Assert.DoesNotContain(v1, map.Vertices);
+    }
+
+    [Fact]
+    public void RemoveLinedef_WithUndoActions_ThenReplayingThem_RestoresTheOrphanedVertices()
+    {
+        var map = new MapData();
+        var v0 = map.CreateVertex(new Vector2(0, 0));
+        var v1 = map.CreateVertex(new Vector2(64, 0));
+        var linedef = map.CreateLinedef(v0, v1, null, null);
+        var undoActions = new List<Action>();
+
+        map.RemoveLinedef(linedef, undoActions);
+        for (var i = undoActions.Count - 1; i >= 0; i--) undoActions[i]();
+
+        Assert.Contains(v0, map.Vertices);
+        Assert.Contains(v1, map.Vertices);
+        Assert.Equal(2, map.Vertices.Count);
+    }
+
     [Fact]
     public void RemoveVertex_RemovesItFromMapVertices()
     {
@@ -1158,6 +1195,25 @@ public class MapDataTests
         map.RestoreVertex(vertex);
 
         Assert.Contains(vertex, map.Vertices);
+    }
+
+    /// <summary>
+    /// The safety guarantee the whole orphaned-vertex-cleanup design leans
+    /// on: a command that explicitly restores a vertex *and* benefits from
+    /// <see cref="MapData.RemoveLinedef"/>'s own cascade restoring the same
+    /// one must not end up with it listed twice.
+    /// </summary>
+    [Fact]
+    public void RestoreVertex_CalledTwiceForTheSameVertex_DoesNotDuplicateIt()
+    {
+        var map = new MapData();
+        var vertex = map.CreateVertex(new Vector2(0, 0));
+        map.RemoveVertex(vertex);
+
+        map.RestoreVertex(vertex);
+        map.RestoreVertex(vertex);
+
+        Assert.Single(map.Vertices);
     }
 
     [Fact]

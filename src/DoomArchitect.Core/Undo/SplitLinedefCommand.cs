@@ -39,9 +39,17 @@ public sealed class SplitLinedefCommand : ICommand
 
     public void Undo()
     {
+        // RemoveLinedef below can orphan originalEnd (if the split line's
+        // far endpoint had no other linedef of its own - a dead-end wall)
+        // and auto-remove it from map.Vertices - RestoreVertex here is a
+        // no-op in the common case, and correctly undoes that in the
+        // dead-end one, before the reattachment three lines down would
+        // otherwise leave it referenced but missing from the map's own
+        // vertex list.
         map.RemoveLinedef(newHalf!);
         vertex!.RemoveLinedef(linedef);
         linedef.End = originalEnd!;
+        map.RestoreVertex(originalEnd!);
         originalEnd!.AddLinedef(linedef);
         map.RemoveVertex(vertex);
     }

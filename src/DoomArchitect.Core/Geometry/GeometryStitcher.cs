@@ -245,7 +245,7 @@ public static class GeometryStitcher
             if (line.Start != line.End && line.Start.Position != line.End.Position) continue;
 
             lines.RemoveAt(i);
-            map.RemoveLinedef(line);
+            map.RemoveLinedef(line, undoActions);
             var loopedFrontSector = line.Front?.Sector;
             var loopedBackSector = line.Back?.Sector;
             if (loopedFrontSector != null) loopedFrontSector.NeedsRebuild = true;
@@ -281,7 +281,7 @@ public static class GeometryStitcher
                 var originalKeepBack = keep.Back;
 
                 lines.Remove(remove);
-                map.JoinLinedefs(keep, remove);
+                map.JoinLinedefs(keep, remove, undoActions);
 
                 var newKeepFront = keep.Front;
                 var newKeepBack = keep.Back;

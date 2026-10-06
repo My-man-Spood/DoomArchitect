@@ -41,8 +41,21 @@ public sealed class MapData
         return thing;
     }
 
+    /// <summary>
+    /// <see cref="RestoreVertex"/>s both endpoints first (a no-op for the
+    /// overwhelming majority of calls, where both are already live) -
+    /// guards against a real case <see cref="RemoveLinedef"/>'s own orphan
+    /// cleanup introduces: a caller that removes a linedef and immediately
+    /// creates a new one reusing the same now-possibly-orphaned endpoint
+    /// object (e.g. <c>DissolveVerticesCommand.MergeLines</c>'s own
+    /// "redraw" branch) would otherwise attach to a vertex silently
+    /// missing from <see cref="Vertices"/>.
+    /// </summary>
     public Linedef CreateLinedef(Vertex start, Vertex end, Sector? front, Sector? back)
     {
+        RestoreVertex(start);
+        RestoreVertex(end);
+
         var linedef = new Linedef(start, end);
 
         if (front != null)
@@ -68,8 +81,17 @@ public sealed class MapData
     /// Detaches a linedef from both its endpoint vertices and both its
     /// sidedefs' sectors (either side may be null on a one-sided wall),
     /// then drops it - the exact reverse of <see cref="CreateLinedef"/>.
+    /// Either endpoint left with no linedefs of its own afterward is
+    /// removed too - UDB's own real <c>Vertex.DetachLinedefP</c>
+    /// (<c>Source/Core/Map/Vertex.cs</c>), which auto-disposes a vertex
+    /// the instant its own linedef count hits zero, confirmed directly
+    /// against its source rather than guessed. <paramref name="undoActions"/>
+    /// is optional - a caller that doesn't pass one (every call site found
+    /// so far that's itself replaying an undo closure, where redoing just
+    /// means running <c>Do()</c> fresh) simply doesn't get this specific
+    /// cleanup recorded for its own undo.
     /// </summary>
-    public void RemoveLinedef(Linedef linedef)
+    public void RemoveLinedef(Linedef linedef, List<Action>? undoActions = null)
     {
         linedef.Start.RemoveLinedef(linedef);
         linedef.End.RemoveLinedef(linedef);
@@ -78,6 +100,26 @@ public sealed class MapData
         if (linedef.Back != null) linedef.Back.Sector.RemoveSidedef(linedef.Back);
 
         _linedefs.Remove(linedef);
+
+        RemoveIfOrphaned(linedef.Start, undoActions);
+        RemoveIfOrphaned(linedef.End, undoActions);
+    }
+
+    /// <summary>
+    /// The actual cascade <see cref="RemoveLinedef"/> needs - deliberately
+    /// not applied inside <see cref="Vertex.RemoveLinedef"/> itself, which
+    /// stays the low-level "just update this vertex's own bookkeeping"
+    /// primitive several callers use mid-rewire (splitting, stitching,
+    /// merging), where a vertex passing through a transient zero-linedef
+    /// moment before being immediately reattached to something else must
+    /// NOT be swept up here.
+    /// </summary>
+    private void RemoveIfOrphaned(Vertex vertex, List<Action>? undoActions)
+    {
+        if (vertex.Linedefs.Count > 0 || !_vertices.Contains(vertex)) return;
+
+        RemoveVertex(vertex);
+        undoActions?.Add(() => RestoreVertex(vertex));
     }
 
     /// <summary>Re-inserts a linedef removed by <see cref="RemoveLinedef"/> - undo support, mirroring <see cref="RestoreVertex"/>, for a caller (<c>GeometryStitcher</c>'s stitching passes) building its own undo closure around a primitive like <see cref="JoinLinedefs"/> that ends up disposing one.</summary>
@@ -102,8 +144,24 @@ public sealed class MapData
     /// </summary>
     public void RemoveVertex(Vertex vertex) => _vertices.Remove(vertex);
 
-    /// <summary>Re-inserts a vertex removed by <see cref="RemoveVertex"/>/<see cref="MergeVertex"/> - undo support for a caller that builds its own undo closure around one of those (mirroring how <see cref="SplitLinedef"/>'s own caller-built undo directly reverses its endpoint reassignment via <see cref="Linedef.End"/>/<see cref="Vertex.AddLinedef"/>).</summary>
-    public void RestoreVertex(Vertex vertex) => _vertices.Add(vertex);
+    /// <summary>
+    /// Re-inserts a vertex removed by <see cref="RemoveVertex"/>/<see cref="MergeVertex"/> -
+    /// undo support for a caller that builds its own undo closure around
+    /// one of those (mirroring how <see cref="SplitLinedef"/>'s own
+    /// caller-built undo directly reverses its endpoint reassignment via
+    /// <see cref="Linedef.End"/>/<see cref="Vertex.AddLinedef"/>).
+    /// Idempotent - a no-op if the vertex is already present - since
+    /// <see cref="RemoveLinedef"/>'s own orphan cleanup and a command's
+    /// own explicit vertex removal can legitimately both target the exact
+    /// same vertex; without this, two independent restore closures for it
+    /// would leave it in <see cref="Vertices"/> twice after an undo
+    /// (<see cref="List{T}"/> allows duplicates, it wouldn't just silently
+    /// reject the second add).
+    /// </summary>
+    public void RestoreVertex(Vertex vertex)
+    {
+        if (!_vertices.Contains(vertex)) _vertices.Add(vertex);
+    }
 
     /// <summary>
     /// Redirects every linedef touching <paramref name="from"/> onto
@@ -225,7 +283,7 @@ public sealed class MapData
     /// the same <see cref="CopySidedefProperties"/> <see cref="SplitLinedef"/>
     /// already uses, just without that extra migration step on top.
     /// </summary>
-    public void JoinLinedefs(Linedef keep, Linedef remove)
+    public void JoinLinedefs(Linedef keep, Linedef remove, List<Action>? undoActions = null)
     {
         var keepFront = keep.Front;
         var keepBack = keep.Back;
@@ -307,7 +365,7 @@ public sealed class MapData
         if (removeFront != null) removeFront.Sector.NeedsRebuild = true;
         if (removeBack != null) removeBack.Sector.NeedsRebuild = true;
 
-        RemoveLinedef(remove);
+        RemoveLinedef(remove, undoActions);
     }
 
     private static void JoinChangeSidedef(Linedef target, bool front, Sidedef? donor)

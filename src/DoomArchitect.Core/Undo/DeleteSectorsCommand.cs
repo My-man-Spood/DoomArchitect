@@ -20,8 +20,13 @@ namespace DoomArchitect.Core.Undo;
 /// <c>MergeInvalidSectors</c> repair step);</item>
 /// <item>any of those linedefs left with *both* sides now null (it only
 /// ever bordered this sector, on both sides, or bordered nothing else) is
-/// fully removed too - no vertex cleanup, matching
-/// <see cref="DeleteLinedefsCommand"/>'s own equally blunt behavior;</item>
+/// fully removed too, via <see cref="MapData.RemoveLinedef"/> - which
+/// cascades to remove either endpoint left with no linedefs of its own
+/// afterward (UDB's real <c>Vertex.DetachLinedefP</c>, confirmed directly
+/// against its source - initially missed here and in
+/// <see cref="DeleteLinedefsCommand"/>, both of which used to claim no
+/// vertex cleanup happens; it does, just one level deeper than either
+/// command itself, baked into the data model);</item>
 /// <item>any left with only a Back side gets flipped
 /// (<see cref="GeometryStitcher.FlipBackwardLinedefs"/> - the format
 /// convention that Front must exist whenever Back does);</item>
@@ -71,7 +76,7 @@ public sealed class DeleteSectorsCommand : ICommand
             {
                 if (linedef.Front == null && linedef.Back == null)
                 {
-                    map.RemoveLinedef(linedef);
+                    map.RemoveLinedef(linedef, undoActions);
                     undoActions.Add(() => map.RestoreLinedef(linedef));
                 }
                 else

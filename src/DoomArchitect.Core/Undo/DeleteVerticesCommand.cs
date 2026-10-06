@@ -77,7 +77,7 @@ public sealed class DeleteVerticesCommand : ICommand
         if (keepWasStart) keep.Start = farVertex; else keep.End = farVertex;
         keep.MarkAdjacentSectorsDirty();
 
-        map.RemoveLinedef(discard);
+        map.RemoveLinedef(discard, undoActions);
 
         undoActions.Add(() =>
         {
@@ -85,6 +85,7 @@ public sealed class DeleteVerticesCommand : ICommand
 
             farVertex.RemoveLinedef(keep);
             if (keepWasStart) keep.Start = vertex; else keep.End = vertex;
+            map.RestoreVertex(vertex);
             vertex.AddLinedef(keep);
             keep.MarkAdjacentSectorsDirty();
         });
@@ -95,7 +96,7 @@ public sealed class DeleteVerticesCommand : ICommand
         foreach (var linedef in vertex.Linedefs.ToList())
         {
             linedef.MarkAdjacentSectorsDirty();
-            map.RemoveLinedef(linedef);
+            map.RemoveLinedef(linedef, undoActions);
             undoActions.Add(() =>
             {
                 map.RestoreLinedef(linedef);

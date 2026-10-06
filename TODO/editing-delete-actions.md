@@ -11,8 +11,11 @@
       its own `Core.Undo` command (`DeleteVerticesCommand`/
       `DeleteLinedefsCommand`/`DeleteSectorsCommand`) so a whole selection
       deletes as one Undo step:
-      - Linedefs: just removes each selected linedef - no vertex or
-        sector cleanup at all, exactly UDB's own blunt real behavior.
+      - Linedefs: just removes each selected linedef - no sector cleanup
+        at all, exactly UDB's own blunt real behavior. A vertex left with
+        zero remaining linedefs by this *is* cleaned up though (see
+        "Update: vertex auto-cleanup" below) - this bullet originally,
+        incorrectly, claimed otherwise.
       - Vertices: a vertex with exactly two linedefs attached has them
         merged into one (matching UDB's `GetByIndex(0/1)` arbitrary-but-
         deterministic pick) before removal, so deleting a vertex mid-wall
@@ -78,3 +81,13 @@
         branch) - gated behind a UDB preference this project has no
         settings surface for. Revisit alongside a real preferences page
         for editing behavior toggles, if ever wanted.
+
+      **Update: vertex auto-cleanup, after a real reported bug.**
+      Reported live: right-click-creating an isolated 4-vertex sector in
+      Vertices mode, then deleting it in Sectors mode, removed the
+      sector and its boundary walls but left all 4 vertices behind. Both
+      the Sectors- and Linedefs-delete doc comments above claimed "no
+      vertex cleanup, matching real UDB" - confirmed wrong by testing
+      real UDB directly (Windows): it fully wipes the vertices too. Full
+      writeup, including why that claim was wrong and how the fix was
+      actually designed, in `TODO/geometry-vertex-auto-cleanup.md`.
