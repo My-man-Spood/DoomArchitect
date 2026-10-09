@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Core.IO;
 using DoomArchitect.Settings;
 using Godot;
 
@@ -115,6 +116,7 @@ public partial class AppShell : Control
 		_resourceBrowserPanel.MouseEntered += () => SetBrowserPanelHover(true);
 		_resourceBrowserPanel.MouseExited += () => SetBrowserPanelHover(false);
 		_resourceBrowserPanel.OpenRequested += OnResourceOpenRequested;
+		_resourceBrowserPanel.AddScriptRequested += OnAddScriptRequested;
 		Resized += UpdateBrowserToggleButton;
 
 		_immersive3DEnabled = AppSettingsFile.Load().GetImmersive3DView();
@@ -564,6 +566,89 @@ public partial class AppShell : Control
 		SwitchTo(_tabContents.IndexOf(existingLump ?? OpenLumpScriptTab(request)));
 	}
 
+	/// <summary>
+	/// A genuinely empty lump is pointless if the user clicks "Add Script"
+	/// and then changes their mind without typing anything - seeded with a
+	/// real, useful starting line instead of nothing. Confirmed `#include`,
+	/// not `#import`, is the real directive for a header file like this
+	/// (not a compiled-library import), against this project's own BCS
+	/// work (TODO/bcs-lsp-foundation.md).
+	/// </summary>
+	private static readonly byte[] NewScriptsLumpBoilerplate =
+		System.Text.Encoding.UTF8.GetBytes("#include \"zcommon.acs\"\n\n");
+
+	/// <summary>
+	/// The resource browser's "Add Script" action - creates the target
+	/// map's own <c>SCRIPTS</c> lump (<see cref="WadFile.WithAddedScriptsLump"/>),
+	/// backs up (<c>.bak</c>) then overwrites the WAD (matching the
+	/// existing WAD-lump-save convention - this is a WAD operation, not a
+	/// PK3 one), refreshes the browser so the new lump actually shows up,
+	/// then opens it the exact same way an already-existing SCRIPTS lump
+	/// opens.
+	/// </summary>
+	private void OnAddScriptRequested(ResourceAddScriptRequest request)
+	{
+		var wad = WadFile.Read(request.WadPath);
+		var (newLumps, insertedIndex) = WadFile.WithAddedScriptsLump(wad.Lumps, request.MapMarkerLumpIndex, NewScriptsLumpBoilerplate);
+		var bytes = WadWriter.Write(newLumps);
+
+		if (System.IO.File.Exists(request.WadPath)) System.IO.File.Move(request.WadPath, request.WadPath + ".bak", overwrite: true);
+		System.IO.File.WriteAllBytes(request.WadPath, bytes);
+
+		// Needed when request.WadPath is a nested maps/MAP01.wad - the
+		// browser's own tree-walk now re-points through this exact cache
+		// for a nested WAD (ResourceBrowserPanel.AddTreeItem), so without
+		// this it would keep serving the pre-write instance on the very
+		// next refresh below, even though the enclosing folder's own
+		// DirectoryResource re-reads everything else fresh already.
+		ResourceContainerCache.Invalidate(request.WadPath);
+		RefreshBrowserForExternallyChangedWad(request.WadPath);
+
+		OnResourceOpenRequested(new ResourceOpenRequest
+		{
+			SourcePath = request.WadPath,
+			LumpName = "SCRIPTS",
+			LumpIndex = insertedIndex,
+			LumpData = NewScriptsLumpBoilerplate,
+		});
+	}
+
+	/// <summary>
+	/// The browser's own tree is driven by whichever Map tab is currently
+	/// active, not re-walked on its own - every existing lump-save path
+	/// (<c>ScriptDocument.SaveLump</c>/<c>SavePk3Entry</c>) only ever
+	/// changes a lump's bytes, never the tree *structure*, so nothing ever
+	/// needed to trigger a refresh before this. Rebuilds just the one
+	/// <see cref="NamedResource"/> whose <see cref="NamedResource.SourcePath"/>
+	/// matches the WAD that was just written (a fresh <see cref="WadFile.Read"/> -
+	/// <see cref="WadFile"/> is immutable once constructed, there's no
+	/// in-place way to add to an existing instance), leaving every other
+	/// already-loaded resource (the IWAD, a mod folder/pk3, a sibling
+	/// map's own WAD) untouched. <c>OpenMapMenu.CurrentMapContainer</c> is
+	/// passed through unchanged regardless of whether it happens to be the
+	/// same WAD - <see cref="ResourceBrowserPanel.Refresh"/> uses it purely
+	/// to resolve/highlight "the currently open map" by path/name, not by
+	/// object identity, and it'll correctly re-read fresh the next time
+	/// this map is actually saved or reopened anyway (<c>OpenMapMenu</c>'s
+	/// own established "always read fresh" convention). Does not touch
+	/// <c>OpenMapMenu</c>'s own fields at all - this is a display-only
+	/// refresh of what the browser shows, exactly like <see cref="Activate"/>'s
+	/// own existing <c>Refresh</c> calls already are.
+	/// </summary>
+	private void RefreshBrowserForExternallyChangedWad(string wadPath)
+	{
+		if (_tabContents[_activeTab] is not MapView mapView) return;
+
+		var freshContainer = WadFile.Read(wadPath);
+		var updated = mapView.OpenMapMenu.CurrentNamedResources
+			.Select(r => string.Equals(r.SourcePath, wadPath, System.StringComparison.OrdinalIgnoreCase)
+				? new NamedResource(r.DisplayName, freshContainer, r.SourcePath)
+				: r)
+			.ToList();
+
+		_resourceBrowserPanel.Refresh(updated, mapView.OpenMapMenu.CurrentMapContainer, mapView.OpenMapMenu.CurrentMapName, mapView.OpenMapMenu.CurrentWadPath);
+	}
+
 	/// <summary>Lump-backed counterpart of <see cref="OpenScriptTab"/> - same tab-strip wiring, populated from already-read bytes (<see cref="ScriptDocument.LoadLump"/>) instead of a disk path.</summary>
 	private ScriptDocument OpenLumpScriptTab(ResourceOpenRequest request)
 	{
@@ -631,6 +716,11 @@ public partial class AppShell : Control
 			_resourceBrowserPanel.Refresh(
 				mapView.OpenMapMenu.CurrentNamedResources, mapView.OpenMapMenu.CurrentMapContainer,
 				mapView.OpenMapMenu.CurrentMapName, mapView.OpenMapMenu.CurrentWadPath);
+			if (AppSettingsFile.Load().GetAutoRevealActiveTab())
+			{
+				_resourceBrowserPanel.RevealActiveMap(
+					mapView.OpenMapMenu.CurrentMapContainer, mapView.OpenMapMenu.CurrentMapName, mapView.OpenMapMenu.CurrentWadPath);
+			}
 		}
 		else if (content is Control control)
 		{
@@ -643,6 +733,10 @@ public partial class AppShell : Control
 			// Same reasoning for the browser's own "currently open" highlight
 			// - a Script tab has no map of its own to show as open.
 			_resourceBrowserPanel.ClearCurrentMapHighlight();
+			if (content is ScriptDocument scriptDocument && AppSettingsFile.Load().GetAutoRevealActiveTab())
+			{
+				_resourceBrowserPanel.RevealActiveScript(scriptDocument);
+			}
 		}
 	}
 

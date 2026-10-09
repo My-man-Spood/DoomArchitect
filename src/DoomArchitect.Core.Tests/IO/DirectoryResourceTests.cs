@@ -153,4 +153,31 @@ public class DirectoryResourceTests
 
         Assert.Null(dir.ResolveAbsolutePath("maps/MAP02.wad"));
     }
+
+    /// <summary>
+    /// The actual wiring, not just PathTreeBuilder.ExpandNestedWads in
+    /// isolation - a real GZDoom/ZDoom-convention maps/MAP01.wad on disk
+    /// should come back from BuildTree as a real lump structure, not a
+    /// flat file leaf.
+    /// </summary>
+    [Fact]
+    public void BuildTree_PerMapWadInsideMapsFolder_ExpandsIntoItsOwnLumpStructure()
+    {
+        var mapWad = WadWriter.Write(new[]
+        {
+            new WadLump("MAP01", Array.Empty<byte>()),
+            new WadLump("THINGS", Array.Empty<byte>()),
+            new WadLump("BEHAVIOR", Array.Empty<byte>()),
+        });
+        var dir = DirectoryTestBuilder.Build(("maps/MAP01.wad", mapWad));
+
+        var tree = dir.BuildTree("mod");
+
+        var mapsFolder = Assert.Single(tree.Children);
+        var expandedWad = Assert.Single(mapsFolder.Children);
+        Assert.Equal(ResourceTreeNodeKind.WadContainer, expandedWad.Kind);
+        var mapGroup = Assert.Single(expandedWad.Children);
+        Assert.Equal(ResourceTreeNodeKind.MapGroup, mapGroup.Kind);
+        Assert.Equal("MAP01", mapGroup.DisplayName);
+    }
 }

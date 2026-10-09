@@ -191,4 +191,30 @@ public class AppSettingsTests
 
         Assert.True(reloaded.GetImmersive3DView());
     }
+
+    [Fact]
+    public void GetAutoRevealActiveTab_NothingSet_DefaultsToTrue()
+    {
+        var settings = AppSettings.Empty();
+
+        Assert.True(settings.GetAutoRevealActiveTab());
+    }
+
+    [Fact]
+    public void WithAutoRevealActiveTab_ThenGet_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithAutoRevealActiveTab(false);
+
+        Assert.False(settings.GetAutoRevealActiveTab());
+    }
+
+    [Fact]
+    public void AutoRevealActiveTab_ToText_ThenParse_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithAutoRevealActiveTab(false);
+
+        var reloaded = AppSettings.Parse(settings.ToText());
+
+        Assert.False(reloaded.GetAutoRevealActiveTab());
+    }
 }

@@ -338,4 +338,89 @@ public class WadFileTests
         Assert.Equal(new byte[] { 1 }, result[1].Data);
         Assert.Equal(new byte[] { 99 }, result[3].Data);
     }
+
+    [Fact]
+    public void WithAddedScriptsLump_ClassicFormatMap_InsertsAsTheLastLumpOfItsGroup()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("THINGS", Array.Empty<byte>()),
+            ("LINEDEFS", Array.Empty<byte>()),
+            ("SIDEDEFS", Array.Empty<byte>()),
+            ("VERTEXES", Array.Empty<byte>()),
+            ("BEHAVIOR", new byte[] { 1 }));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, insertedIndex) = WadFile.WithAddedScriptsLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(6, insertedIndex);
+        Assert.Equal(7, result.Count);
+        Assert.Equal("SCRIPTS", result[6].Name);
+        Assert.Equal(new byte[] { 9 }, result[6].Data);
+        Assert.Equal("BEHAVIOR", result[5].Name);
+    }
+
+    [Fact]
+    public void WithAddedScriptsLump_UdmfFormatMap_InsertsBeforeEndmap()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("ZNODES", Array.Empty<byte>()),
+            ("BLOCKMAP", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, insertedIndex) = WadFile.WithAddedScriptsLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(4, insertedIndex);
+        Assert.Equal(6, result.Count);
+        Assert.Equal("SCRIPTS", result[4].Name);
+        Assert.Equal("ENDMAP", result[5].Name);
+    }
+
+    [Fact]
+    public void WithAddedScriptsLump_ReturnsTheCorrectIndex_AndLeavesEveryOtherLumpUntouched()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("THINGS", new byte[] { 1 }),
+            ("BEHAVIOR", new byte[] { 2 }));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, insertedIndex) = WadFile.WithAddedScriptsLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(3, insertedIndex);
+        Assert.Equal("MAP01", result[0].Name);
+        Assert.Equal("THINGS", result[1].Name);
+        Assert.Equal(new byte[] { 1 }, result[1].Data);
+        Assert.Equal("BEHAVIOR", result[2].Name);
+        Assert.Equal(new byte[] { 2 }, result[2].Data);
+        Assert.Equal("SCRIPTS", result[3].Name);
+        Assert.Equal(new byte[] { 9 }, result[3].Data);
+    }
+
+    /// <summary>A second map elsewhere in the same WAD must be left completely alone, besides its own lumps shifting by exactly one index - the whole reason the method takes a marker index, not just a lump list.</summary>
+    [Fact]
+    public void WithAddedScriptsLump_MultiMapWad_OnlyAffectsTheTargetMapsOwnGroup()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("THINGS", Array.Empty<byte>()),
+            ("BEHAVIOR", Array.Empty<byte>()),
+            ("MAP02", Array.Empty<byte>()),
+            ("THINGS", new byte[] { 7 }),
+            ("BEHAVIOR", new byte[] { 8 }));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, insertedIndex) = WadFile.WithAddedScriptsLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(3, insertedIndex);
+        Assert.Equal(7, result.Count);
+        Assert.Equal("MAP02", result[4].Name);
+        Assert.Equal("THINGS", result[5].Name);
+        Assert.Equal(new byte[] { 7 }, result[5].Data);
+        Assert.Equal("BEHAVIOR", result[6].Name);
+        Assert.Equal(new byte[] { 8 }, result[6].Data);
+    }
 }

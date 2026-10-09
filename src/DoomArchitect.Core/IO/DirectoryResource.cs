@@ -105,9 +105,23 @@ public sealed class DirectoryResource : IResourceContainer
         return null;
     }
 
-    /// <summary>Every real file's own relative path, folded into a real nested tree by <see cref="PathTreeBuilder"/> - mirrors <see cref="Pk3File.BuildTree"/>.</summary>
-    public ResourceTreeNode BuildTree(string displayName) =>
-        PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.DirectoryContainer, _pathsByRelativePath.Keys);
+    /// <summary>
+    /// Every real file's own relative path, folded into a real nested
+    /// tree by <see cref="PathTreeBuilder"/> - mirrors
+    /// <see cref="Pk3File.BuildTree"/>. A second pass
+    /// (<see cref="PathTreeBuilder.ExpandNestedWads"/>) then expands any
+    /// real GZDoom/ZDoom per-map WAD it finds directly inside a top-level
+    /// <c>maps/</c> folder into its own real lump structure - re-reads
+    /// each one's current bytes fresh every call (<see cref="File.ReadAllBytes(string)"/>,
+    /// matching this class's own existing "nothing cached" design), so a
+    /// later write to one of them is picked up on the very next refresh.
+    /// </summary>
+    public ResourceTreeNode BuildTree(string displayName)
+    {
+        var root = PathTreeBuilder.Build(displayName, ResourceTreeNodeKind.DirectoryContainer, _pathsByRelativePath.Keys);
+        PathTreeBuilder.ExpandNestedWads(root, relativePath => _pathsByRelativePath.TryGetValue(relativePath, out var fullPath) ? File.ReadAllBytes(fullPath) : null);
+        return root;
+    }
 
     /// <summary>Compares full, normalized paths rather than the raw string, so a differently-spelled but equivalent path (relative vs. absolute, a trailing separator, mixed slash direction) still matches.</summary>
     public bool ContainsFile(string absolutePath)

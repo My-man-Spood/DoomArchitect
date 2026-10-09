@@ -25,6 +25,7 @@ public partial class PreferencesDialog : AcceptDialog
 	private ResourceListEditor _resourceListEditor;
 	private KeybindsEditor _keybindsEditor;
 	private TestEnginesEditor _testEnginesEditor;
+	private CheckBox _autoRevealCheckBox;
 
 	private AppSettings _workingSettings;
 	private int _selectedIndex;
@@ -35,12 +36,14 @@ public partial class PreferencesDialog : AcceptDialog
 		tabs.SetTabTitle(0, "Game Configurations");
 		tabs.SetTabTitle(1, "Keybinds");
 		tabs.SetTabTitle(2, "Test Engines");
+		tabs.SetTabTitle(3, "General");
 
 		_configList = GetNode<ItemList>("Tabs/Container/ConfigList");
 		_resourceListEditor = GetNode<ResourceListEditor>("Tabs/Container/ResourceListEditor");
 		_resourceListEditor.HintText = "Default resources for this game (e.g. its IWAD) - pre-fills new maps for it.";
 		_keybindsEditor = GetNode<KeybindsEditor>("Tabs/KeybindsEditor");
 		_testEnginesEditor = GetNode<TestEnginesEditor>("Tabs/TestEnginesEditor");
+		_autoRevealCheckBox = GetNode<CheckBox>("Tabs/General/AutoRevealCheckBox");
 
 		foreach (var kind in Kinds) _configList.AddItem(kind.ToString());
 		_configList.ItemSelected += OnConfigSelected;
@@ -58,6 +61,7 @@ public partial class PreferencesDialog : AcceptDialog
 		_resourceListEditor.SetResourcePaths(_workingSettings.GetDefaultResources(Kinds[0]));
 		_keybindsEditor.Load(_workingSettings.GetKeyBindingOverrides());
 		_testEnginesEditor.Load(_workingSettings);
+		_autoRevealCheckBox.ButtonPressed = _workingSettings.GetAutoRevealActiveTab();
 		PopupCentered();
 	}
 
@@ -88,6 +92,8 @@ public partial class PreferencesDialog : AcceptDialog
 		}
 
 		_workingSettings = _testEnginesEditor.Apply(_workingSettings);
+
+		_workingSettings = _workingSettings.WithAutoRevealActiveTab(_autoRevealCheckBox.ButtonPressed);
 
 		AppSettingsFile.Save(_workingSettings);
 

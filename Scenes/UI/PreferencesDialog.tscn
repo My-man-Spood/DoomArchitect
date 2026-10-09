@@ -29,3 +29,10 @@ layout_mode = 2
 
 [node name="TestEnginesEditor" parent="Tabs" instance=ExtResource("4")]
 layout_mode = 2
+
+[node name="General" type="VBoxContainer" parent="Tabs"]
+layout_mode = 2
+
+[node name="AutoRevealCheckBox" type="CheckBox" parent="Tabs/General"]
+layout_mode = 2
+text = "Auto-reveal active tab in Resource Browser"

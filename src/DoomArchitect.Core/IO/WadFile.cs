@@ -382,4 +382,34 @@ public sealed class WadFile : IResourceContainer
         result[index] = new WadLump(lumps[index].Name, newData);
         return result;
     }
+
+    /// <summary>
+    /// Inserts a new <c>SCRIPTS</c> lump into the map whose own marker sits
+    /// at <paramref name="markerIndex"/> - as the new last lump of its group
+    /// for a classic/Hexen-format map, or right before its own <c>ENDMAP</c>
+    /// terminator for a UDMF one (matching <see cref="WadMapLumpNames.Classic"/>/
+    /// <see cref="WadMapLumpNames.Udmf"/>'s own real lump order - <c>SCRIPTS</c>
+    /// is last in both, with UDMF's own <c>ENDMAP</c> coming after it).
+    /// Reuses <see cref="FindGroupEnd"/>, the same group-boundary primitive
+    /// <see cref="FindMapLumpGroups"/>/<see cref="BuildTree"/> already go
+    /// through, rather than re-scanning independently. Returns the spliced
+    /// lump list (ready for <see cref="WadWriter.Write"/>) and the new
+    /// lump's own real index, so the caller doesn't need to re-derive it to
+    /// open what it just created.
+    /// </summary>
+    public static (IReadOnlyList<WadLump> Lumps, int InsertedIndex) WithAddedScriptsLump(
+        IReadOnlyList<WadLump> lumps, int markerIndex, byte[] data)
+    {
+        var isUdmf = markerIndex + 1 < lumps.Count
+            && lumps[markerIndex + 1].Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase);
+        var bodyStart = markerIndex + 1;
+        var bodyEnd = isUdmf
+            ? FindGroupEnd(lumps, bodyStart, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP")
+            : FindGroupEnd(lumps, bodyStart, WadMapLumpNames.Classic);
+
+        var insertAt = isUdmf ? bodyEnd - 1 : bodyEnd;
+        var result = new List<WadLump>(lumps);
+        result.Insert(insertAt, new WadLump("SCRIPTS", data));
+        return (result, insertAt);
+    }
 }

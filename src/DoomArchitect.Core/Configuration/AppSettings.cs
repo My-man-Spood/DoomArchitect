@@ -84,4 +84,10 @@ public sealed class AppSettings
 
     public AppSettings WithImmersive3DView(bool value) =>
         new(_root.WithAssignment("immersive3dview", CfgValue.OfBool(value)));
+
+    /// <summary>Whether switching tabs should select/scroll the resource browser to whichever item the new tab corresponds to - on by default (the VSCode "Explorer: Auto Reveal" convention), with an off switch since it can fight a deliberately-collapsed folder by popping it open again to reveal what's active in it.</summary>
+    public bool GetAutoRevealActiveTab() => _root.Find("autorevealactivetab")?.AsBool() ?? true;
+
+    public AppSettings WithAutoRevealActiveTab(bool value) =>
+        new(_root.WithAssignment("autorevealactivetab", CfgValue.OfBool(value)));
 }
