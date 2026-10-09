@@ -1225,3 +1225,404 @@ reached, the guard macro is already defined and the body is skipped.
   LSP process: two sibling files each safely `#include`ing a guarded
   shared file (clean), and a true `#include` cycle correctly reporting
   the real diagnostic.
+
+## Real `[private|internal] [strict] namespace [name] { ... }` support (new)
+
+Found the hard way, via the ACS compilation feature
+(`scripting-acs-compilation.md`): once `#include "zcommon.acs"`
+actually started resolving against the bundled `zt-bcc` stdlib, the
+real `zcommon.bcs` (1886 lines, `strict namespace { ... }` wrapping
+almost everything in it) produced over a thousand diagnostics and, in
+one specific shape, an actual infinite loop (see
+`scripting-acs-compilation.md`'s own "two more real bugs" write-up for
+that part - a `Parse()`-level forward-progress guard, independently
+necessary regardless of this). The diagnostic flood's own real cause
+was simpler than it looked: this parser never modeled a namespace
+block as a block at all, so everything inside one got mis-parsed as
+if back at file scope.
+
+Confirmed the real grammar directly from `zt-bcc`'s own
+`src/parse/library.c`/`dec.c` rather than guessing:
+
+```
+namespace_decl   ::= [ 'private' | 'internal' ] [ 'strict' ] 'namespace' [ name_path ] '{' namespace_member* '}'
+name_path        ::= IDENTIFIER ( ( '.' | '::' ) IDENTIFIER )*
+namespace_member ::= namespace_decl | declaration | 'using' ... | SCRIPT | SPECIAL | ';'
+```
+
+- `strict namespace { ... }` with **no name** is real, valid grammar
+  (`read_namespace_name`'s own comment: an unqualified, unnamed
+  namespace is only forced to have a name when it *isn't*
+  `strict`/hidden) - exactly `zcommon.bcs`'s own shape.
+- `private`/`internal` are **not** namespace-exclusive - confirmed
+  from `dec.c`'s own `read_dec`, both can equally qualify a plain
+  declaration (`private int x;`) - a separate, adjacent gap (hit
+  "unexpected token" before this) closed in the same pass since the
+  real disambiguation needed to tell the two apart already requires
+  looking past the qualifier anyway.
+- That disambiguation (`is_namespace` in `library.c`) needs up to a
+  2-token lookahead: bare `strict` is always a namespace (confirmed -
+  there's no other real bare use for it); bare `namespace` only if an
+  identifier or `{` follows; `private`/`internal` only if followed by
+  `strict`, or by `namespace` *and* (one more token ahead) an
+  identifier or `{` - otherwise it's a plain qualified declaration.
+
+Added a small, self-contained lookahead buffer to `BcsParser` itself
+(`_lookahead`/`PeekAhead`, draining before `Advance` pulls fresh from
+`_preprocessor`) - no changes needed to `BcsPreprocessor` (its own
+`_pushback` stays private to it). `IsNamespaceStart()` mirrors
+`is_namespace` exactly; `ParseNamespace()` consumes the qualifiers,
+keyword, optional dotted/`::` name, and body, calling
+`ParseTopLevelMember()` for each member (handling a nested namespace
+for free via the same recursive call - the real grammar allows
+arbitrary nesting) until its own matching `}` - which is also what
+actually fixes the hang's real root cause, not just its symptom: that
+`}` is now consumed by its own real enclosing construct instead of
+reaching `Parse()`'s top-level loop as a stray token with nowhere to
+go.
+
+New `BcsNamespaceDeclaration` AST node - a real nested node (the
+user's own call on this one design choice, over transparently
+flattening a namespace's members into its parent the way `#include`
+splicing already does, for fidelity to the real structure). Every
+symbol-walking method (`FileScopeSymbols`/`CollectSymbols`/
+`CollectSymbolsVisibleAt`/`FindDeclaration`) now walks a shared
+`AllMembers` helper instead of `Members` directly - one that flattens
+through any nested namespace - rather than each learning to recurse
+independently; a namespace's own function/script/enum/variable
+members already have the exact node types these methods already
+handle, they just weren't being reached before. Namespace-qualified
+access (`NAME.member`) is still not modeled - every nested symbol
+surfaces exactly as if it were a plain file-scope one, the same
+simplification this AST already applies everywhere.
+
+Not modeled, noted rather than silently dropped: `using` inside a
+namespace (`BcsTokenType.Using` exists, nothing consumes it anywhere
+yet - a smaller, separate, pre-existing gap); `#`-directives
+technically aren't valid namespace members in the real grammar
+(`read_namespace_member` has no `TK_HASH` branch, unlike the
+file-level `read_module_item`) but are tolerated here anyway, since
+rejecting a structurally-fine include/library pragma that happens to
+sit inside a namespace would make this advisory-only parser more
+wrong, not less.
+
+Verified against the exact real-world case this was found with -
+`ProjectReaper`'s own real `maps/MAP01.wad` `SCRIPTS` lump (resources:
+`DOOM2.WAD`, `gzdoom.pk3`, the mod's own folder, `OTEX_1.1.pk3`):
+**1107 diagnostics down to 1**, and that one remaining diagnostic
+(`acs/souls.acs` genuinely not found) turned out to be a separate,
+unrelated bug in `ResourceSet.FindIncludeText` itself - a bare-title-only
+lookup that never tried a real subfolder path at all - fixed in
+`scripting-acs-compilation.md`'s own latest update; the real `MAP01.wad`
+`SCRIPTS` lump now parses with **zero** main-file diagnostics.
+`zcommon.bcs` *on its own* still produces real diagnostics well past
+its namespace body (~80, around its own lines 1848-1881 - a
+`special`-declaration-list shape this parser's existing `ParseSpecial`
+doesn't fully handle, confirmed by inspection, not yet investigated
+further) - a separate, smaller, contained gap that no longer leaks
+into whatever script actually `#include`s it, which is the part that
+was actually making the user's own, unrelated errors look
+"unreliable."
+
+## Autocomplete/hover for real ACS builtin functions (new)
+
+Reported right after the above: `Print`, `Delay`, `SpawnSpot`,
+`Thing_Activate`-style calls - already used in the user's own real
+scripts - got no completion or hover at all, even with every parsing
+fix above in place. Root cause confirmed, not guessed: these are true
+compiler intrinsics, hardcoded directly into `zt-bcc`'s own
+`src/builtin.c` (`g_funcs[]`, a `{name, format}` table) and wired to
+real opcodes at compiler startup (`t_create_builtins`) - never
+declared in any source file at all, not `zcommon.bcs`, not anywhere.
+`t_create_builtins` iterates exactly that array, and a
+`STATIC_ASSERT` in that same real source ties its length to the sum
+of its three backing-implementation tables (131 + 6 + 2 = 139,
+confirmed by direct count) - this really is the complete, authoritative
+list of everything `zt-bcc` treats as a builtin, not a partial one.
+(Line-special wrappers like `Door_Open`/`Floor_RaiseByValue` are a
+*different* mechanism - real, source-declared `special` statements,
+not compiler intrinsics - and still blocked on the separate,
+already-documented `special`-declaration-list parsing gap above, not
+this.)
+
+New `BcsBuiltinFunctions` (Core) - the 139-entry table copied verbatim
+(name + its own compact format string, byte-diffed against the real
+source to confirm an exact transcription), decoded by the exact same
+algorithm as `builtin.c`'s own `setup_return_type`/`setup_param_list`
+(confirmed by hand against three real entries before writing any code -
+see the class's own remarks for the worked examples). Three entries
+(`print`/`printbold`/`log`) have an empty format string in the real
+table - a real variadic, keyword-tagged argument list
+(`Print(s:expr, i:expr, ...)`) the simple scheme can't express - these
+get a small, clearly-labeled manual override instead of a naive
+"void, zero params" decode of an empty string.
+
+Deliberately **not** wired into `BcsCompilationUnit`/`FindDeclaration` -
+a builtin has no real source position, and `FindDeclaration`'s result
+already drives three separate navigation paths with no guard against a
+position-less match (`ScriptDocument.OnBcsSymbolLookup`/
+`OnBcsSymbolValidate`, `BcsDefinitionHandler`). Completion
+(`ScriptDocument.OnBcsCodeCompletionRequested`,
+`BcsCompletionHandler`) and hover (`ScriptDocument.GetBcsTooltip`,
+`BcsHoverHandler`) each consult `BcsBuiltinFunctions` directly instead,
+as an addition alongside the real declared-symbol lookup - so
+go-to-definition correctly keeps not-navigating for one, with zero new
+code in any of those three places.
+
+Two small, deliberate deviations from the plan as originally approved,
+both decided during implementation and worth calling out plainly
+rather than silently changing scope:
+- **Completion-item casing**: the approved plan said "title case,
+  matching how these are conventionally written in real ACS/BCS
+  source" (e.g. `SpawnSpot`). Implemented instead as a strictly
+  mechanical transform - capitalize the first letter, and the letter
+  right after each real, already-present underscore (`thing_projectile2`
+  -> `Thing_Projectile2`) - with zero invented internal word
+  boundaries, since this project has no authoritative source to verify
+  a specific internal-capitalization spelling against for every one of
+  139 names, and guessing wrong would be a real, if minor, inaccuracy.
+  The result (`Spawnspot`, not `SpawnSpot`) is less pretty but fully
+  functional either way - BCS itself is case-insensitive.
+- **Optional parameters**: the approved plan said "no special bracket
+  notation, consistent with how a real declared function... already
+  renders here" (which has no "optional" concept to show at all,
+  unlike this data). Implemented with `[int]`-style brackets instead -
+  the format string genuinely, unambiguously distinguishes required
+  from optional (confirmed from the real decode algorithm itself, not
+  guessed), so showing that real information seemed worth one small,
+  explained divergence rather than discarding it for consistency with
+  an unrelated code path.
+
+## Update: the real `special`-declaration-list and `enum : basetype` gaps, found and fixed
+
+Reported right after the above shipped: still "a lot of functions I
+call" with no completion/hover - `Thing_Activate`, `Exit_Normal`,
+`Door_Open`, `advertise`, `pay`, `HUD_LOOP` and more, all real,
+already-present in the user's own scripts. These aren't compiler
+intrinsics at all (confirmed: not in `g_funcs[]`) - `Thing_Activate`/
+`Door_Open`/etc. are real, *source-declared* line specials (zcommon.bcs's
+own huge `special` statement), and `advertise`/`pay`/`HUD_LOOP` are the
+user's own real declarations inside `acs/souls.acs` - already correctly
+resolvable since the earlier `FindIncludeText` fix, but previously
+left undiscoverable by a *different*, genuine parser bug that was
+corrupting everything parsed after it.
+
+Root-caused properly (not patched around) by re-running the exact same
+real-world reproduction from the earlier hang/namespace investigation
+(`zcommon.bcs` via the bundled `zt-bcc` lib, the user's real
+`MAP01.wad` SCRIPTS lump) and tracing the two remaining real
+diagnostic sources down to their own exact lines:
+
+- **`ParseSpecial`'s own loop stopped at the *first* embedded `;`,
+  not the statement's real terminator.** A real special entry's own
+  required/optional parameters are separated by a `;` *inside* that
+  entry's own parens - confirmed real, the exact same convention
+  `g_funcs[]`'s own format strings already use (e.g. `zcommon.bcs`'s
+  own `"Door_Close(int,int;int):int,"`). The loop's exit condition
+  only ever checked `_current.Type == Semicolon`, never the paren
+  depth it was *already* tracking for other reasons - so the very
+  first entry with an inner `;` ended the whole multi-hundred-entry
+  statement after itself, and every real special name after it got
+  re-parsed as a stray top-level declaration instead (exactly the
+  "expected a declarator name" cascade already noted as unresolved).
+  Fixed by adding the one missing `parenDepth == 0` check the loop's
+  own body was already computing but never consulting.
+- **`enum : basetype { ... }` wasn't recognized at all.** Confirmed
+  real grammar from `dec.c`'s own `read_enum_base_type` - an enum can
+  declare its own underlying type after an optional name (`zcommon.bcs`'s
+  own real `"enum : fixed { ATTN_NONE = 0.0, ... }"`, needed since its
+  members are fixed-point values, not plain ints). `ParseEnum` went
+  straight from an optional name to expecting `{`, so the real file's
+  own `:` produced "expected '{', got ':'" and desynced from there.
+  Fixed by consuming an optional `: typeKeyword` clause (not
+  semantically modeled, same as every other untracked qualifier this
+  pass already just-correctly-consumes) before the body.
+
+Re-verified against the exact same real reproduction used throughout
+this whole investigation: `zcommon.bcs` alone went from 1104+
+diagnostics down to 2 (both from the unrelated 6-line `zcommon.acs`
+shim's own `#ifdef __INCLUDED__` guard interaction with frame-popping -
+a narrow, separate, pre-existing preprocessor quirk affecting only
+that never-user-edited stub file, not investigated further here since
+it has zero effect on any real content); the real `MAP01.wad` SCRIPTS
+lump: 0 main-file diagnostics, and `Thing_Activate`/`Exit_Normal`/
+`Door_Open`/`advertise`/`pay`/`HUD_LOOP` all now confirmed visible via
+`CollectSymbolsVisibleAt`. Two new regression tests in
+`BcsParserTests.cs` pin both fixes directly (a special entry with an
+embedded `;`, an anonymous and a named `enum : basetype`).
+
+## Update: `special`-declared functions had no real parameter info on hover/completion
+
+Reported after the fixes above: `Thing_Activate`/`Exit_Normal`/etc.
+were now *visible*, but hovering one showed only a bare `function
+Thing_Activate` - no parameter list, no return type. Root cause:
+`ParseSpecial` only ever extracted each entry's bare name into a
+`BcsSymbol` (matching `decimal ':' identifier` by token-type pattern
+alone) and never set `Signature` at all, so `BcsSymbol.Describe()`
+fell back to its generic no-signature case for every single one of
+the ~500 real special-declared functions in `zcommon.bcs` - not a gap
+specific to these two.
+
+Confirmed the real grammar and decode algorithm directly from `zt-bcc`'s
+own `src/parse/dec.c` (`read_special`/`read_special_param_dec`/
+`read_special_param_list`/`read_special_param`/
+`read_special_return_type`, dec.c:2453-2641):
+
+```
+['-'] decimal ':' identifier '(' params ')' [':' returntype [':' decimal]]
+```
+
+`params` is either a numeric min/max-count shorthand (`(10)`/`(2,5)` -
+an untyped, "raw"-style special with no real per-parameter type to
+show, e.g. the real `zcommon.bcs`'s own sentinel
+`"-100000:__EndOfList__(10);"`) or a real, comma-separated type list:
+required parameters, then optionally a `;` followed by more, now-
+optional ones - the exact same required/optional convention
+`g_funcs[]`'s own format strings already use, confirmed and reused
+from `BcsBuiltinFunctions.Decode`'s own `[type]`-bracket notation for
+consistency. A missing `:returntype` really does default to `raw`,
+not `void` - confirmed from the real source's own `int return_spec =
+SPEC_RAW;` default, set *before* its optional
+`read_special_return_type` call.
+
+Rewrote `ParseSpecial` (`BcsParser.cs`) to parse each comma-separated
+entry structurally via a new `ParseOneSpecialEntry`, building a real
+`$"function {returnType} {name}({params})"` signature - matching the
+same "function " prefix convention `BcsFunctionDeclaration`'s own
+`FileScopeSymbols` entry already uses, so a special and a real
+declared function render identically through `BcsSymbol.Describe()`.
+Deliberately kept the same recovery-first posture the old generic
+scan had: the instant an entry doesn't match the expected shape
+(missing colon, non-type token where a type keyword was expected,
+etc.), it falls back to a bare name via `SkipSpecialEntryRemainder`
+(skip to the next top-level comma/semicolon) rather than risking a
+wrong diagnostic on content this project has already been burned by
+guessing about once this session.
+
+Verified live against the real `zcommon.bcs`: 0 diagnostics (no
+regression), and 491 of 492 real special-declared functions now get a
+real signature - the lone holdout is `__EndOfList__` itself, which
+correctly falls back to a bare name since it uses the untyped numeric
+shorthand form with nothing real to show. Spot-checked
+`Thing_Activate`/`Exit_Normal`/`Door_Open`/`Door_Close`/`Floor_Waggle`
+against their real `zcommon.bcs` entries - each decodes to the exact
+expected signature (e.g. `function int Door_Open(int, int, [int])`).
+Six new regression tests in `BcsParserTests.cs` cover: a typed
+required/optional entry, a void/zero-param entry, the implicit-`raw`
+default, the trailing script-callable flag, a leading `-` (`FUNC_EXT`)
+entry, and the numeric-shorthand bare-name fallback.
+
+### Update: found and fixed a real `EscapeForBbcode` bug the signature work above exposed
+
+The `[int]` optional-parameter bracket notation (`BcsBuiltinFunctions.Decode`,
+and this same file's `ParseOneSpecialEntry`) put real `[`/`]` characters
+into hover text for the first time - which exposed a genuine,
+pre-existing bug in `Scripts/View/Bcs/BcsBbcodeFormatter.cs`'s
+`EscapeForBbcode`: `text.Replace("[", "[lb]").Replace("]", "[rb]")`
+chains two *dependent* replacements - the first call's own output
+(`"[lb]"`) contains a `]` that the second call then also matches and
+re-escapes, corrupting a lone `"["` into `"[lb[rb]"` instead of
+`"[lb]"`. Reported by the user as a garbled `[lb[int]` in a real
+tooltip. Fixed by walking the original text once, character by
+character, so neither substitution's own output is ever rescanned.
+No automated coverage added - this file has zero Godot dependencies
+but lives in the Godot-layer project with no existing test
+infrastructure (same as every other hover/completion call site here);
+verified via a standalone repro script instead (confirmed
+`EscapeForBbcode("[int]")` now round-trips to `"[lb]int[rb]"`, which
+`RichTextLabel` renders back as literal `[int]`).
+
+## Update: original hover descriptions for real ACS functions and action specials
+
+Prompted by the user noticing the newly-visible signatures for
+`Thing_Activate`/`Exit_Normal`-style functions still had no description
+of *what they do* - just the decoded parameter types. Researched from
+the ZDoom Wiki, but deliberately not copied from it: the wiki's content
+license (GNU FDL 1.2, confirmed via its own `siprop=rightsinfo` API) makes
+reproducing its actual text something this codebase can't casually ship.
+Full reasoning and the fetch/distill pipeline are documented in
+`wiki-research/README.md` - summary:
+
+1. Fetched all 511 real ZDoom Wiki pages (action specials + ACS
+   functions, across the wiki's own category structure) as raw wikitext
+   via its MediaWiki API - saved locally, git-ignored, never shipped.
+2. Extracted structured facts (param names, description prose) out of
+   the wiki markup with a small Python script - still wiki-sourced
+   material, still git-ignored.
+3. Had 7 parallel agents each read a batch of that extracted material
+   and write a *fresh*, original one-or-two-sentence summary plus a
+   short per-parameter description for every entry - explicitly
+   instructed to synthesize from the facts, not excerpt or lightly
+   reword the source sentences (with a worked good/bad example in the
+   prompt to anchor this). One agent's notes called out that the wiki's
+   own `Polyobj_RotateLeft`/`Polyobj_RotateRight` pages both say "right"
+   (an apparent copy-paste error on the wiki itself) and correctly
+   described each from its actual name instead of propagating that error.
+4. Merged, fixed a real extraction bug (a few `special` templates mark
+   optional params inline with brackets, e.g. `"crush [,crushmode]"` -
+   the naive comma-split had been leaking `"crush ["` in as a literal
+   param name) and a wiki-title-vs-identifier mismatch (disambiguator
+   suffixes like `"GetCVar (ACS)"` got mangled by an earlier filename-
+   sanitizing step into `GetCVar__ACS_` rather than normalizing to the
+   real identifier `GetCVar`), then generated
+   `src/DoomArchitect.Core/ZDoom/Bcs/BcsFunctionDocsData.cs` (509
+   entries) from the result - a generated partial class consumed by the
+   new, hand-written `BcsFunctionDocs` (`TryGetDoc`/`Format`).
+5. Wired into every hover call site alongside (never instead of) the
+   real signature: `BcsAst.cs`'s `FileScopeSymbols` now falls back to
+   `BcsFunctionDocs.Format` for a `special` entry when that statement
+   has no real leading doc comment of its own (true for ~all of
+   `zcommon.bcs`'s own specials) - a real user-written comment always
+   wins; `ScriptDocument.GetBcsTooltip` and `BcsHoverHandler` both
+   prepend it for a `BcsBuiltinFunctions` intrinsic the same way.
+
+Verified live: all 139 `BcsBuiltinFunctions` entries have a doc; 361 of
+491 real `zcommon.bcs` special-declared functions do (the gap is mostly
+Zandronum-era multiplayer/database/bot externs with no ZDoom Wiki
+coverage at all under the categories searched - a real, honest gap, not
+a bug). Found one more real, interesting quirk in the process: the real
+compiler's own `zcommon.bcs` declares special 158 as `Fs_Excute` (a
+genuine typo, confirmed character-for-character), while the wiki
+documents the correctly-spelled `FS_Execute` - the doc entry is keyed
+under the real, typo'd compiler spelling so hover actually fires for
+real scripts, not the wiki's cleaned-up one. Nine new tests
+(`BcsFunctionDocsTests.cs`, plus two in `BcsParserTests.cs` covering the
+fallback-vs-real-comment precedence) - 1141 total passing.
+
+### Update: parameter names in the signature itself, not just the description below it
+
+The user noticed the new description still left the *signature line*
+types-only (e.g. `function int Thing_Activate(int)`) even though the
+description right below it already said what that `int` was -
+asked for `function int Thing_Activate(int tid)` instead. Neither real
+source format actually carries parameter names at all - not `g_funcs[]`'s
+own format strings, not the real `special`-declaration-list grammar
+(confirmed again directly from `read_special_param`'s own type switch) -
+so the only place names can come from is the same wiki research already
+sitting in `BcsFunctionDocs`.
+
+Added `BcsFunctionDocs.ApplyParameterNames(signature, name)`: splits a
+types-only signature's parenthesized list, and if the researched doc's
+own parameter *count* matches exactly, zips its names in positionally
+(`"[int]"` -> `"[int angle]"`, keeping the name inside the optional
+brackets) - falls back to the original signature completely unchanged
+on any mismatch (no doc, or a count that doesn't line up), rather than
+guessing a name onto the wrong parameter. Required switching
+`BcsFunctionDocs.Doc.Parameters` from a `Dictionary<string,string>` to
+an ordered `(Name, Description)[]` first - zipping positionally against
+a dictionary would have been relying on enumeration order matching
+insertion order, a real .NET implementation detail, not an actual
+contract.
+
+Wired into both signature producers directly (so every consumer -
+hover, and anything else that reads `BcsSymbol.Signature` later - gets
+it automatically, rather than requiring every call site to remember to
+apply it): `BcsBuiltinFunctions.TryDescribe` and
+`BcsParser.ParseOneSpecialEntry`'s own signature-building line. Updated
+eight existing tests whose exact-signature assertions predated this
+(not a regression - the old assertions were correct for the old,
+intentionally-types-only behavior) to the new, richer expected strings,
+verified live rather than hand-typed. Six new tests in
+`BcsFunctionDocsTests.cs` cover `ApplyParameterNames` directly
+(insertion, the optional-bracket shape, no-doc fallback, count-mismatch
+fallback, zero-param fallback) - 1146 total passing.

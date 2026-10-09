@@ -26,6 +26,9 @@ public partial class PreferencesDialog : AcceptDialog
 	private KeybindsEditor _keybindsEditor;
 	private TestEnginesEditor _testEnginesEditor;
 	private CheckBox _autoRevealCheckBox;
+	private LineEdit _scriptCompilerPathEdit;
+	private Button _scriptCompilerBrowseButton;
+	private FileDialog _scriptCompilerFileDialog;
 
 	private AppSettings _workingSettings;
 	private int _selectedIndex;
@@ -44,9 +47,14 @@ public partial class PreferencesDialog : AcceptDialog
 		_keybindsEditor = GetNode<KeybindsEditor>("Tabs/KeybindsEditor");
 		_testEnginesEditor = GetNode<TestEnginesEditor>("Tabs/TestEnginesEditor");
 		_autoRevealCheckBox = GetNode<CheckBox>("Tabs/General/AutoRevealCheckBox");
+		_scriptCompilerPathEdit = GetNode<LineEdit>("Tabs/General/ScriptCompilerRow/ScriptCompilerPathEdit");
+		_scriptCompilerBrowseButton = GetNode<Button>("Tabs/General/ScriptCompilerRow/ScriptCompilerBrowseButton");
+		_scriptCompilerFileDialog = GetNode<FileDialog>("Tabs/General/ScriptCompilerFileDialog");
 
 		foreach (var kind in Kinds) _configList.AddItem(kind.ToString());
 		_configList.ItemSelected += OnConfigSelected;
+		_scriptCompilerBrowseButton.Pressed += () => _scriptCompilerFileDialog.PopupCentered();
+		_scriptCompilerFileDialog.FileSelected += path => _scriptCompilerPathEdit.Text = path;
 
 		Confirmed += OnConfirmed;
 	}
@@ -62,6 +70,7 @@ public partial class PreferencesDialog : AcceptDialog
 		_keybindsEditor.Load(_workingSettings.GetKeyBindingOverrides());
 		_testEnginesEditor.Load(_workingSettings);
 		_autoRevealCheckBox.ButtonPressed = _workingSettings.GetAutoRevealActiveTab();
+		_scriptCompilerPathEdit.Text = _workingSettings.GetScriptCompilerPathOverride();
 		PopupCentered();
 	}
 
@@ -94,6 +103,7 @@ public partial class PreferencesDialog : AcceptDialog
 		_workingSettings = _testEnginesEditor.Apply(_workingSettings);
 
 		_workingSettings = _workingSettings.WithAutoRevealActiveTab(_autoRevealCheckBox.ButtonPressed);
+		_workingSettings = _workingSettings.WithScriptCompilerPathOverride(_scriptCompilerPathEdit.Text);
 
 		AppSettingsFile.Save(_workingSettings);
 

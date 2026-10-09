@@ -30,6 +30,16 @@ internal sealed class BcsCompletionHandler : CompletionHandlerBase
         })
         .ToList();
 
+    /// <summary>True compiler intrinsics (Print, Delay, SpawnSpot, ...) - never declared anywhere, so <c>CollectSymbolsVisibleAt</c> never sees them (see <see cref="BcsBuiltinFunctions"/>'s own remarks). Same shape as <see cref="KeywordItems"/> - a fixed list, computed once.</summary>
+    private static readonly IEnumerable<CompletionItem> BuiltinItems = BcsBuiltinFunctions.AllNames
+        .Select(name => new CompletionItem
+        {
+            Label = name,
+            Kind = CompletionItemKind.Function,
+            InsertText = name,
+        })
+        .ToList();
+
     private readonly BcsDocumentStore _documentStore;
 
     private readonly TextDocumentSelector _selector = new(
@@ -44,7 +54,7 @@ internal sealed class BcsCompletionHandler : CompletionHandlerBase
     public override Task<CompletionList> Handle(CompletionParams request, CancellationToken token)
     {
         var program = _documentStore.GetProgram(request.TextDocument.Uri);
-        if (program == null) return Task.FromResult(new CompletionList(KeywordItems, isIncomplete: false));
+        if (program == null) return Task.FromResult(new CompletionList(KeywordItems.Concat(BuiltinItems), isIncomplete: false));
 
         var line = request.Position.Line + 1; // LSP's 0-based line -> this parser's 1-based lines
         var symbolItems = program.CollectSymbolsVisibleAt(line)
@@ -60,7 +70,7 @@ internal sealed class BcsCompletionHandler : CompletionHandlerBase
                 InsertText = symbol.Name,
             });
 
-        return Task.FromResult(new CompletionList(KeywordItems.Concat(symbolItems), isIncomplete: false));
+        return Task.FromResult(new CompletionList(KeywordItems.Concat(BuiltinItems).Concat(symbolItems), isIncomplete: false));
     }
 
     private static CompletionItemKind ToCompletionItemKind(BcsSymbolKind kind) => kind switch

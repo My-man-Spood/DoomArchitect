@@ -1,3 +1,5 @@
+using System.Text;
+
 namespace DoomArchitect.Core.IO;
 
 /// <summary>
@@ -37,6 +39,31 @@ public sealed class ResourceSet
         {
             var lump = resource.FindLump(name);
             if (lump != null) return lump;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// The real UDB equivalent of <c>DataManager.GetTextResourceData</c>
+    /// for a <c>#include</c>/<c>#import</c> target - tries each
+    /// container's own <see cref="IResourceContainer.FindByPath"/> in
+    /// priority order (an exact relative-path match first - e.g.
+    /// <c>"acs/souls.acs"</c> inside a real on-disk subfolder - falling
+    /// back to that same container's own bare-title match, same as a
+    /// WAD/PK3 root-level entry is already matched elsewhere; a bare
+    /// <see cref="FindLump"/>-only lookup here would have silently
+    /// missed a real file sitting in a subfolder - confirmed live,
+    /// against a real <c>#include "acs/souls.acs"</c>) and decodes the
+    /// winning entry as UTF-8 text. Null if nothing in this set has a
+    /// matching entry either way.
+    /// </summary>
+    public string? FindIncludeText(string path)
+    {
+        foreach (var resource in _byPriorityDescending)
+        {
+            var data = resource.FindByPath(path);
+            if (data != null) return Encoding.UTF8.GetString(data);
         }
 
         return null;

@@ -66,7 +66,24 @@ internal sealed class BcsHoverHandler : HoverHandlerBase
 
         var program = _documentStore.GetProgram(request.TextDocument.Uri);
         var declaration = program?.FindDeclaration(word, request.Position.Line + 1);
-        if (declaration is not { } found) return Task.FromResult<Hover?>(null);
+        if (declaration is not { } found)
+        {
+            // Not a real declared symbol - a true compiler intrinsic like
+            // Print/Delay/SpawnSpot (see BcsBuiltinFunctions's own remarks)
+            // has no declaration to find at all, but is still worth a
+            // signature on hover.
+            var builtin = BcsBuiltinFunctions.TryDescribe(word);
+            if (builtin == null) return Task.FromResult<Hover?>(null);
+
+            var builtinSignature = $"```c\n{builtin}\n```";
+            var builtinDoc = BcsFunctionDocs.Format(word);
+            var builtinBody = builtinDoc == null ? builtinSignature : $"{builtinDoc}\n\n{builtinSignature}";
+
+            return Task.FromResult<Hover?>(new Hover
+            {
+                Contents = new MarkedStringsOrMarkupContent(new MarkupContent { Kind = MarkupKind.Markdown, Value = builtinBody }),
+            });
+        }
 
         // Markdown + a fenced code block (unlike the plain-text diagnostic
         // path above - that's English prose, not code) so a real editor

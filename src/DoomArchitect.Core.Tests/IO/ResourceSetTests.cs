@@ -112,4 +112,58 @@ public class ResourceSetTests
 
         Assert.Null(resources.FindLumpSource("NOPE"));
     }
+
+    [Fact]
+    public void FindIncludeText_RootLevelPk3Entry_DecodesItAsUtf8Text()
+    {
+        var pk3 = Pk3TestBuilder.Build(("zcommon.acs", System.Text.Encoding.UTF8.GetBytes("#define FOO 1")));
+        var resources = new ResourceSet(new IResourceContainer[] { pk3 });
+
+        Assert.Equal("#define FOO 1", resources.FindIncludeText("zcommon.acs"));
+    }
+
+    [Fact]
+    public void FindIncludeText_WadLump_DecodesItAsUtf8Text()
+    {
+        var wad = BuildWad(("ZCOMMON", System.Text.Encoding.UTF8.GetBytes("#define FOO 1")));
+        var resources = new ResourceSet(new IResourceContainer[] { wad });
+
+        Assert.Equal("#define FOO 1", resources.FindIncludeText("zcommon.acs"));
+    }
+
+    [Fact]
+    public void FindIncludeText_PathWithASubfolder_StillMatchesByBareTitle()
+    {
+        var pk3 = Pk3TestBuilder.Build(("zcommon.acs", System.Text.Encoding.UTF8.GetBytes("#define FOO 1")));
+        var resources = new ResourceSet(new IResourceContainer[] { pk3 });
+
+        Assert.Equal("#define FOO 1", resources.FindIncludeText("acs/zcommon.acs"));
+    }
+
+    [Fact]
+    public void FindIncludeText_NotFoundAnywhere_ReturnsNull()
+    {
+        var resources = new ResourceSet(new IResourceContainer[] { BuildWad(), BuildWad() });
+
+        Assert.Null(resources.FindIncludeText("zcommon.acs"));
+    }
+
+    /// <summary>
+    /// Real, reported bug: a real on-disk folder resource (the
+    /// GZDoom/ZDoom convention this whole project already targets)
+    /// commonly organizes its own ACS sources under an `acs/` subfolder -
+    /// `#include "acs/souls.acs"` failed to resolve even though the file
+    /// genuinely existed, because the original implementation only ever
+    /// tried a bare-title match (<see cref="FindLump"/>'s own root-only +
+    /// fixed-texture-namespace search), never the real relative path a
+    /// <see cref="DirectoryResource"/> already indexes recursively.
+    /// </summary>
+    [Fact]
+    public void FindIncludeText_RealFileInASubfolder_ResolvesByItsExactRelativePath()
+    {
+        var folder = DirectoryTestBuilder.Build(("acs/souls.acs", System.Text.Encoding.UTF8.GetBytes("#define SOULS 1")));
+        var resources = new ResourceSet(new IResourceContainer[] { folder });
+
+        Assert.Equal("#define SOULS 1", resources.FindIncludeText("acs/souls.acs"));
+    }
 }

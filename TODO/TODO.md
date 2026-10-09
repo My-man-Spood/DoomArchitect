@@ -206,3 +206,4 @@ so it isn't lost, not because it belongs in the tables below.
 | Item | Note |
 |---|---|
 | [BCS tokenizer + parser + minimal LSP server](bcs-lsp-foundation.md) | |
+| [Compile SCRIPTS into BEHAVIOR on map save](scripting-acs-compilation.md) | Shells out to a bundled `zt-bcc`, matching UDB's own real compile-on-save behavior. |

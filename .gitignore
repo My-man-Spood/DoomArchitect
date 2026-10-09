@@ -15,3 +15,14 @@ bin/
 obj/
 .vs/
 *.user
+
+# Raw/extracted ZDoom Wiki material (GNU FDL 1.2) used as research
+# input for hover doc comments - never ship or commit the wiki's own
+# text itself. See wiki-research/README.md (tracked, along with
+# merged_docs.json and generate_docs_data.py - those hold only this
+# project's own original wording, not wiki content).
+wiki-research/raw/
+wiki-research/manifest/
+wiki-research/extracted.json
+wiki-research/batches/
+wiki-research/batch-out/

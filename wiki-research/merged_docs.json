@@ -1,0 +1,3719 @@
+{
+  "ACS_Execute": {
+    "summary": "Starts a numbered script, either on the current map (map 0) or a different one, where it begins running as soon as that map loads. At most one instance of the script runs at a time; calling it again while the script is suspended resumes it where it left off.",
+    "params": {
+      "script": "The numbered script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_ExecuteAlways": {
+    "summary": "Starts a numbered script like ACS_Execute, but allows several copies to run side by side instead of limiting it to one active instance. Scripts launched this way cannot later be suspended or terminated.",
+    "params": {
+      "script": "The numbered script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_ExecuteWait": {
+    "summary": "Runs a numbered script on the current map and pauses the calling script until it finishes, combining a script start and a wait into one call.",
+    "params": {
+      "script": "The numbered script to run.",
+      "unused": "Reserved slot that should be left at 0.",
+      "arg1": "First value passed into the script.",
+      "arg2": "Second value passed into the script.",
+      "arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_ExecuteWithResult": {
+    "summary": "Runs a numbered script on the current map right away and returns the value the script reports back via SetResultValue.",
+    "params": {
+      "script": "The numbered script to run.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script.",
+      "s_arg4": "Fourth value passed into the script."
+    }
+  },
+  "ACS_LockedExecute": {
+    "summary": "Starts a numbered script only if the activator is carrying the required key, otherwise shows a message saying a key is needed to activate the object.",
+    "params": {
+      "script": "The numbered script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "lock": "Key that must be held for the script to start."
+    }
+  },
+  "ACS_LockedExecuteDoor": {
+    "summary": "Same key-gated script start as ACS_LockedExecute, but shows the door-specific locked message when the required key is missing.",
+    "params": {
+      "script": "The numbered script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "lock": "Key that must be held for the script to start."
+    }
+  },
+  "ACS_NamedExecute": {
+    "summary": "Name-based counterpart to ACS_Execute: starts a script identified by name rather than number, and reports whether it was launched successfully.",
+    "params": {
+      "script": "Name of the script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_NamedExecuteAlways": {
+    "summary": "Name-based counterpart to ACS_ExecuteAlways: starts a named script and allows multiple copies of it to run at the same time.",
+    "params": {
+      "script": "Name of the script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_NamedExecuteWait": {
+    "summary": "Starts a named script on the current map and pauses the calling script until it finishes.",
+    "params": {
+      "script": "Name of the script to run.",
+      "unused": "Reserved slot that should be left at 0.",
+      "arg1": "First value passed into the script.",
+      "arg2": "Second value passed into the script.",
+      "arg3": "Third value passed into the script."
+    }
+  },
+  "ACS_NamedExecuteWithResult": {
+    "summary": "Name-based counterpart to ACS_ExecuteWithResult: runs a named script immediately and returns the value it reports back.",
+    "params": {
+      "script": "Name of the script to run.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "s_arg3": "Third value passed into the script.",
+      "s_arg4": "Fourth value passed into the script."
+    }
+  },
+  "ACS_NamedLockedExecute": {
+    "summary": "Name-based counterpart to ACS_LockedExecute: starts a named script only if the activator holds the required key.",
+    "params": {
+      "script": "Name of the script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "lock": "Key that must be held for the script to start."
+    }
+  },
+  "ACS_NamedLockedExecuteDoor": {
+    "summary": "Name-based counterpart to ACS_LockedExecuteDoor: starts a named script only if the activator holds the required key, showing the door-locked message otherwise.",
+    "params": {
+      "script": "Name of the script to run.",
+      "map": "The map the script lives on; 0 means the current map.",
+      "s_arg1": "First value passed into the script.",
+      "s_arg2": "Second value passed into the script.",
+      "lock": "Key that must be held for the script to start."
+    }
+  },
+  "ACS_NamedSuspend": {
+    "summary": "Name-based counterpart to ACS_Suspend: pauses a named script in place so it can later resume from where it stopped.",
+    "params": {
+      "script": "Name of the script to suspend.",
+      "map": "The map the script lives on."
+    }
+  },
+  "ACS_NamedTerminate": {
+    "summary": "Name-based counterpart to ACS_Terminate: stops a named script outright instead of just pausing it.",
+    "params": {
+      "script": "Name of the script to stop.",
+      "map": "The map the script lives on."
+    }
+  },
+  "ACS_Suspend": {
+    "summary": "Pauses a running numbered script in place; it picks back up from that same point the next time it is started rather than restarting from the top.",
+    "params": {
+      "script": "The numbered script to suspend.",
+      "map": "The map the script lives on."
+    }
+  },
+  "ACS_Terminate": {
+    "summary": "Stops a numbered script completely. Scripts started with ACS_ExecuteAlways cannot be stopped this way.",
+    "params": {
+      "script": "The numbered script to stop.",
+      "map": "The map the script lives on."
+    }
+  },
+  "ActivatorSound": {
+    "summary": "Plays a sound as if it came from whichever actor triggered the script, whether that's a player, monster, or projectile.",
+    "params": {
+      "sound": "Name of the sound to play, as defined in SNDINFO.",
+      "volume": "Loudness of the sound, from 0 (silent) to 127 (full volume)."
+    }
+  },
+  "ActivatorTID": {
+    "summary": "Returns the TID of the actor that triggered the running script.",
+    "params": {}
+  },
+  "AmbientSound": {
+    "summary": "Plays a sound everywhere on the map at the same volume for every player, regardless of how far they are from the source.",
+    "params": {
+      "sound": "Name of the sound to play.",
+      "volume": "Loudness of the sound, from 0 (silent) to 127 (full volume)."
+    }
+  },
+  "Autosave": {
+    "summary": "Triggers an autosave, commonly used to create save points between sections of a level so a player who dies doesn't lose all their progress.",
+    "params": {}
+  },
+  "BlueCount": {
+    "summary": "Returns how many players are currently on the blue team; treated as a legacy function likely to be removed in favor of BlueTeamCount.",
+    "params": {}
+  },
+  "BlueScore": {
+    "summary": "Returns the blue team's current score; treated as a legacy function likely to be removed in favor of BlueTeamScore.",
+    "params": {}
+  },
+  "BlueTeamCount": {
+    "summary": "Returns how many players are currently on the blue team.",
+    "params": {}
+  },
+  "BlueTeamScore": {
+    "summary": "Returns the blue team's current score.",
+    "params": {}
+  },
+  "CanRaiseActor": {
+    "summary": "Checks whether a dead actor (or every actor sharing a TID) is currently in a state where it could be resurrected.",
+    "params": {
+      "tid": "TID of the actor(s) to check; 0 checks the script's own activator."
+    }
+  },
+  "CancelFade": {
+    "summary": "Immediately stops any in-progress screen fade started by FadeTo or FadeRange and clears the palette effect; does nothing if no fade is active.",
+    "params": {}
+  },
+  "Ceil": {
+    "summary": "Rounds a fixed-point number up to the next whole number.",
+    "params": {
+      "value": "The fixed-point number to round up."
+    }
+  },
+  "Ceiling_CrushAndRaise": {
+    "summary": "Repeatedly lowers then raises the tagged ceiling, crushing anything caught beneath it along the way; it rises back up at half the speed it fell.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushAndRaiseA": {
+    "summary": "Like Ceiling_CrushAndRaise, but lets the descending and rising speeds of the crushing ceiling be set independently.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dspeed": "How fast the ceiling descends.",
+      "uspeed": "How fast the ceiling rises back up.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushAndRaiseDist": {
+    "summary": "Repeatedly lowers and raises the tagged ceiling at a single matched speed, stopping short of the floor so shorter actors can survive underneath while taller ones get crushed.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dist": "Closest distance above the floor the ceiling comes down to.",
+      "speed": "How fast the ceiling moves in both directions.",
+      "damage": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushAndRaiseSilentA": {
+    "summary": "Same independently-timed crush-and-raise motion as Ceiling_CrushAndRaiseA, but the ceiling only makes noise when it reaches the top or bottom of its travel.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dspeed": "How fast the ceiling descends.",
+      "uspeed": "How fast the ceiling rises back up.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushAndRaiseSilentDist": {
+    "summary": "Same floor-clearance crush-and-raise motion as Ceiling_CrushAndRaiseDist, but the ceiling only makes noise when it reaches the top or bottom of its travel.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dist": "Closest distance above the floor the ceiling comes down to.",
+      "speed": "How fast the ceiling moves in both directions.",
+      "damage": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushRaiseAndStay": {
+    "summary": "Lowers the tagged ceiling once, crushing anything underneath, then raises it back to its starting height and stops; the rise is half as fast as the fall.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling descends.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushRaiseAndStayA": {
+    "summary": "Like Ceiling_CrushRaiseAndStay, but lets the descending and rising speeds be set independently for the single crush-then-return motion.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dspeed": "How fast the ceiling descends.",
+      "uspeed": "How fast the ceiling rises back up.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushRaiseAndStaySilA": {
+    "summary": "Same one-shot crush-then-return motion as Ceiling_CrushRaiseAndStayA, but the ceiling only makes noise at the top and bottom of its travel.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "dspeed": "How fast the ceiling descends.",
+      "uspeed": "How fast the ceiling rises back up.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_CrushStop": {
+    "summary": "Halts an active crushing ceiling wherever it currently sits; depending on its second argument, a later special can resume the same crushing pattern or start fresh.",
+    "params": {
+      "tag": "Tag of the sector(s) whose crusher should stop.",
+      "remove": "Whether the crusher keeps or discards its current state once stopped."
+    }
+  },
+  "Ceiling_LowerAndCrush": {
+    "summary": "Lowers the tagged ceiling down to just above the floor, crushing anything in its path along the way.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "crush": "How much damage the crusher deals.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_LowerAndCrushDist": {
+    "summary": "Like Ceiling_LowerAndCrush, but lets the stopping height above the floor be set explicitly instead of using a fixed clearance.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "crush": "How much damage the crusher deals.",
+      "dist": "Height above the floor at which the ceiling stops.",
+      "crushmode": "Which crushing behavior the ceiling uses."
+    }
+  },
+  "Ceiling_LowerByTexture": {
+    "summary": "Lowers a tagged sector's ceiling to a height determined by comparing it against a matching floor texture.",
+    "params": {}
+  },
+  "Ceiling_LowerByValue": {
+    "summary": "Lowers the tagged ceiling by a fixed number of units.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Number of units to lower the ceiling by."
+    }
+  },
+  "Ceiling_LowerByValueTimes8": {
+    "summary": "Lowers the tagged ceiling by a number of units that is multiplied by eight.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Value multiplied by 8 to get the distance the ceiling drops."
+    }
+  },
+  "Ceiling_LowerInstant": {
+    "summary": "Drops the tagged ceiling to a new height immediately rather than animating the move; a player caught underneath is pushed clear instead of being crushed.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "arg1": "Not used by this special.",
+      "height": "Value multiplied by 8 to get the distance the ceiling drops."
+    }
+  },
+  "Ceiling_LowerToFloor": {
+    "summary": "Lowers the tagged ceiling until it meets the floor beneath it.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves."
+    }
+  },
+  "Ceiling_LowerToHighestFloor": {
+    "summary": "Lowers the tagged ceiling to match the height of the highest surrounding floor, rising instantly first if it currently sits below that height.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves."
+    }
+  },
+  "Ceiling_LowerToLowest": {
+    "summary": "Lowers the tagged ceiling to match the height of the lowest neighboring ceiling, rising instantly first if it currently sits below that height.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves."
+    }
+  },
+  "Ceiling_LowerToNearest": {
+    "summary": "Lowers a tagged sector's ceiling toward the closest neighboring ceiling height below its current position.",
+    "params": {}
+  },
+  "Ceiling_MoveToValue": {
+    "summary": "Moves the tagged ceiling directly to a specific absolute height, going up or down as needed.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Target height to move the ceiling to.",
+      "neg": "Set to 1 when the target height is negative, otherwise 0."
+    }
+  },
+  "Ceiling_MoveToValueAndCrush": {
+    "summary": "Moves a tagged sector's ceiling to an absolute height, crushing anything caught in its path along the way.",
+    "params": {}
+  },
+  "Ceiling_MoveToValueTimes8": {
+    "summary": "Moves the tagged ceiling to an absolute height, where the target height given is multiplied by eight.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Value multiplied by 8 to get the target height.",
+      "neg": "Set to 1 when the target height is negative, otherwise 0."
+    }
+  },
+  "Ceiling_RaiseByTexture": {
+    "summary": "Raises a tagged sector's ceiling to a height determined by a matching texture.",
+    "params": {}
+  },
+  "Ceiling_RaiseByValue": {
+    "summary": "Raises the tagged ceiling by a fixed number of units.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Number of units to raise the ceiling by."
+    }
+  },
+  "Ceiling_RaiseByValueTimes8": {
+    "summary": "Raises the tagged ceiling by a number of units that is multiplied by eight.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Value multiplied by 8 to get the distance the ceiling rises."
+    }
+  },
+  "Ceiling_RaiseInstant": {
+    "summary": "Raises the tagged ceiling to a new height immediately rather than animating the move.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "arg1": "Not used by this special.",
+      "height": "Value multiplied by 8 to get the distance the ceiling rises."
+    }
+  },
+  "Ceiling_RaiseToHighest": {
+    "summary": "Raises a tagged sector's ceiling up to the nearest surrounding ceiling that sits higher than it, doing nothing if none is higher.",
+    "params": {}
+  },
+  "Ceiling_RaiseToHighestFloor": {
+    "summary": "Raises a tagged sector's ceiling to match the height of the highest surrounding floor.",
+    "params": {}
+  },
+  "Ceiling_RaiseToLowest": {
+    "summary": "Raises a tagged sector's ceiling to match the height of the lowest surrounding ceiling.",
+    "params": {}
+  },
+  "Ceiling_RaiseToNearest": {
+    "summary": "Raises the tagged ceiling up to the closest surrounding ceiling that sits higher than it, doing nothing if none is higher.",
+    "params": {
+      "tag": "Tag of the sector(s) to move; 0 uses the line's back sector.",
+      "speed": "How fast the ceiling moves."
+    }
+  },
+  "Ceiling_Stop": {
+    "summary": "Halts a moving ceiling in the tagged sector(s) wherever it currently is.",
+    "params": {}
+  },
+  "Ceiling_ToFloorInstant": {
+    "summary": "Instantly snaps a tagged sector's ceiling down to the floor level.",
+    "params": {}
+  },
+  "Ceiling_ToHighestInstant": {
+    "summary": "Instantly snaps a tagged sector's ceiling up to the highest surrounding ceiling height.",
+    "params": {}
+  },
+  "Ceiling_Waggle": {
+    "summary": "Makes the tagged ceiling bob smoothly up and down in a sine-wave pattern for a set duration, then settles back to its original height; often combined with Floor_Waggle for a shaking-room effect.",
+    "params": {
+      "tag": "Tag of the sector(s) to animate.",
+      "amp": "How far the ceiling moves from its resting height, in eighths of a unit.",
+      "freq": "How quickly the ceiling oscillates.",
+      "offset": "Starting phase of the wave, letting several waggles run out of sync with each other.",
+      "time": "How long the effect lasts, in seconds; 0 means indefinitely."
+    }
+  },
+  "ChangeActorAngle": {
+    "summary": "Sets the horizontal facing angle of the actor(s) with the given TID, optionally smoothing the turn instead of snapping to it instantly.",
+    "params": {
+      "tid": "TID of the actor to turn; 0 means the script's own activator.",
+      "angle": "New facing angle, expressed as a fixed-point fraction of a full turn.",
+      "interpolate": "Whether to smoothly animate the turn instead of snapping to it immediately."
+    }
+  },
+  "ChangeActorPitch": {
+    "summary": "Sets the up/down look angle of the actor(s) with the given TID, optionally smoothing the change instead of snapping to it instantly.",
+    "params": {
+      "tid": "TID of the actor to adjust; 0 means the script's own activator.",
+      "pitch": "New pitch angle, as a fixed-point value.",
+      "interpolate": "Whether to smoothly animate the change instead of snapping to it immediately."
+    }
+  },
+  "ChangeActorRoll": {
+    "summary": "Sets the roll (sideways tilt) angle of the actor(s) with the given TID; the effect is only visible on models and the player's own view, not on sprites.",
+    "params": {
+      "tid": "TID of the actor to adjust; 0 means the script's own activator.",
+      "angle": "New roll angle, expressed as a fixed-point fraction of a full turn.",
+      "interpolate": "Whether to smoothly animate the change instead of snapping to it immediately."
+    }
+  },
+  "ChangeCamera": {
+    "summary": "Switches a player's viewpoint to look through a camera actor; setting the target to 0 restores the player's normal first-person view.",
+    "params": {
+      "tid": "TID of the camera to view through; 0 restores the normal view.",
+      "who": "Whether to change only the activating player's view or every player's view.",
+      "revert": "Whether moving automatically snaps the view back to the player's own body."
+    }
+  },
+  "ChangeCeiling": {
+    "summary": "Swaps the ceiling texture of every sector with the given tag to a new flat or graphic.",
+    "params": {
+      "tag": "Tag identifying which sectors to retexture.",
+      "flatname": "Name of the flat or graphic to apply."
+    }
+  },
+  "ChangeFloor": {
+    "summary": "Swaps the floor texture of every sector with the given tag to a new flat or graphic.",
+    "params": {
+      "tag": "Tag identifying which sectors to retexture.",
+      "flatname": "Name of the flat or graphic to apply."
+    }
+  },
+  "ChangeLevel": {
+    "summary": "Exits to a different map, placing the player at a chosen start spot, with optional flags and an optional skill-level change for the new map.",
+    "params": {
+      "mapname": "Lump name of the destination map.",
+      "position": "Player start number to spawn at on the new map.",
+      "flags": "Options controlling things like facing, intermission, monsters, and inventory carried into the new map.",
+      "skill": "Skill level to start the new map on; use -1 to keep the current skill."
+    }
+  },
+  "ChangeSkill": {
+    "summary": "Changes the game's skill level, with the change taking effect starting on the next map.",
+    "params": {
+      "skill": "The skill level to switch to."
+    }
+  },
+  "ChangeSky": {
+    "summary": "Replaces the map's sky texture(s); useful together with SetSkyScrollSpeed for scrolling sky effects.",
+    "params": {
+      "sky1": "Name of the primary sky texture to use.",
+      "sky2": "Name of the secondary sky texture, used when double-sky scrolling is enabled."
+    }
+  },
+  "CheckActorCeilingTexture": {
+    "summary": "Checks whether the ceiling of the sector an actor is standing in uses a given texture.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's own activator.",
+      "texture": "Name of the texture or flat to compare against."
+    }
+  },
+  "CheckActorClass": {
+    "summary": "Checks whether an actor is an instance of a given class.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's own activator.",
+      "class": "Name of the class to compare the actor against."
+    }
+  },
+  "CheckActorFloorTexture": {
+    "summary": "Checks whether the floor of the sector an actor is standing in uses a given texture.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's own activator.",
+      "texture": "Name of the texture or flat to compare against."
+    }
+  },
+  "CheckActorInventory": {
+    "summary": "Counts how many of a specific inventory item a given actor is carrying. Unlike CheckInventory, passing 0 for the TID does not mean the script's activator.",
+    "params": {
+      "tid": "TID identifying which actor's inventory to inspect.",
+      "inventory_item": "Class name of the item being counted."
+    }
+  },
+  "CheckActorProperty": {
+    "summary": "Compares one of an actor's properties against a supplied value and reports whether they are equal. Works for numeric, fixed-point, and string-based properties alike.",
+    "params": {
+      "tid": "TID of the actor to inspect; 0 means the script's activator.",
+      "property": "Which actor property to compare.",
+      "value": "Value the actor's property is compared against."
+    }
+  },
+  "CheckActorState": {
+    "summary": "Reports whether the actor identified by TID currently occupies (or has) a given named state.",
+    "params": {
+      "tid": "TID of the actor to examine; 0 refers to the script's activator.",
+      "statename": "Name of the state being checked for.",
+      "exact": "Whether the state name must match exactly rather than as a prefix."
+    }
+  },
+  "CheckFlag": {
+    "summary": "Reports whether a specified actor currently has a given engine flag set.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator.",
+      "flag": "Name of the actor flag being tested."
+    }
+  },
+  "CheckFont": {
+    "summary": "Reports whether a given name refers to a font (or font-like graphic) usable with SetFont.",
+    "params": {
+      "fontname": "Name of the font or graphic to validate."
+    }
+  },
+  "CheckInventory": {
+    "summary": "Counts how many of a given item the script's activator currently carries.",
+    "params": {
+      "inventory_item": "Class name of the inventory item being counted."
+    }
+  },
+  "CheckPlayerCamera": {
+    "summary": "Returns the TID of the camera actor a given player is currently viewing through, or -1 if none applies.",
+    "params": {
+      "player": "Player number whose current viewpoint camera is being looked up."
+    }
+  },
+  "CheckSight": {
+    "summary": "Tests whether any actor matching one TID has a clear line of sight to any actor matching another TID, with optional flags to adjust what blocks the check.",
+    "params": {
+      "source": "TID identifying the actor(s) whose vision is being tested.",
+      "dest": "TID identifying the actor(s) being searched for in that vision.",
+      "flags": "Bit flags that change how obstructions are treated during the check."
+    }
+  },
+  "CheckWeapon": {
+    "summary": "Reports whether the activating player's currently equipped weapon matches a given weapon class.",
+    "params": {
+      "weapon": "Class name of the weapon to compare against the active weapon."
+    }
+  },
+  "ClassifyActor": {
+    "summary": "Returns a bitfield of flags describing the category and state of a given actor, or 0 if no matching actor exists.",
+    "params": {
+      "tid": "TID of the actor to classify; 0 refers to the script's activator."
+    }
+  },
+  "ClearActorInventory": {
+    "summary": "Empties the inventory of a specified actor, leaving undroppable items untouched.",
+    "params": {
+      "tid": "TID of the actor whose inventory should be cleared."
+    }
+  },
+  "ClearForceField": {
+    "summary": "Removes an active force-field effect, including its visible barrier texture, from the lines of a tagged sector.",
+    "params": {
+      "tag": "Tag identifying the sector whose force field should be cleared."
+    }
+  },
+  "ClearInventory": {
+    "summary": "Empties the activating player's inventory of weapons, ammo, armor, and other carried items; if there is no activator, it affects every player in the game.",
+    "params": {}
+  },
+  "ClearLineSpecial": {
+    "summary": "Removes the special assigned to the line that triggered the current script, so it can no longer activate it again.",
+    "params": {}
+  },
+  "ConsoleCommand": {
+    "summary": "Runs a single console command on behalf of the activating player, as though they had typed it themselves.",
+    "params": {}
+  },
+  "Cos": {
+    "summary": "Computes the cosine of an angle, expressed in Doom's fixed-point angle units, and returns a fixed-point result.",
+    "params": {
+      "angle": "Angle, in fixed-point units, to take the cosine of."
+    }
+  },
+  "CreateTranslation": {
+    "summary": "Defines (or resets) a numbered palette-remapping table for the current map, which can then be applied to actors to recolor them.",
+    "params": {
+      "transnumber": "Index identifying which translation slot is being defined.",
+      "a": "Start of the source palette-entry range being remapped.",
+      "b": "End of the source palette-entry range being remapped.",
+      "c": "Start of the destination color range (palette index or RGB) entries map to.",
+      "d": "End of the destination color range (palette index or RGB) entries map to."
+    }
+  },
+  "DamageActor": {
+    "summary": "Applies a specific amount and type of damage to a target actor, optionally crediting another actor as the source for obituary and targeting purposes. Returns the damage actually dealt, or -1 if it was blocked or no target was found.",
+    "params": {
+      "targettid": "TID of the actor to damage; 0 means the script's activator.",
+      "targetptr": "Actor-pointer role used to resolve the actual target relative to targettid.",
+      "inflictortid": "TID of the actor credited as the damage source; 0 means the script's activator.",
+      "inflictorptr": "Actor-pointer role used to resolve the actual damage source.",
+      "damage": "Amount of damage to inflict; negative values are treated as zero.",
+      "damagetype": "Damage type applied, affecting resistances and obituaries."
+    }
+  },
+  "DamageThing": {
+    "summary": "Inflicts damage on the actor that triggered the special; a zero amount guarantees a kill even through invulnerability.",
+    "params": {
+      "amount": "Amount of damage to apply; a negative value heals instead.",
+      "mod": "Damage type/obituary identifier used if the damage proves fatal."
+    }
+  },
+  "Delay": {
+    "summary": "Pauses execution of the current script for a given number of tics before continuing.",
+    "params": {
+      "tics": "Number of tics to wait before the script resumes."
+    }
+  },
+  "Door_Animated": {
+    "summary": "Opens a door sector by instantly moving its ceiling into place while playing an animated texture across its front side, instead of visibly raising the ceiling.",
+    "params": {
+      "tag": "Tag identifying the door sector to animate.",
+      "speed": "Duration of each animation frame, in tics.",
+      "delay": "Number of tics the door stays open before it closes again.",
+      "lock": "Key required to trigger the door, if any."
+    }
+  },
+  "Door_AnimatedClose": {
+    "summary": "Closes a door that uses an animated texture change instead of a visibly moving ceiling.",
+    "params": {}
+  },
+  "Door_Close": {
+    "summary": "Closes a door by lowering its ceiling down to the floor, optionally fading sector lighting between open and closed brightness as it moves.",
+    "params": {
+      "tag": "Tag of the sector to close; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the door closes.",
+      "lighttag": "Tag of a sector to apply the gradual open/close lighting effect to; 0 disables it."
+    }
+  },
+  "Door_CloseWaitOpen": {
+    "summary": "Closes a door and then automatically reopens it after a delay, optionally fading sector lighting as it moves.",
+    "params": {
+      "tag": "Tag of the sector to operate on; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the door moves.",
+      "delay": "How long, in octics, the door stays closed before reopening.",
+      "lighttag": "Tag of a sector to apply the gradual lighting effect to; 0 disables it."
+    }
+  },
+  "Door_LockedRaise": {
+    "summary": "Opens a door for a player holding the required key, raising its ceiling near the surrounding ceiling height and automatically closing it again after a delay.",
+    "params": {
+      "tag": "Tag of the sector to operate on; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the door moves.",
+      "delay": "How long, in tics, the door stays open before closing; 0 keeps it open.",
+      "lock": "Key required to open the door.",
+      "lighttag": "Tag of a sector to apply the gradual lighting effect to; 0 disables it."
+    }
+  },
+  "Door_Open": {
+    "summary": "Opens a door by raising its ceiling near the surrounding ceiling height and leaves it open.",
+    "params": {
+      "tag": "Tag of the sector to open; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the door opens.",
+      "lighttag": "Tag of a sector to apply the gradual lighting effect to; 0 disables it."
+    }
+  },
+  "Door_Raise": {
+    "summary": "Opens a door and automatically closes it again after a delay, optionally fading sector lighting as it moves.",
+    "params": {
+      "tag": "Tag of the sector to operate on; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the door moves.",
+      "delay": "How long, in tics, the door stays open before closing.",
+      "lighttag": "Tag of a sector to apply the gradual lighting effect to; 0 disables it."
+    }
+  },
+  "Door_WaitClose": {
+    "summary": "Closes a tagged door sector after a wait period, following the same timing pattern as the other Door specials.",
+    "params": {}
+  },
+  "Door_WaitRaise": {
+    "summary": "Opens a tagged door sector after a wait period, following the same timing pattern as the other Door specials.",
+    "params": {}
+  },
+  "DropInventory": {
+    "summary": "Removes one of a specified item from an actor's inventory and drops it on the ground.",
+    "params": {
+      "tid": "TID of the actor to drop the item from; 0 means the script's activator.",
+      "itemtodrop": "Class name of the inventory item to drop."
+    }
+  },
+  "DropItem": {
+    "summary": "Causes actors matching a TID to drop a specified item, similar to an actor's built-in drop-item property. Returns how many actors attempted the drop.",
+    "params": {
+      "tid": "TID of the actor(s) that will drop the item; 0 means the script's activator.",
+      "item": "Actor class to spawn and drop.",
+      "dropamount": "Inventory amount the dropped item should carry; -1 uses the item's default.",
+      "chance": "Probability of the drop occurring, out of 255."
+    }
+  },
+  "Elevator_LowerToNearest": {
+    "summary": "Moves a tagged sector's floor and ceiling down together, like an elevator, until the floor matches the next lower surrounding floor.",
+    "params": {
+      "tag": "Tag of the sector to move.",
+      "speed": "How fast the elevator moves."
+    }
+  },
+  "Elevator_MoveToFloor": {
+    "summary": "Moves a tagged sector's floor and ceiling as a unit until the floor matches the height of the sector facing the triggering line.",
+    "params": {
+      "tag": "Tag of the sector to move.",
+      "speed": "How fast the elevator moves."
+    }
+  },
+  "Elevator_RaiseToNearest": {
+    "summary": "Moves a tagged sector's floor and ceiling up together until the floor matches the next higher surrounding floor.",
+    "params": {
+      "tag": "Tag of the sector to move.",
+      "speed": "How fast the elevator moves."
+    }
+  },
+  "Exit_Normal": {
+    "summary": "Ends the current map and transitions to the next map defined in MAPINFO, placing the player at the start spot matching a given position number.",
+    "params": {
+      "pos": "Identifier matched against the destination start spot's position argument."
+    }
+  },
+  "Exit_Secret": {
+    "summary": "Ends the current map and transitions to the secret map defined in MAPINFO, placing the player at the start spot matching a given position number.",
+    "params": {
+      "pos": "Identifier matched against the destination start spot's position argument."
+    }
+  },
+  "ExtraFloor_LightOnly": {
+    "summary": "Creates a lighting-only fake floor: it transfers a control sector's light level onto the walls of a tagged sector between the two sectors' heights, without transferring geometry.",
+    "params": {
+      "tag": "Tag of the sector that receives the transferred lighting band.",
+      "type": "Which of the light-extension modes to use for how far the lighting band reaches."
+    }
+  },
+  "FadeRange": {
+    "summary": "Fades the activating player's screen tint from one color and intensity to another over a specified duration; with no activator, it affects every player.",
+    "params": {
+      "red1": "Red component of the starting screen tint (0-255).",
+      "green1": "Green component of the starting screen tint (0-255).",
+      "blue1": "Blue component of the starting screen tint (0-255).",
+      "amount1": "Opacity of the starting screen tint (0.0-1.0).",
+      "red2": "Red component of the ending screen tint (0-255).",
+      "green2": "Green component of the ending screen tint (0-255).",
+      "blue2": "Blue component of the ending screen tint (0-255).",
+      "amount2": "Opacity of the ending screen tint (0.0-1.0).",
+      "seconds": "Duration of the fade, in seconds."
+    }
+  },
+  "FadeTo": {
+    "summary": "Fades the activating player's current screen tint to a new color and intensity over a given duration, even when viewing through another camera; with no activator, it affects every player.",
+    "params": {
+      "red": "Red component of the target screen tint (0-255).",
+      "green": "Green component of the target screen tint (0-255).",
+      "blue": "Blue component of the target screen tint (0-255).",
+      "amount": "Opacity of the target screen tint (0.0-1.0).",
+      "seconds": "Duration of the fade, in seconds."
+    }
+  },
+  "FixedDiv": {
+    "summary": "Divides one fixed-point number by another and returns the fixed-point quotient.",
+    "params": {
+      "a": "Fixed-point dividend.",
+      "b": "Fixed-point divisor."
+    }
+  },
+  "FixedMul": {
+    "summary": "Multiplies two fixed-point numbers together and returns the fixed-point product.",
+    "params": {
+      "a": "First fixed-point factor to multiply.",
+      "b": "Second fixed-point factor to multiply."
+    }
+  },
+  "Floor_CrushStop": {
+    "summary": "Stops an active crushing-floor effect on a tagged sector, halting its movement in place.",
+    "params": {
+      "tag": "Tag of the sector whose crushing floor should stop."
+    }
+  },
+  "Floor_Donut": {
+    "summary": "Performs the classic donut effect: lowers a central pillar sector while raising the surrounding ring sector to match the pillar's new floor model.",
+    "params": {
+      "ptag": "Tag of the central pillar sector.",
+      "pspeed": "Speed at which the pillar sector's floor lowers.",
+      "sspeed": "Speed at which the surrounding ring sector's floor rises."
+    }
+  },
+  "Floor_LowerByTexture": {
+    "summary": "Lowers a tagged sector's floor by an amount derived from its shortest lower wall texture.",
+    "params": {}
+  },
+  "Floor_LowerByValue": {
+    "summary": "Lowers a tagged sector's floor by a fixed number of units.",
+    "params": {
+      "tag": "Tag of the sector(s) to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Distance to lower the floor by."
+    }
+  },
+  "Floor_LowerByValueTimes8": {
+    "summary": "Lowers a tagged sector's floor by a given number of units multiplied by eight.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Value multiplied by eight to get the lowering distance."
+    }
+  },
+  "Floor_LowerInstant": {
+    "summary": "Instantly drops a tagged sector's floor by a given number of units multiplied by eight, with no gradual movement.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "arg1": "Unused argument reserved for this special.",
+      "height": "Value multiplied by eight to get the drop distance."
+    }
+  },
+  "Floor_LowerToHighest": {
+    "summary": "Lowers a tagged sector's floor to just below the highest surrounding floor, with an offset that fine-tunes exactly how far below.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "adjust": "Offset from the target height, relative to a baseline of 128.",
+      "force_adjust": "Whether to apply the offset even when the floor is already at the matching height."
+    }
+  },
+  "Floor_LowerToHighestEE": {
+    "summary": "An extended variant of lowering a sector's floor to the highest surrounding floor, paired with a texture and special change.",
+    "params": {}
+  },
+  "Floor_LowerToLowest": {
+    "summary": "Lowers a tagged sector's floor down to the height of the lowest surrounding floor.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_LowerToLowestCeiling": {
+    "summary": "Lowers a tagged sector's floor down to the height of the lowest surrounding ceiling.",
+    "params": {}
+  },
+  "Floor_LowerToLowestTxTy": {
+    "summary": "Lowers a tagged sector's floor to the lowest surrounding floor and copies that neighboring sector's floor texture and special onto it.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_LowerToNearest": {
+    "summary": "Lowers a tagged sector's floor to the nearest surrounding floor height that is still below its current level.",
+    "params": {
+      "tag": "Tag of the sector to lower; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_MoveToValue": {
+    "summary": "Moves a tagged sector's floor to an exact target height, positive or negative.",
+    "params": {
+      "tag": "Tag of the sector to move; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Target height to move the floor to.",
+      "neg": "Set to indicate the target height is negative."
+    }
+  },
+  "Floor_MoveToValueAndCrush": {
+    "summary": "Moves a tagged sector's floor to a target height, crushing anything caught beneath it along the way.",
+    "params": {}
+  },
+  "Floor_MoveToValueTimes8": {
+    "summary": "Moves a tagged sector's floor to an exact target height given in units of eight, positive or negative.",
+    "params": {
+      "tag": "Tag of the sector to move; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Value multiplied by eight giving the target height.",
+      "neg": "Set to indicate the target height is negative."
+    }
+  },
+  "Floor_RaiseAndCrush": {
+    "summary": "Raises a tagged sector's floor nearly up to its ceiling, crushing anything caught in between.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "crush": "Amount of crushing damage applied to anything caught by the floor.",
+      "crushmode": "Determines how the crusher behaves once it meets an obstruction."
+    }
+  },
+  "Floor_RaiseAndCrushDoom": {
+    "summary": "Raises a tagged sector's floor nearly up to the lowest surrounding ceiling, crushing anything caught in between, matching classic crusher behavior.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "crush": "Amount of crushing damage applied to anything caught by the floor.",
+      "crushmode": "Determines how the crusher behaves once it meets an obstruction."
+    }
+  },
+  "Floor_RaiseByTexture": {
+    "summary": "Raises a tagged sector's floor by an amount derived from the shortest lower wall texture on its surrounding lines.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_RaiseByValue": {
+    "summary": "Raises a tagged sector's floor by a fixed number of units.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Amount to raise the floor by."
+    }
+  },
+  "Floor_RaiseByValueTimes8": {
+    "summary": "Raises a tagged sector's floor by a given number of units multiplied by eight.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Value multiplied by eight to get the raise distance."
+    }
+  },
+  "Floor_RaiseByValueTxTy": {
+    "summary": "Raises a tagged sector's floor by a fixed amount and copies a neighboring sector's floor texture and special onto it.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves.",
+      "height": "Amount to raise the floor by."
+    }
+  },
+  "Floor_RaiseInstant": {
+    "summary": "Instantly raises a tagged sector's floor by a given number of units multiplied by eight, with no gradual movement.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "arg1": "Unused argument reserved for this special.",
+      "height": "Value multiplied by eight to get the raise distance."
+    }
+  },
+  "Floor_RaiseToCeiling": {
+    "summary": "Raises a tagged sector's floor up until it meets its own ceiling, optionally crushing anything in the way.",
+    "params": {}
+  },
+  "Floor_RaiseToHighest": {
+    "summary": "Raises a tagged sector's floor up to the height of the highest surrounding floor.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_RaiseToLowest": {
+    "summary": "Raises a tagged sector's floor up to the height of the lowest surrounding floor.",
+    "params": {}
+  },
+  "Floor_RaiseToLowestCeiling": {
+    "summary": "Raises a tagged sector's floor up to the height of the lowest surrounding ceiling.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_RaiseToNearest": {
+    "summary": "Raises a tagged sector's floor up to the nearest surrounding floor height that is above its current level.",
+    "params": {
+      "tag": "Tag of the sector to raise; 0 uses the sector behind the triggering line.",
+      "speed": "How fast the floor moves."
+    }
+  },
+  "Floor_Stop": {
+    "summary": "Stops a currently moving floor on a tagged sector, halting it at its present height.",
+    "params": {}
+  },
+  "Floor_ToCeilingInstant": {
+    "summary": "Instantly moves a tagged sector's floor up to its ceiling height, with no gradual movement.",
+    "params": {}
+  },
+  "Floor_TransferNumeric": {
+    "summary": "Copies a tagged sector's floor texture and special from a model sector chosen by the lowest-numbered connecting two-sided line, using the numeric transfer method.",
+    "params": {
+      "tag": "Tag of the sector that receives the transferred floor texture and special."
+    }
+  },
+  "Floor_TransferTrigger": {
+    "summary": "Copies the floor texture and sector special from the sector on side 1 of the triggering line onto the tagged sector.",
+    "params": {
+      "tag": "Tag identifying the sector that receives the copied floor texture and special."
+    }
+  },
+  "Floor_Waggle": {
+    "summary": "Makes the tagged sector's floor oscillate smoothly up and down in a sine-wave motion for a set duration, then settles back to its original height.",
+    "params": {
+      "tag": "Tag of the sector(s) whose floor oscillates.",
+      "amp": "How far the floor rises and falls, in eighths of a map unit.",
+      "freq": "How quickly the oscillation cycles.",
+      "offset": "Starting phase offset, letting multiple waggles be staggered (0-63).",
+      "time": "Duration in seconds before the effect stops; 0 runs indefinitely."
+    }
+  },
+  "FloorAndCeiling_LowerByValue": {
+    "summary": "Lowers both the floor and ceiling of the tagged sector together by a fixed distance.",
+    "params": {
+      "tag": "Tag of the sector(s) to move.",
+      "speed": "How fast the floor and ceiling move.",
+      "height": "Distance the floor and ceiling drop."
+    }
+  },
+  "FloorAndCeiling_LowerRaise": {
+    "summary": "Opens up the tagged sector by dropping its floor to match the lowest neighboring floor while raising its ceiling to match the highest neighboring ceiling.",
+    "params": {
+      "tag": "Tag of the sector to resize.",
+      "fspeed": "Speed at which the floor descends.",
+      "cspeed": "Speed at which the ceiling ascends.",
+      "boomemu": "Enables an older engine quirk where only the floor or ceiling moves at a time instead of both together."
+    }
+  },
+  "FloorAndCeiling_RaiseByValue": {
+    "summary": "Raises both the floor and ceiling of the tagged sector together by a fixed distance.",
+    "params": {
+      "tag": "Tag of the sector(s) to move.",
+      "speed": "How fast the floor and ceiling move.",
+      "height": "Distance the floor and ceiling rise."
+    }
+  },
+  "ForceField": {
+    "summary": "Turns the line into an energy barrier that damages and shoves back any player crossing it; it does not physically block movement unless blocking flags are also set on the line.",
+    "params": {}
+  },
+  "GameSkill": {
+    "summary": "Reports which difficulty level the current game is running at, as a numeric index that increases with difficulty.",
+    "params": {}
+  },
+  "GameType": {
+    "summary": "Reports which multiplayer mode the current session is running, such as single-player, cooperative, or deathmatch.",
+    "params": {}
+  },
+  "Generic_Ceiling": {
+    "summary": "A configurable ceiling mover that raises or lowers the tagged sector's ceiling to a destination computed from a chosen rule, optionally copying the texture and special of a nearby sector.",
+    "params": {
+      "tag": "Tag of the affected sector, or 0 to use the sector behind the triggering line.",
+      "speed": "How fast the ceiling moves.",
+      "height": "Distance to move when the destination is a fixed amount rather than computed from a rule.",
+      "target": "Rule used to determine the ceiling's destination height.",
+      "flag": "Bit flags controlling extra behavior such as crushing or copying a nearby sector's texture and special."
+    }
+  },
+  "Generic_Crusher": {
+    "summary": "A configurable crushing ceiling that repeatedly lowers toward the floor and rises back up, damaging anything caught in between, with an option to run silently.",
+    "params": {
+      "tag": "Tag of the affected sector.",
+      "dspeed": "Speed at which the ceiling descends.",
+      "uspeed": "Speed at which the ceiling ascends.",
+      "silent": "Set to suppress the crusher's movement sound.",
+      "crush": "Amount of damage dealt to anything caught by the crusher."
+    }
+  },
+  "Generic_Crusher2": {
+    "summary": "Behaves the same as the standard configurable crusher but is selected under the alternate special-numbering scheme used for Hexen-format maps.",
+    "params": {
+      "tag": "Tag of the affected sector.",
+      "dspeed": "Speed at which the ceiling descends.",
+      "uspeed": "Speed at which the ceiling ascends.",
+      "silent": "Set to suppress the crusher's movement sound.",
+      "crush": "Amount of damage dealt to anything caught by the crusher."
+    }
+  },
+  "Generic_Door": {
+    "summary": "A flexible door special covering several opening and closing behaviors, an automatic reopen/reclose delay, and an optional required key; an alternate mode drives a gradual lighting effect instead of moving a door.",
+    "params": {
+      "tag": "Tag of the affected sector, or 0 to use the sector behind the line.",
+      "speed": "How fast the door moves.",
+      "kind": "Which opening and closing behavior the door follows.",
+      "delay": "How long the door waits before automatically reversing direction.",
+      "lock": "Key required to activate the door, if any."
+    }
+  },
+  "Generic_Floor": {
+    "summary": "A configurable floor mover that raises or lowers the tagged sector's floor to a destination computed from a chosen rule, optionally copying the texture and special of a nearby sector.",
+    "params": {
+      "tag": "Tag of the affected sector(s), or 0 to use the sector behind the line.",
+      "speed": "How fast the floor moves.",
+      "height": "Distance to move when the destination is a fixed amount rather than computed from a rule.",
+      "target": "Rule used to determine the floor's destination height.",
+      "flags": "Bit flags controlling extra behavior such as crushing or copying a nearby sector's texture and special."
+    }
+  },
+  "Generic_Lift": {
+    "summary": "A configurable platform special that raises, lowers, or cycles the tagged sector's floor between positions, with a choice of lift behaviors.",
+    "params": {
+      "tag": "Tag of the affected sector, or 0 to use the sector behind the line.",
+      "speed": "How fast the lift travels.",
+      "delay": "How long the lift pauses before reversing direction.",
+      "type": "Which lift behavior to use.",
+      "height": "Distance the lift travels, used only for fixed-distance behaviors."
+    }
+  },
+  "Generic_Stairs": {
+    "summary": "Builds a connected staircase of sectors step by step, moving upward or downward, with an optional delay after which the stairs return to their starting heights.",
+    "params": {
+      "tag": "Tag of the first sector in the staircase.",
+      "speed": "How fast each step moves.",
+      "height": "Height added or removed by each step.",
+      "flags": "Controls whether the stairs build up or down and whether mismatched floor textures stop the chain.",
+      "reset": "Delay in tics before the stairs return to their original heights; 0 means never."
+    }
+  },
+  "GetActorAngle": {
+    "summary": "Returns the direction the specified actor is currently facing.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorCeilingZ": {
+    "summary": "Returns the height of the lowest ceiling surface directly above the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorClass": {
+    "summary": "Returns the actor class name of the specified actor as text.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorFloorTerrain": {
+    "summary": "Returns the terrain name assigned to the floor beneath the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorFloorTexture": {
+    "summary": "Returns the texture name of the floor beneath the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorFloorZ": {
+    "summary": "Returns the height of the highest floor surface directly beneath the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorLightLevel": {
+    "summary": "Returns the light level of the sector the specified actor currently occupies, ignoring any dynamic point-based lighting.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorPitch": {
+    "summary": "Returns how far up or down the specified actor is looking, as an angle, with negative values meaning looking upward.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorPowerupTics": {
+    "summary": "Returns how many tics remain before a specific active powerup on the given actor expires.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator.",
+      "powerup": "Class name of the powerup whose remaining duration to check."
+    }
+  },
+  "GetActorProperty": {
+    "summary": "Reads the current value of a chosen built-in property, such as health or speed, from the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator.",
+      "property": "Which actor property to read."
+    }
+  },
+  "GetActorRoll": {
+    "summary": "Returns the roll (sideways tilt) angle of the specified actor.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorVelX": {
+    "summary": "Returns the actor's current speed along the east-west axis, with positive values meaning eastward motion.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorVelY": {
+    "summary": "Returns the actor's current speed along the north-south axis, with positive values meaning northward motion.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorVelZ": {
+    "summary": "Returns the actor's current vertical speed, with positive values meaning upward motion.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorViewHeight": {
+    "summary": "Returns the height of the actor's eye level above its feet.",
+    "params": {
+      "tid": "TID of the actor to check."
+    }
+  },
+  "GetActorX": {
+    "summary": "Returns the actor's current X coordinate in the map.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorY": {
+    "summary": "Returns the actor's current Y coordinate in the map.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetActorZ": {
+    "summary": "Returns the actor's absolute height above the map origin, not relative to the floor beneath it.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator."
+    }
+  },
+  "GetAirSupply": {
+    "summary": "Returns how many tics of breathable air the specified player has left before they begin drowning.",
+    "params": {
+      "playernum": "Player number to check."
+    }
+  },
+  "GetAmmoCapacity": {
+    "summary": "Returns the maximum amount of a given ammo type the player can carry, accounting for a backpack-style upgrade if one has been picked up.",
+    "params": {
+      "classname": "Class name of the ammo type to check."
+    }
+  },
+  "GetArmorInfo": {
+    "summary": "Reads a chosen detail - such as class name, save amount, or absorption rate - from the armor currently equipped by the player.",
+    "params": {
+      "infotype": "Which armor information field to retrieve."
+    }
+  },
+  "GetArmorType": {
+    "summary": "Checks whether a specific player is wearing a particular basic armor class and, if so, returns how many armor points it provides.",
+    "params": {
+      "armortype": "Class name of the armor type to check for.",
+      "playernum": "Player number to check."
+    }
+  },
+  "GetChar": {
+    "summary": "Returns the single character located at a given position in a string.",
+    "params": {
+      "string": "The string to read from.",
+      "index": "Zero-based position of the character to retrieve."
+    }
+  },
+  "GetInvasionState": {
+    "summary": "Returns the current phase of an invasion-mode game, such as waiting to start, counting down, in progress, or finished.",
+    "params": {}
+  },
+  "GetInvasionWave": {
+    "summary": "Returns the current wave number of an invasion-mode game, or a sentinel value when invasion mode isn't running.",
+    "params": {}
+  },
+  "GetLevelInfo": {
+    "summary": "Reads a chosen statistic about the current map, such as secret or monster counts, par time, or map and cluster numbers.",
+    "params": {
+      "levelinfo": "Which map statistic to retrieve."
+    }
+  },
+  "GetLineActivation": {
+    "summary": "Returns the activation-flag bitfield for the line with the given line ID, describing which kinds of triggers can activate it.",
+    "params": {
+      "lineid": "ID of the line whose activation flags to read."
+    }
+  },
+  "GetLineRowOffset": {
+    "summary": "Returns the vertical texture offset on the front side of the line that triggered the running script.",
+    "params": {}
+  },
+  "GetLineUDMFFixed": {
+    "summary": "Returns the fixed-point value stored under a custom user-defined key on a line.",
+    "params": {
+      "lineid": "Tag of the line to read; 0 uses the triggering line.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetLineUDMFInt": {
+    "summary": "Returns the integer value stored under a custom user-defined key on a line.",
+    "params": {
+      "lineid": "Tag of the line to read; 0 uses the triggering line.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetMaxInventory": {
+    "summary": "Returns the maximum amount of a given inventory item the specified actor could hold, falling back to the item's class-defined maximum if the actor doesn't currently carry it.",
+    "params": {
+      "tid": "TID of the actor to check; 0 means the script's activator.",
+      "inventory": "Class name of the inventory item to check."
+    }
+  },
+  "GetNetID": {
+    "summary": "Looks up the network ID of an actor matching a given TID, for use alongside functions that set a script's activator by network ID.",
+    "params": {
+      "tid": "TID of the actor(s) to search; 0 uses the script's activator.",
+      "index": "Which matching actor to select when several share the same TID.",
+      "pointer": "An actor-pointer role to resolve the network ID through instead of the found actor, when applicable."
+    }
+  },
+  "GetPlayerInfo": {
+    "summary": "Reads a chosen piece of player-specific information, such as team, color, gender, or field of view.",
+    "params": {
+      "playernumber": "Player number to query.",
+      "playerinfo": "Which player information field to retrieve."
+    }
+  },
+  "GetPlayerInput": {
+    "summary": "Reads a player's current or previous control input, such as movement axes or which action binds are held, for building custom input-driven effects.",
+    "params": {
+      "player": "Player number to query; -1 means the script's activator.",
+      "input": "Which input channel to read, and whether to read raw or engine-processed values."
+    }
+  },
+  "GetPolyobjX": {
+    "summary": "Returns the X coordinate of the given polyobject's starting position.",
+    "params": {
+      "po": "Number of the polyobject to check."
+    }
+  },
+  "GetPolyobjY": {
+    "summary": "Returns the Y coordinate of the given polyobject's starting position.",
+    "params": {
+      "po": "Number of the polyobject to check."
+    }
+  },
+  "GetScreenHeight": {
+    "summary": "Returns the player's current screen height in pixels, useful for positioning HUD messages consistently across resolutions.",
+    "params": {}
+  },
+  "GetScreenWidth": {
+    "summary": "Returns the player's current screen width in pixels, useful for positioning HUD messages consistently across resolutions.",
+    "params": {}
+  },
+  "GetSectorCeilingZ": {
+    "summary": "Returns the ceiling height of the tagged sector at a given point, projecting the slope outward if the point lies outside a sloped sector.",
+    "params": {
+      "tag": "Tag of the sector to check; 0 uses whichever sector contains the given point.",
+      "x": "X coordinate at which to sample the ceiling height.",
+      "y": "Y coordinate at which to sample the ceiling height."
+    }
+  },
+  "GetSectorFloorZ": {
+    "summary": "Returns the floor height of the tagged sector at a given point, projecting the slope outward if the point lies outside a sloped sector.",
+    "params": {
+      "tag": "Tag of the sector to check; 0 uses whichever sector contains the given point.",
+      "x": "X coordinate at which to sample the floor height.",
+      "y": "Y coordinate at which to sample the floor height."
+    }
+  },
+  "GetSectorLightLevel": {
+    "summary": "Returns the light level of the tagged sector, on a scale from 0 to 255.",
+    "params": {
+      "tag": "Tag of the sector to check."
+    }
+  },
+  "GetSectorUDMFFixed": {
+    "summary": "Returns the fixed-point value stored under a custom user-defined key on a sector.",
+    "params": {
+      "tag": "Tag of the sector to read.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetSectorUDMFInt": {
+    "summary": "Returns the integer value stored under a custom user-defined key on a sector.",
+    "params": {
+      "tag": "Tag of the sector to read.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetSideUDMFFixed": {
+    "summary": "Returns the fixed-point value stored under a custom user-defined key on one side of a line.",
+    "params": {
+      "lineid": "Tag of the line whose side to read.",
+      "side": "Which side of the line to read - front or back.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetSideUDMFInt": {
+    "summary": "Returns the integer value stored under a custom user-defined key on one side of a line.",
+    "params": {
+      "lineid": "Tag of the line whose side to read.",
+      "side": "Which side of the line to read - front or back.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetSigilPieces": {
+    "summary": "Returns how many pieces of the Sigil item the player currently holds.",
+    "params": {}
+  },
+  "GetThingUDMFFixed": {
+    "summary": "Returns the fixed-point value stored under a custom user-defined key on a thing; not yet functional in the engine.",
+    "params": {
+      "thingid": "TID of the thing to read.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetThingUDMFInt": {
+    "summary": "Returns the integer value stored under a custom user-defined key on a thing; not yet functional in the engine.",
+    "params": {
+      "thingid": "TID of the thing to read.",
+      "key": "Name of the custom user key to read."
+    }
+  },
+  "GetUserArray": {
+    "summary": "Reads one element of a custom or native array variable defined on the specified actor.",
+    "params": {
+      "tid": "TID of the actor to read from; 0 means the script's activator.",
+      "name": "Name of the array variable to read.",
+      "pos": "Zero-based index into the array to read."
+    }
+  },
+  "GetUserCVar": {
+    "summary": "Returns the integer value of a named user-scoped console variable belonging to a specific player.",
+    "params": {
+      "playernumber": "Player number whose variable to read, from 0 to 7.",
+      "cvar": "Name of the user console variable to read."
+    }
+  },
+  "GetUserVariable": {
+    "summary": "Reads the value of a custom or native variable defined on the specified actor.",
+    "params": {
+      "tid": "TID of the actor to read from; 0 means the script's activator.",
+      "name": "Name of the variable to read."
+    }
+  },
+  "GetWeapon": {
+    "summary": "Returns the class name of the weapon currently equipped by the script's activator, when the activator is a player.",
+    "params": {}
+  },
+  "GiveActorInventory": {
+    "summary": "Gives a specified quantity of an inventory item directly to the actor matching a TID; unlike similar functions, TID 0 is not treated as the activator.",
+    "params": {
+      "tid": "TID of the actor to receive the item; 0 gives it to every player instead of the activator.",
+      "inventory_item": "Class name of the inventory item to give.",
+      "amount": "How many of the item to give."
+    }
+  },
+  "GiveInventory": {
+    "summary": "Grants a given amount of an inventory item to the script's activator, or to every active player if the script has no activator.",
+    "params": {
+      "inventory_item": "Class name of the inventory item to give.",
+      "amount": "How many of the item to grant."
+    }
+  },
+  "GlassBreak": {
+    "summary": "Breaks a pane of glass placed on the activated line, producing a shatter effect appropriate to the line's setup.",
+    "params": {
+      "dontspawnjunk": "When set, skips spawning the glass-shard debris that normally scatters from the break.",
+      "type": "Selects which glass-breaking variant and look to use."
+    }
+  },
+  "HealThing": {
+    "summary": "Restores health to the actor that triggered the special, optionally capping how high the result can go.",
+    "params": {
+      "amount": "How many health points to restore.",
+      "max": "Upper limit the actor's health can reach; 0 falls back to the engine's default cap."
+    }
+  },
+  "HudMessage": {
+    "summary": "Draws a positioned on-screen message for the activating player, with options for color, placement, and fade/typing animation.",
+    "params": {
+      "text": "The formatted text or image content to display.",
+      "type": "Which display style to use - plain, fade-out, type-on, or fade-in/out.",
+      "id": "Identifier for this message, used to replace or remove it later.",
+      "color": "Text color, either a predefined constant or a custom color name.",
+      "x": "Horizontal position of the message on screen.",
+      "y": "Vertical position of the message on screen.",
+      "holdTime": "How long, in seconds, the message stays on screen before disappearing or fading.",
+      "alpha": "Opacity of the message, from fully transparent to fully opaque."
+    }
+  },
+  "HudMessageBold": {
+    "summary": "Shows the same kind of on-screen message as HudMessage, but delivers it to every player instead of only the activator.",
+    "params": {
+      "text": "The formatted text or image content to display.",
+      "type": "Which display style to use - plain, fade-out, type-on, or fade-in/out.",
+      "id": "Identifier for this message, used to replace or remove it later.",
+      "color": "Text color, either a predefined constant or a custom color name.",
+      "x": "Horizontal position of the message on screen.",
+      "y": "Vertical position of the message on screen.",
+      "holdTime": "How long, in seconds, the message stays on screen before disappearing or fading.",
+      "alpha": "Opacity of the message, from fully transparent to fully opaque."
+    }
+  },
+  "IsNetworkGame": {
+    "summary": "Reports whether the current session is a networked multiplayer game rather than an offline single-player game.",
+    "params": {}
+  },
+  "IsOneFlagCTF": {
+    "summary": "Reports whether the current game mode is One Flag Capture The Flag.",
+    "params": {}
+  },
+  "IsPointerEqual": {
+    "summary": "Compares two actor pointers and reports whether they both refer to the same actor.",
+    "params": {
+      "ptr_select1": "Which pointer slot to read for the first actor being compared.",
+      "ptr_select2": "Which pointer slot to read for the second actor being compared.",
+      "tid1": "TID of the actor used to resolve the first pointer; 0 means the script's activator.",
+      "tid2": "TID of the actor used to resolve the second pointer; 0 means the script's activator."
+    }
+  },
+  "IsTIDUsed": {
+    "summary": "Reports whether any actor, alive or dead, currently exists with the given TID.",
+    "params": {}
+  },
+  "Light_ChangeToValue": {
+    "summary": "Immediately sets a tagged sector's light level to a specific value.",
+    "params": {
+      "tag": "Sector tag to apply the light change to.",
+      "value": "The light level to set."
+    }
+  },
+  "Light_Fade": {
+    "summary": "Gradually shifts a tagged sector's light level to a new value over a set duration.",
+    "params": {
+      "tag": "Sector tag affected by the fade.",
+      "value": "Target light level to fade toward.",
+      "tics": "Duration of the fade, in tics."
+    }
+  },
+  "Light_Flicker": {
+    "summary": "Randomly alternates a tagged sector's brightness between two levels at short, irregular intervals.",
+    "params": {
+      "tag": "Sector tag affected by the flicker.",
+      "upper": "Brighter light level used during the flicker.",
+      "lower": "Dimmer light level used during the flicker."
+    }
+  },
+  "Light_ForceLightning": {
+    "summary": "Triggers a lightning-flash effect on the map, with the mode selecting which part of the effect runs.",
+    "params": {
+      "mode": "Chooses which lightning-related operation to perform."
+    }
+  },
+  "Light_Glow": {
+    "summary": "Continuously cycles a tagged sector's light level back and forth between two values.",
+    "params": {
+      "tag": "Sector tag affected by the glow.",
+      "upper": "Brightest light level in the cycle.",
+      "lower": "Dimmest light level in the cycle.",
+      "tics": "Time spent transitioning between the two extremes."
+    }
+  },
+  "Light_LowerByValue": {
+    "summary": "Reduces a tagged sector's current light level by a fixed amount.",
+    "params": {
+      "tag": "Sector tag to darken.",
+      "value": "Amount to subtract from the current light level."
+    }
+  },
+  "Light_MaxNeighbor": {
+    "summary": "Matches a tagged sector's light level to the brightest of its neighboring sectors.",
+    "params": {
+      "tag": "Sector tag whose light level is adjusted."
+    }
+  },
+  "Light_MinNeighbor": {
+    "summary": "Matches a tagged sector's light level to the dimmest of its neighboring sectors.",
+    "params": {
+      "tag": "Sector tag whose light level is adjusted."
+    }
+  },
+  "Light_RaiseByValue": {
+    "summary": "Increases a tagged sector's current light level by a fixed amount.",
+    "params": {
+      "tag": "Sector tag to brighten.",
+      "value": "Amount to add to the current light level."
+    }
+  },
+  "Light_Stop": {
+    "summary": "Halts any ongoing lighting effect on a tagged sector, leaving its brightness wherever it had reached.",
+    "params": {
+      "tag": "Sector tag whose lighting effect should stop."
+    }
+  },
+  "Light_Strobe": {
+    "summary": "Switches a tagged sector's light level back and forth between two values on a set timing pattern.",
+    "params": {}
+  },
+  "Light_StrobeDoom": {
+    "summary": "Strobes a tagged sector between its current light level and the dimmest level found among its neighbors.",
+    "params": {}
+  },
+  "Line_AlignCeiling": {
+    "summary": "Realigns a sector's ceiling texture to line up with a reference line, becoming the new basis for any later scrolling or rotation.",
+    "params": {
+      "lineid": "ID of the reference line used for alignment.",
+      "side": "Which side of the line to align - front or back."
+    }
+  },
+  "Line_AlignFloor": {
+    "summary": "Realigns a sector's floor texture to line up with a reference line, becoming the new basis for any later scrolling or rotation.",
+    "params": {
+      "lineid": "ID of the reference line used for alignment.",
+      "side": "Which side of the line to align - front or back."
+    }
+  },
+  "Line_Horizon": {
+    "summary": "Marks a line as an infinite horizon, stretching the view past it endlessly - commonly used for sky or outdoor backdrops.",
+    "params": {}
+  },
+  "Line_Mirror": {
+    "summary": "Turns a line into a mirror that reflects the geometry on its near side back toward the viewer.",
+    "params": {}
+  },
+  "Line_SetAutomapFlags": {
+    "summary": "Sets or clears the automap display flags for every line sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) whose automap flags are changed.",
+      "setflags": "Automap flags to turn on.",
+      "clearflags": "Automap flags to turn off."
+    }
+  },
+  "Line_SetAutomapStyle": {
+    "summary": "Forces lines with a given ID to be drawn on the automap as though they were a different kind of line.",
+    "params": {
+      "lineid": "ID of the line(s) to re-style.",
+      "style": "The line appearance to mimic on the automap."
+    }
+  },
+  "Line_SetBlocking": {
+    "summary": "Changes which kinds of actors or projectiles are blocked by every line sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) to modify.",
+      "setflags": "Blocking flags to turn on.",
+      "clearflags": "Blocking flags to turn off."
+    }
+  },
+  "Line_SetIdentification": {
+    "summary": "Assigns a line ID to a linedef for use by other specials and scripts, and can set extra flags the map format can't otherwise store.",
+    "params": {
+      "lineid": "The line ID to assign to this linedef.",
+      "moreflags": "Extra linedef behavior flags not representable in the older flag field.",
+      "reserved1": "Unused; reserved for future use.",
+      "reserved2": "Unused; reserved for future use.",
+      "lineid_hi": "High byte of the line ID, for IDs above 255."
+    }
+  },
+  "Line_SetPortal": {
+    "summary": "Creates a visual portal linking two lines, so looking at one line shows the view through the other.",
+    "params": {
+      "targetline": "ID of the line this portal leads to.",
+      "thisline": "ID to assign to the line this special sits on, in Hexen-format maps.",
+      "type": "The kind of portal behavior to create.",
+      "planeanchor": "Reference plane used to anchor the portal's alignment."
+    }
+  },
+  "Line_SetPortalTarget": {
+    "summary": "Repoints an existing dynamic line portal to a different destination line.",
+    "params": {
+      "sourceline": "ID of the portal line being redirected.",
+      "targetline": "ID of the line to send the portal to instead."
+    }
+  },
+  "Line_SetTextureOffset": {
+    "summary": "Shifts a line's texture offset at runtime, useful for scrolling or sliding effects on its upper, middle, or lower texture.",
+    "params": {
+      "lineid": "ID of the line(s) whose texture offset is changed.",
+      "x": "Horizontal offset to apply.",
+      "y": "Vertical offset to apply.",
+      "side": "Which side of the line to affect - front or back.",
+      "flags": "Selects which texture part(s) - upper, middle, lower - are affected."
+    }
+  },
+  "Line_SetTextureScale": {
+    "summary": "Adjusts a line's texture scale at runtime, letting its upper, middle, and lower textures be stretched or shrunk independently.",
+    "params": {
+      "lineid": "ID of the line(s) whose texture scale is changed.",
+      "x": "Horizontal scale factor to apply.",
+      "y": "Vertical scale factor to apply.",
+      "side": "Which side of the line to affect - front or back.",
+      "flags": "Selects which texture part(s) - upper, middle, lower - are affected."
+    }
+  },
+  "LineSide": {
+    "summary": "Reports which side of the triggering line - front or back - the script was activated from.",
+    "params": {}
+  },
+  "LocalAmbientSound": {
+    "summary": "Plays a world-volume ambient sound that only the script's activator can hear.",
+    "params": {
+      "sound": "Sound to play.",
+      "volume": "Playback volume, from silent (0) to full (127)."
+    }
+  },
+  "LocalSetMusic": {
+    "summary": "Changes the background music, but only for the player who activated the script, unlike the global music-change special.",
+    "params": {
+      "song": "Name of the track to play, or \"*\" to use the map's default music.",
+      "order": "Starting playback position within a tracker-module song; ignored for other formats.",
+      "unused": "Currently unused; reserved for future use."
+    }
+  },
+  "Log": {
+    "summary": "Prints formatted text to the on-screen log area and the console, using the same formatting rules as printing a message.",
+    "params": {}
+  },
+  "MorphActor": {
+    "summary": "Transforms an actor into a different class - commonly turning a player or monster into another form - for a limited duration.",
+    "params": {
+      "tid": "TID of the actor(s) to morph; 0 uses the script's activator.",
+      "playerclass": "Class to morph a player actor into.",
+      "monsterclass": "Class to morph a non-player actor into.",
+      "duration": "How long the morph effect lasts.",
+      "style": "Options controlling how the morph behaves.",
+      "morphflash": "Actor spawned as a visual effect when the morph begins.",
+      "unmorphflash": "Actor spawned as a visual effect when the morph ends."
+    }
+  },
+  "Music_Change": {
+    "summary": "Switches the game's current music track; superseded by newer music-change specials.",
+    "params": {
+      "music": "Name of the track to switch to.",
+      "pattern": "Pattern or order value used when starting playback."
+    }
+  },
+  "NamedScriptWait": {
+    "summary": "Pauses the running script until a named script finishes executing, waiting for it to start first if it isn't already running.",
+    "params": {
+      "script": "Name of the script to wait for."
+    }
+  },
+  "NoiseAlert": {
+    "summary": "Simulates a noise that draws nearby monsters' attention toward a target, as though they had heard it.",
+    "params": {
+      "target_tid": "TID of the actor monsters should be alerted toward; 0 uses the activator.",
+      "emitter_tid": "TID of the actor the alert sound originates from; 0 uses the activator."
+    }
+  },
+  "PickActor": {
+    "summary": "Traces a ray from a source actor and, if it hits a matching actor, can assign that actor a TID for later reference.",
+    "params": {
+      "source": "TID of the actor the trace originates from; 0 uses the script's activator.",
+      "angle": "Horizontal aim direction for the trace.",
+      "pitch": "Vertical aim direction for the trace.",
+      "distance": "Maximum distance the trace can reach.",
+      "tid": "TID to assign to the actor that gets picked.",
+      "actorMask": "Actor flags a target must have to be eligible for picking.",
+      "wallMask": "Linedef flags that will stop the trace early.",
+      "flags": "Options controlling TID assignment and what the function returns."
+    }
+  },
+  "Pillar_Build": {
+    "summary": "Closes a sector into a solid pillar by raising its floor and lowering its ceiling until they meet.",
+    "params": {
+      "tag": "Sector tag to build into a pillar.",
+      "speed": "Movement speed of the slower-moving plane; the other plane's speed is timed to match.",
+      "height": "Height above the floor where the two planes meet."
+    }
+  },
+  "Pillar_BuildAndCrush": {
+    "summary": "Builds a pillar the same way as a plain pillar build, but also crushes anything caught between the closing floor and ceiling.",
+    "params": {
+      "tag": "Sector tag to build into a pillar.",
+      "speed": "Movement speed of the slower-moving plane; the other plane's speed is timed to match.",
+      "height": "Height above the floor where the two planes meet.",
+      "crush": "Amount of crushing damage applied to anything caught in the pillar.",
+      "crushmode": "Selects which crushing behavior variant to use."
+    }
+  },
+  "Pillar_Open": {
+    "summary": "Opens a closed pillar sector by lowering the floor and raising the ceiling back toward the surrounding heights.",
+    "params": {
+      "tag": "Sector tag to open.",
+      "speed": "Movement speed of the slower-moving plane; the other plane's speed is timed to match.",
+      "fdist": "How far the floor should drop; 0 lowers it to the lowest neighboring floor.",
+      "cdist": "How far the ceiling should rise; 0 raises it to the highest neighboring ceiling."
+    }
+  },
+  "Plane_Align": {
+    "summary": "Slopes a sector's floor and/or ceiling plane so that it follows the height of a reference line.",
+    "params": {
+      "floor": "Which side of the line the floor plane should slope to follow.",
+      "ceiling": "Which side of the line the ceiling plane should slope to follow.",
+      "lineid": "Optional line ID to assign to this line for later reference."
+    }
+  },
+  "Plane_Copy": {
+    "summary": "Copies slope angles from one side of a linedef to the other, as an alternative to placing slope-copy things; only takes effect during map setup.",
+    "params": {}
+  },
+  "Plat_DownByValue": {
+    "summary": "Lowers a platform by a set distance, pauses, then raises it back to where it started.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before rising back up.",
+      "height": "Distance to lower, measured in units of 8."
+    }
+  },
+  "Plat_DownWaitUpStay": {
+    "summary": "Lowers a platform, waits, then raises it back to its starting height, using a standard lip amount.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before rising back up."
+    }
+  },
+  "Plat_DownWaitUpStayLip": {
+    "summary": "Lowers a platform, waits, then raises it back to its starting height, with a configurable lip and move sound.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before rising back up.",
+      "lip": "Amount of floor left visible when the platform is lowered.",
+      "sound": "Which sound effect plays while the platform moves."
+    }
+  },
+  "Plat_PerpetualRaise": {
+    "summary": "Starts a platform endlessly rising and lowering, beginning in a randomized direction so multiple copies don't move in sync.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Pause duration between each rise and fall."
+    }
+  },
+  "Plat_PerpetualRaiseLip": {
+    "summary": "Starts a platform endlessly rising and lowering, with a configurable lip amount.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Pause duration between each rise and fall.",
+      "lip": "Amount of floor left visible when the platform is lowered."
+    }
+  },
+  "Plat_RaiseAndStayTx0": {
+    "summary": "Raises a platform to the next-highest neighboring floor and copies the triggering line's front floor texture onto it.",
+    "params": {
+      "tag": "Sector tag of the platform to raise; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform rises.",
+      "lockout": "Controls whether the platform can be moved again afterward."
+    }
+  },
+  "Plat_Stop": {
+    "summary": "Stops an in-progress perpetually-moving platform.",
+    "params": {
+      "tag": "Sector tag of the platform to stop."
+    }
+  },
+  "Plat_ToggleCeiling": {
+    "summary": "Toggles a platform between its lowered position and touching the ceiling.",
+    "params": {
+      "tag": "Sector tag of the platform to toggle; 0 uses the line's back sector."
+    }
+  },
+  "Plat_UpByValue": {
+    "summary": "Raises a platform by a set distance, pauses, then lowers it back to where it started.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before lowering back down.",
+      "height": "Distance to raise, measured in units of 8."
+    }
+  },
+  "Plat_UpByValueStayTx": {
+    "summary": "Raises a platform by a set distance and copies the triggering line's front floor texture onto it.",
+    "params": {
+      "tag": "Sector tag of the platform to raise; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform rises.",
+      "height": "Distance to raise, measured in units of 8."
+    }
+  },
+  "Plat_UpNearestWaitDownStay": {
+    "summary": "Raises a platform to the next-highest neighboring floor, waits, then lowers it back to its original height.",
+    "params": {
+      "tag": "Sector tag of the platform to move.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before lowering back down."
+    }
+  },
+  "Plat_UpWaitDownStay": {
+    "summary": "Raises a platform, waits, then lowers it back to its starting height.",
+    "params": {
+      "tag": "Sector tag of the platform to move; 0 uses the line's back sector.",
+      "speed": "Speed at which the platform moves.",
+      "delay": "Time to wait before lowering back down."
+    }
+  },
+  "PlayActorSound": {
+    "summary": "Plays one of an actor's own defined sounds, chosen by sound-slot name rather than an explicit sound file, from that actor's location.",
+    "params": {
+      "tid": "TID of the actor to play the sound from; 0 uses the script's activator.",
+      "sound": "Name of the actor's sound slot to play.",
+      "channel": "Audio channel the sound plays on.",
+      "volume": "Playback volume of the sound.",
+      "looping": "Whether the sound repeats continuously instead of playing once.",
+      "attenuation": "How quickly the sound's volume fades with distance from its source."
+    }
+  },
+  "PlayMovie": {
+    "summary": "Was used to play a video file, but this feature has been removed from current versions and the call always fails now.",
+    "params": {
+      "moviename": "Name of the movie file that would have been played."
+    }
+  },
+  "PlaySound": {
+    "summary": "Plays an explicit sound effect from an actor's location, without any automatic fallback sound.",
+    "params": {
+      "tid": "TID of the actor to play the sound from; 0 uses the script's activator.",
+      "sound": "Sound lump to play, as defined in the sound configuration.",
+      "channel": "Audio channel the sound plays on.",
+      "volume": "Playback volume of the sound.",
+      "looping": "Whether the sound repeats continuously instead of playing once.",
+      "attenuation": "How quickly the sound's volume fades with distance from its source.",
+      "local": "When set, the sound is only heard from this actor's own point of view, at full strength regardless of distance."
+    }
+  },
+  "PlayerArmorpoints": {
+    "summary": "Returns the amount of armor the activating player currently has.",
+    "params": {}
+  },
+  "PlayerClass": {
+    "summary": "Returns a player's class, identified by its position in the class list, or -1 if the activator isn't a player.",
+    "params": {
+      "playernumber": "Index of the player whose class to check."
+    }
+  },
+  "PlayerCount": {
+    "summary": "Returns how many players are currently in the game.",
+    "params": {}
+  },
+  "PlayerFrags": {
+    "summary": "Returns the frag count of the activating player, which can be negative after a suicide, or 0 if there was no player activator.",
+    "params": {}
+  },
+  "PlayerHealth": {
+    "summary": "Returns the current health of the player who activated the script.",
+    "params": {}
+  },
+  "PlayerInGame": {
+    "summary": "Reports whether the given player slot is currently occupied by an active player.",
+    "params": {
+      "playernumber": "Player slot index to check, from 0 to 7."
+    }
+  },
+  "PlayerIsBot": {
+    "summary": "Reports whether the given player slot is controlled by a bot rather than a human.",
+    "params": {
+      "playernumber": "Player slot index to check, from 0 to 7."
+    }
+  },
+  "PlayerNumber": {
+    "summary": "Returns the activating player's slot index, or -1 if the script wasn't activated by a player.",
+    "params": {}
+  },
+  "PlayerTeam": {
+    "summary": "Returns the team the activating player belongs to.",
+    "params": {}
+  },
+  "PointPush_SetForce": {
+    "summary": "Sets the push or pull strength of a point pusher/puller, found by sector tag or by TID; only takes effect during map setup.",
+    "params": {
+      "tag": "Sector tag to search for point pushers/pullers; takes priority over tid when non-zero.",
+      "tid": "TID of the point pusher/puller to adjust when not using a sector tag.",
+      "amount": "Strength value to apply to the point pusher/puller.",
+      "useline": "When set, derives the strength from the triggering linedef's length instead of amount."
+    }
+  },
+  "PolyWait": {
+    "summary": "Pauses the current script until the specified polyobject has finished whatever movement it is doing.",
+    "params": {
+      "polyid": "ID of the polyobject to wait on."
+    }
+  },
+  "Polyobj_DoorSlide": {
+    "summary": "Slides a polyobject open like a sliding door, waits, then slides it back to its starting position.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Movement speed of the polyobject.",
+      "angle": "Byte-angle direction the polyobject slides toward.",
+      "dist": "Distance the polyobject travels before reversing.",
+      "delay": "Tics to wait before sliding back."
+    }
+  },
+  "Polyobj_DoorSwing": {
+    "summary": "Swings a polyobject open like a hinged door, waits, then swings it back to its starting orientation; it turns counter-clockwise by default unless a negative speed is given.",
+    "params": {
+      "po": "ID of the polyobject to rotate.",
+      "speed": "Rotation speed; a negative value reverses the default turn direction.",
+      "angle": "Byte-angle amount the polyobject swings through.",
+      "delay": "Tics to wait before swinging back closed."
+    }
+  },
+  "Polyobj_ExplicitLine": {
+    "summary": "Assigns a single linedef as part of a polyobject's outline, used when the shape can't be built from one continuous loop of lines, and sets its draw order and optional mirror link.",
+    "params": {
+      "po": "ID of the polyobject this line belongs to.",
+      "order": "Position of this line within the polyobject's draw order.",
+      "mirror": "ID of another polyobject that mirrors this one's movement.",
+      "sound": "Door sound sequence played while the polyobject moves.",
+      "lineid": "Line ID to assign to this line, if nonzero."
+    }
+  },
+  "Polyobj_Move": {
+    "summary": "Translates a polyobject a set distance in a given direction at a set speed.",
+    "params": {}
+  },
+  "Polyobj_MoveTimes8": {
+    "summary": "Translates a polyobject the same way as the basic move special, but the distance traveled is multiplied by eight.",
+    "params": {}
+  },
+  "Polyobj_MoveTo": {
+    "summary": "Moves a polyobject in a straight line to a fixed map coordinate.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Travel speed, in map units per octic.",
+      "pos_x": "Absolute X coordinate of the destination.",
+      "pos_y": "Absolute Y coordinate of the destination."
+    }
+  },
+  "Polyobj_MoveToSpot": {
+    "summary": "Moves a polyobject in a straight line toward the current location of another actor.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Travel speed, in map units per octic.",
+      "target": "TID of the actor marking the destination."
+    }
+  },
+  "Polyobj_OR_Move": {
+    "summary": "Moves a polyobject like the basic move special, but cancels and overrides any movement already in progress, including an endlessly repeating one.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Movement speed of the polyobject.",
+      "angle": "Byte-angle direction to move toward.",
+      "distance": "Distance the polyobject travels."
+    }
+  },
+  "Polyobj_OR_MoveTimes8": {
+    "summary": "Moves a polyobject like the override move special, but the travel distance is multiplied by eight.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Movement speed of the polyobject.",
+      "angle": "Byte-angle direction to move toward.",
+      "distance": "Distance the polyobject travels, in units of eight."
+    }
+  },
+  "Polyobj_OR_MoveTo": {
+    "summary": "Moves a polyobject in a straight line to a fixed coordinate, overriding whatever movement it was already performing.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Travel speed, in map units per octic.",
+      "pos_x": "Absolute X coordinate of the destination.",
+      "pos_y": "Absolute Y coordinate of the destination."
+    }
+  },
+  "Polyobj_OR_MoveToSpot": {
+    "summary": "Moves a polyobject in a straight line toward another actor's location, overriding whatever movement it was already performing.",
+    "params": {
+      "po": "ID of the polyobject to move.",
+      "speed": "Travel speed, in map units per octic.",
+      "target": "TID of the actor marking the destination."
+    }
+  },
+  "Polyobj_OR_RotateLeft": {
+    "summary": "Spins a polyobject counter-clockwise through a set angle, overriding whatever movement it was already performing; an angle of 255 makes it spin indefinitely.",
+    "params": {
+      "po": "ID of the polyobject to rotate.",
+      "speed": "Rotation speed of the polyobject.",
+      "angle": "Byte-angle amount to rotate through."
+    }
+  },
+  "Polyobj_OR_RotateRight": {
+    "summary": "Spins a polyobject clockwise through a set angle, overriding whatever movement it was already performing; an angle of 255 makes it spin indefinitely.",
+    "params": {
+      "po": "ID of the polyobject to rotate.",
+      "speed": "Rotation speed of the polyobject.",
+      "angle": "Byte-angle amount to rotate through."
+    }
+  },
+  "Polyobj_RotateLeft": {
+    "summary": "Spins a polyobject counter-clockwise through a set angle; an angle of 255 makes it spin indefinitely.",
+    "params": {}
+  },
+  "Polyobj_RotateRight": {
+    "summary": "Spins a polyobject clockwise through a set angle; an angle of 255 makes it spin indefinitely.",
+    "params": {}
+  },
+  "Polyobj_StartLine": {
+    "summary": "Begins defining a polyobject's outline starting from the line it is placed on, optionally linking it to a mirrored polyobject and a door sound.",
+    "params": {
+      "po": "ID being assigned to the new polyobject.",
+      "mirror": "ID of another polyobject whose movement this one mirrors.",
+      "sound": "Door sound sequence played while the polyobject moves.",
+      "lineid": "Line ID to assign to this line, if nonzero."
+    }
+  },
+  "Polyobj_Stop": {
+    "summary": "Immediately halts whatever movement a polyobject is currently performing.",
+    "params": {
+      "po": "ID of the polyobject to stop."
+    }
+  },
+  "Polyobj_StopSound": {
+    "summary": "Silences the looping sound sequence that a moving polyobject is currently playing.",
+    "params": {
+      "po": "ID of the polyobject whose sound sequence to stop."
+    }
+  },
+  "Print": {
+    "summary": "Displays a line of text, built from mixed literal strings and formatted values, on the screen of whichever actor activated the script; nothing appears if the activator isn't a player.",
+    "params": {}
+  },
+  "PrintBold": {
+    "summary": "Works like the basic print function, but shows the message to every player at once instead of only the activator, using a different default text color.",
+    "params": {}
+  },
+  "QuakeEx": {
+    "summary": "Creates a configurable earthquake effect centered on one or more actors, with independent shake strength per camera axis, optional sine-wave motion and camera roll, and optional damage and knockback to nearby actors.",
+    "params": {
+      "tid": "TID of the actor(s) at the quake's center; 0 uses the script's activator.",
+      "intensityX": "Shake strength along the X axis (or the camera's side-to-side motion, depending on flags).",
+      "intensityY": "Shake strength along the Y axis (or the camera's front-to-back motion, depending on flags).",
+      "intensityZ": "Shake strength along the vertical Z axis.",
+      "duration": "How long the quake lasts, in tics.",
+      "damrad": "Radius, in map units, within which actors can be damaged or thrown.",
+      "tremrad": "Radius, in map units, within which the screen shake is felt.",
+      "sfx": "Sound effect played alongside the quake.",
+      "flags": "Bit flags controlling intensity scaling, wave motion, falloff, and who the quake can affect.",
+      "mulwavex": "Wave frequency multiplier for the X axis when wave motion is enabled.",
+      "mulwavey": "Wave frequency multiplier for the Y axis when wave motion is enabled.",
+      "mulwavez": "Wave frequency multiplier for the Z axis when wave motion is enabled.",
+      "falloff": "Distance over which the shake intensity tapers off before reaching tremrad.",
+      "highpoint": "Point in time, in tics, at which the quake's intensity peaks.",
+      "rollintensity": "How strongly the quake tilts (rolls) the camera.",
+      "rollwave": "Wave frequency multiplier for the camera roll motion.",
+      "damageMultiplier": "Scales the amount of damage the quake deals to actors.",
+      "thrustMultiplier": "Scales how strongly the quake shoves actors around.",
+      "damage": "Fixed damage amount dealt per hit, overriding the default random range."
+    }
+  },
+  "Radius_Quake": {
+    "summary": "Triggers an earthquake centered on one or more map spots, shaking the screen and optionally damaging anything within range.",
+    "params": {
+      "intensity": "Overall strength of the quake, from 0 to 9.",
+      "duration": "How long the quake lasts, in tics.",
+      "damrad": "Damage radius, measured in 64-unit map cells.",
+      "tremrad": "Screen-shake radius, measured in 64-unit map cells.",
+      "tid": "TID of the actor(s) marking the quake's center; 0 uses the activator."
+    }
+  },
+  "Radius_Quake2": {
+    "summary": "A variant earthquake special that measures its radii directly in map units instead of 64-unit cells, and lets a sound effect accompany the shaking.",
+    "params": {
+      "tid": "TID of the actor(s) marking the quake's center; 0 uses the activator.",
+      "intensity": "Overall strength of the quake, from 0 to 9.",
+      "duration": "How long the quake lasts, in tics.",
+      "damrad": "Damage radius, in map units.",
+      "tremrad": "Screen-shake radius, in map units.",
+      "sound": "Sound effect played alongside the quake."
+    }
+  },
+  "Random": {
+    "summary": "Returns a random whole number between two bounds, inclusive.",
+    "params": {
+      "min": "Lowest value that can be returned.",
+      "max": "Highest value that can be returned."
+    }
+  },
+  "RedCount": {
+    "summary": "Returns how many players are currently on the red team; superseded by a newer function of similar purpose.",
+    "params": {}
+  },
+  "RedScore": {
+    "summary": "Returns the red team's current score; superseded by a newer function of similar purpose.",
+    "params": {}
+  },
+  "RedTeamCount": {
+    "summary": "Returns how many players are currently on the red team.",
+    "params": {}
+  },
+  "RedTeamScore": {
+    "summary": "Returns the red team's current score.",
+    "params": {}
+  },
+  "ReplaceTextures": {
+    "summary": "Swaps every occurrence of one texture for another across the whole map, with flags to exclude specific wall sections or floor/ceiling planes from the swap.",
+    "params": {
+      "oldtexturename": "Name of the texture being replaced.",
+      "newtexturename": "Name of the texture to replace it with.",
+      "flags": "Bit flags excluding certain surfaces from the swap."
+    }
+  },
+  "Round": {
+    "summary": "Rounds a fixed-point number to the nearest whole value.",
+    "params": {
+      "value": "The fixed-point number to round."
+    }
+  },
+  "ScriptWait": {
+    "summary": "Pauses the current script until another numbered script finishes running, waiting for it to start first if it isn't running yet.",
+    "params": {
+      "script": "Number of the script to wait for."
+    }
+  },
+  "Scroll_Ceiling": {
+    "summary": "Sets or changes the scroll speed and direction of a sector's ceiling texture.",
+    "params": {}
+  },
+  "Scroll_Floor": {
+    "summary": "Sets or changes the scroll speed and direction of a sector's floor texture, and can also carry actors standing on it, with or without visibly scrolling the texture.",
+    "params": {}
+  },
+  "Scroll_Texture_Both": {
+    "summary": "Scrolls a wall texture diagonally by combining independent horizontal and vertical scroll speeds, either on the line it's placed on or on other lines sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) to affect; 0 affects the line this special is placed on.",
+      "left": "Scroll speed toward the left.",
+      "right": "Scroll speed toward the right.",
+      "down": "Scroll speed downward.",
+      "up": "Scroll speed upward."
+    }
+  },
+  "Scroll_Texture_Down": {
+    "summary": "Scrolls a wall texture downward at a set speed, optionally limited to specific parts of the wall.",
+    "params": {
+      "speed": "How fast the texture scrolls.",
+      "flags": "Which parts of the wall (upper, middle, lower) scroll."
+    }
+  },
+  "Scroll_Texture_Left": {
+    "summary": "Scrolls a wall texture to the left at a set speed, optionally limited to specific parts of the wall.",
+    "params": {
+      "speed": "How fast the texture scrolls.",
+      "flags": "Which parts of the wall (upper, middle, lower) scroll."
+    }
+  },
+  "Scroll_Texture_Model": {
+    "summary": "Makes one line's texture scroll the same way as another tagged line's scroll settings, rather than defining its own.",
+    "params": {
+      "lineid": "ID of the line whose scroll settings to copy; obsolete in UDMF.",
+      "scrollbits": "Flags selecting which kind of scroller to copy."
+    }
+  },
+  "Scroll_Texture_Offsets": {
+    "summary": "Scrolls both the horizontal and vertical texture offsets of the line it's placed on, based on that line's own texture offset values; mainly kept for compatibility with older maps.",
+    "params": {
+      "flags": "Which parts of the wall (upper, middle, lower) scroll."
+    }
+  },
+  "Scroll_Texture_Right": {
+    "summary": "Scrolls a wall texture to the right at a set speed, optionally limited to specific parts of the wall.",
+    "params": {
+      "speed": "How fast the texture scrolls.",
+      "flags": "Which parts of the wall (upper, middle, lower) scroll."
+    }
+  },
+  "Scroll_Texture_Up": {
+    "summary": "Scrolls a wall texture upward at a set speed, optionally limited to specific parts of the wall.",
+    "params": {
+      "speed": "How fast the texture scrolls.",
+      "flags": "Which parts of the wall (upper, middle, lower) scroll."
+    }
+  },
+  "Scroll_Wall": {
+    "summary": "Starts or stops independent horizontal and vertical texture scrolling on one side of one or more lines, with separate control over the upper, middle, and lower wall sections.",
+    "params": {
+      "lineid": "ID of the line(s) to affect.",
+      "x": "Horizontal scroll speed, as a fixed-point value.",
+      "y": "Vertical scroll speed, as a fixed-point value.",
+      "side": "Which side of the line to affect: 0 for front, 1 for back.",
+      "flags": "Which wall sections (upper, middle, lower) the scroll applies to."
+    }
+  },
+  "Sector_Attach3dMidtex": {
+    "summary": "Links one or more 3D-midtex lines to a sector so their textures move along with that sector's floor or ceiling, letting mid-textures form lifts or similar moving surfaces.",
+    "params": {
+      "lineid": "ID of the line(s) carrying the 3D midtexture to attach.",
+      "tag": "Tag of the sector whose floor or ceiling movement drives those lines.",
+      "floororceiling": "Which plane of the sector to follow: 0 for floor, 1 for ceiling."
+    }
+  },
+  "Sector_ChangeFlags": {
+    "summary": "Turns specific sector behavior flags on or off for the tagged sector(s).",
+    "params": {
+      "tag": "Tag of the sector(s) to modify.",
+      "setflags": "Flags to turn on.",
+      "clearflags": "Flags to turn off."
+    }
+  },
+  "Sector_ChangeSound": {
+    "summary": "Changes which ambient sound sequence a sector plays, allowing it to be swapped at run time instead of fixed by a sound-sequence map thing.",
+    "params": {
+      "tag": "Tag of the sector to change.",
+      "newsequence": "Index of the new sound sequence to use."
+    }
+  },
+  "Sector_CopyScroller": {
+    "summary": "Makes a line's front sector copy the floor or ceiling scroll (or carrying) effect already running on another tagged sector.",
+    "params": {
+      "tag": "Tag of the sector to copy the scroll effect from.",
+      "flags": "Which effects to copy: ceiling scroll, floor scroll, and/or carrying."
+    }
+  },
+  "Sector_Set3dFloor": {
+    "summary": "Builds a 3D floor inside the tagged sector, using a separate control sector's floor, ceiling, and side texture to shape the extra walkable surface.",
+    "params": {}
+  },
+  "Sector_SetCeilingGlow": {
+    "summary": "Adds a colored light glow to a sector's ceiling, with the color and the height over which it fades configurable.",
+    "params": {}
+  },
+  "Sector_SetCeilingPanning": {
+    "summary": "Offsets (pans) a sector's ceiling texture horizontally and vertically, each axis given as a whole-number part plus a fractional part.",
+    "params": {}
+  },
+  "Sector_SetCeilingScale": {
+    "summary": "Scales a sector's ceiling texture horizontally and vertically, each axis given as a whole-number part plus a fractional part.",
+    "params": {}
+  },
+  "Sector_SetCeilingScale2": {
+    "summary": "Scales a sector's ceiling texture horizontally and vertically, taking each scale factor directly as a fixed-point number instead of split integer/fraction pairs.",
+    "params": {}
+  },
+  "Sector_SetColor": {
+    "summary": "Tints the light in a sector with a custom color, and can desaturate that color partway or fully toward grayscale.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "r": "Red component of the light color.",
+      "g": "Green component of the light color.",
+      "b": "Blue component of the light color.",
+      "desat": "How much the light color is desaturated toward grayscale."
+    }
+  },
+  "Sector_SetContents": {
+    "summary": "Sets the environmental contents (such as a liquid) filling a sector, along with its appearance and behavior; details are intentionally sparse in the source material.",
+    "params": {
+      "type": "Which content or liquid type fills the sector.",
+      "translucency": "How see-through the contents' surface appears.",
+      "flags": "Bit flags adjusting how the contents behave."
+    }
+  },
+  "Sector_SetCurrent": {
+    "summary": "Applies a pushing current to actors in a sector, with its strength and direction either given directly or derived from the line it's placed on.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "amount": "Strength of the current.",
+      "angle": "Direction the current pushes toward.",
+      "useline": "If set, derive strength and direction from the line's geometry instead."
+    }
+  },
+  "Sector_SetDamage": {
+    "summary": "Configures the periodic damage a sector inflicts on players standing in it, overriding the sector's built-in damage setting, including amount, source type, tick rate, and how much protective gear still lets through.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "amount": "Damage dealt per tick.",
+      "mod": "Damage type or source used for the damage.",
+      "interval": "Tics between each damage tick.",
+      "leaky": "How much a radiation suit still lets damage through; 0 means full protection."
+    }
+  },
+  "Sector_SetFade": {
+    "summary": "Sets the color distant light in a sector fades toward, producing a fog-like atmosphere.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "r": "Red component of the fade color.",
+      "g": "Green component of the fade color.",
+      "b": "Blue component of the fade color."
+    }
+  },
+  "Sector_SetFloorGlow": {
+    "summary": "Adds a colored light glow to a sector's floor, with the color and the height over which it fades configurable.",
+    "params": {}
+  },
+  "Sector_SetFloorPanning": {
+    "summary": "Offsets (pans) a sector's floor texture horizontally and vertically, each axis given as a whole-number part plus a fractional part.",
+    "params": {}
+  },
+  "Sector_SetFloorScale": {
+    "summary": "Scales a sector's floor texture horizontally and vertically, each axis given as a whole-number part plus a fractional part.",
+    "params": {}
+  },
+  "Sector_SetFloorScale2": {
+    "summary": "Scales a sector's floor texture horizontally and vertically, taking each scale factor directly as a fixed-point number instead of split integer/fraction pairs.",
+    "params": {}
+  },
+  "Sector_SetFriction": {
+    "summary": "Sets how slippery or grippy the floor of a sector feels to actors walking on it.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "amount": "Friction value; lower values make the floor more slippery."
+    }
+  },
+  "Sector_SetGravity": {
+    "summary": "Changes how strong gravity feels within a sector, as a multiplier of the map's normal gravity made from a whole-number part and a fractional part.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "ipart": "Whole-number part of the gravity multiplier.",
+      "fpart": "Fractional part of the gravity multiplier."
+    }
+  },
+  "Sector_SetLink": {
+    "summary": "Links one or more sectors to a control sector so they move together, letting composite lifts or other multi-sector structures hold together even when part of the movement is blocked.",
+    "params": {
+      "controltag": "Tag of the control sector that other sectors follow.",
+      "tag": "Tag of the sector(s) to link to the control sector.",
+      "surface": "Whether to follow the control sector's ceiling or its floor.",
+      "movetype": "Which kinds of movement are linked between the sectors."
+    }
+  },
+  "Sector_SetPlaneReflection": {
+    "summary": "Makes a sector's floor and/or ceiling behave like a mirror, reflecting the scene above or below it.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "floor": "How reflective the floor is, from none to a perfect mirror.",
+      "ceiling": "How reflective the ceiling is, from none to a perfect mirror."
+    }
+  },
+  "Sector_SetPortal": {
+    "summary": "Establishes a one-way visual portal connecting the tagged sector's floor or ceiling to another sector, such as a plain view portal, a copied portal, or a skybox.",
+    "params": {
+      "tag": "Tag of the sector that will display the portal.",
+      "type": "Kind of portal being created: plain view, copied, or skybox.",
+      "plane": "Which plane (floor or ceiling) the portal applies to.",
+      "misc": "Extra value whose meaning depends on the portal type.",
+      "opacity": "How opaque the portal surface appears."
+    }
+  },
+  "Sector_SetRotation": {
+    "summary": "Rotates the floor and ceiling textures of a sector independently to a given angle.",
+    "params": {}
+  },
+  "Sector_SetTranslucent": {
+    "summary": "Adjusts how transparent one of a sector's floor or ceiling portal planes appears.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "plane": "Which plane to affect: floor or ceiling.",
+      "amount": "Opacity of the plane, from fully transparent to fully opaque.",
+      "type": "Blending style used for the transparency."
+    }
+  },
+  "Sector_SetWind": {
+    "summary": "Applies a pushing wind to actors in a sector, with its strength and direction either given directly or derived from the line it's placed on; the sector needs its wind/pusher flag enabled for this to take effect.",
+    "params": {
+      "tag": "Tag of the sector(s) to affect.",
+      "amount": "Strength of the wind.",
+      "angle": "Direction the wind blows toward.",
+      "useline": "If set, derive strength and direction from the line's geometry instead."
+    }
+  },
+  "SectorDamage": {
+    "summary": "Immediately deals a single damage hit to everything in a tagged sector, rather than applying damage continuously like a sector's built-in damage setting.",
+    "params": {
+      "tag": "Tag of the sector(s) whose occupants take damage.",
+      "amount": "Amount of damage dealt.",
+      "type": "Damage type applied.",
+      "protection_item": "Inventory item that shields an actor from this damage, if carried.",
+      "flags": "Bit flags controlling who can be hit, such as players or non-players."
+    }
+  },
+  "SectorSound": {
+    "summary": "Plays a sound at the location of the sector facing the line the script is attached to, growing quieter at a distance.",
+    "params": {
+      "sound": "Name of the sound to play.",
+      "volume": "Playback volume, from 0 (silent) to 127 (full volume)."
+    }
+  },
+  "SendToCommunicator": {
+    "summary": "Plays a numbered in-game voice message to the player if they are carrying a communicator item, and optionally logs a matching text entry to their objectives screen.",
+    "params": {
+      "voc_id": "Number identifying which voice clip and log entry to use.",
+      "front_only": "If set, only triggers when crossed from the line's front side.",
+      "identify": "Which header text is shown for the incoming message.",
+      "nolog": "If set, suppresses adding the message to the objectives log."
+    }
+  },
+  "SetActivator": {
+    "summary": "Reassigns the script's current activator to the first actor found with a given TID, optionally picking a related actor (such as its target) instead of that actor itself.",
+    "params": {
+      "tid": "TID of the actor to become the new activator.",
+      "pointer_selector": "Selects a related actor (such as a target) relative to the matched actor."
+    }
+  },
+  "SetActivatorByNetID": {
+    "summary": "Reassigns the script's current activator to the actor identified by its network ID rather than its TID.",
+    "params": {
+      "netid": "Network ID of the actor to become the new activator.",
+      "pointer": "Selects a related actor relative to the matched actor, similar to SetActivator's selector."
+    }
+  },
+  "SetActivatorToTarget": {
+    "summary": "Switches the script's activator to the target of the first matching actor found; if none is found, the activator is left unchanged.",
+    "params": {
+      "tid": "TID identifying whose target becomes the new activator; 0 uses the current activator's own target."
+    }
+  },
+  "SetActorAngle": {
+    "summary": "Turns an actor to face a given direction.",
+    "params": {
+      "tid": "TID of the actor to turn.",
+      "angle": "Fixed-point heading to face, as a fraction of a full turn."
+    }
+  },
+  "SetActorFlag": {
+    "summary": "Turns a named actor flag on or off for matching actors and reports how many were actually changed.",
+    "params": {
+      "tid": "TID of the actor(s) to modify; 0 targets the activator.",
+      "flagname": "Name of the actor flag being toggled.",
+      "value": "New on/off state to give the flag."
+    }
+  },
+  "SetActorPitch": {
+    "summary": "Sets how far up or down an actor is looking.",
+    "params": {
+      "tid": "TID of the actor to adjust.",
+      "pitch": "Fixed-point vertical look angle to apply."
+    }
+  },
+  "SetActorPosition": {
+    "summary": "Moves an actor to specific coordinates, optionally with teleport fog, and reports whether the move succeeded.",
+    "params": {
+      "tid": "TID of the actor to reposition.",
+      "x": "Fixed-point X coordinate of the destination.",
+      "y": "Fixed-point Y coordinate of the destination.",
+      "z": "Absolute fixed-point Z coordinate (height) of the destination.",
+      "fog": "Whether to spawn teleport fog at the new location."
+    }
+  },
+  "SetActorProperty": {
+    "summary": "Sets one of an actor's built-in properties to a new value.",
+    "params": {
+      "tid": "TID of the actor to modify; 0 means the activator.",
+      "property": "Which property constant to change.",
+      "value": "New value to assign to that property."
+    }
+  },
+  "SetActorRoll": {
+    "summary": "Tilts an actor sideways around its forward axis; the effect is visible on models and the player's own view, but not on sprites.",
+    "params": {
+      "tid": "TID of the actor to tilt; 0 means the activator.",
+      "angle": "Fixed-point roll angle to apply."
+    }
+  },
+  "SetActorState": {
+    "summary": "Forces matching actors into a named Decorate state and reports how many actually changed state; using it on actors with monster AI can cause unpredictable behavior.",
+    "params": {
+      "tid": "TID of the actor(s) to affect; 0 means the activator.",
+      "statename": "Name of the Decorate state to jump to.",
+      "exact": "Whether a partial or parent-state match is disallowed."
+    }
+  },
+  "SetActorTeleFog": {
+    "summary": "Overrides the fog actors spawned when a matching actor teleports in and out.",
+    "params": {
+      "tid": "TID of the actor(s) to affect; 0 means the activator.",
+      "telefogsrc": "Fog actor used when the actor departs; \"none\" removes it, empty keeps the current one.",
+      "telefogdest": "Fog actor used when the actor arrives; \"none\" removes it, empty keeps the current one."
+    }
+  },
+  "SetActorVelocity": {
+    "summary": "Changes an actor's speed and direction of movement, either replacing or adding to its current velocity.",
+    "params": {
+      "tid": "TID of the actor(s) to affect; 0 means the activator.",
+      "velx": "Fixed-point velocity along the X axis.",
+      "vely": "Fixed-point velocity along the Y axis.",
+      "velz": "Fixed-point velocity along the Z axis.",
+      "add": "If true, adds to the existing velocity instead of replacing it.",
+      "setbob": "If true, also affects the player's view-bobbing speed."
+    }
+  },
+  "SetAirControl": {
+    "summary": "Adjusts how much steering control players have while airborne, such as when falling or jumping.",
+    "params": {
+      "amount": "Fixed-point strength of air control to apply."
+    }
+  },
+  "SetAirSupply": {
+    "summary": "Sets how many tics remain before a given player starts drowning; monsters are unaffected since they cannot drown.",
+    "params": {
+      "playernum": "Number identifying the player to affect.",
+      "tics": "Remaining tics of breathable air to give the player."
+    }
+  },
+  "SetAmmoCapacity": {
+    "summary": "Changes the maximum amount of a specific ammo type a player is allowed to carry.",
+    "params": {
+      "typename": "Class name of the ammo (or ammo-derived) type to adjust.",
+      "maxamount": "New maximum carrying capacity for that ammo type."
+    }
+  },
+  "SetCVarString": {
+    "summary": "Writes a new string value to a mod-defined console variable; built-in engine variables cannot be changed this way.",
+    "params": {
+      "cvar": "Name of the console variable to set.",
+      "value": "New string value to assign to it."
+    }
+  },
+  "SetCameraToTexture": {
+    "summary": "Binds a camera's live view to a named texture so whatever the camera sees each frame is drawn onto that texture.",
+    "params": {
+      "cameratid": "TID of the camera actor supplying the view.",
+      "texturename": "Name of the camera texture to render into.",
+      "fov": "Field of view used to render the camera's view."
+    }
+  },
+  "SetCeilingTrigger": {
+    "summary": "Watches a sector's ceiling and fires another action special with the given arguments once the ceiling reaches a given height.",
+    "params": {
+      "tag": "Tag of the sector whose ceiling is watched.",
+      "height": "Ceiling height that fires the trigger.",
+      "special": "Action special to run once triggered.",
+      "arg1": "First argument passed to the triggered special.",
+      "arg2": "Second argument passed to the triggered special.",
+      "arg3": "Third argument passed to the triggered special.",
+      "arg4": "Fourth argument passed to the triggered special.",
+      "arg5": "Fifth argument passed to the triggered special."
+    }
+  },
+  "SetFloorTrigger": {
+    "summary": "Watches a sector's floor and fires another action special with the given arguments once the floor reaches a given height.",
+    "params": {
+      "tag": "Tag of the sector whose floor is watched.",
+      "height": "Floor height that fires the trigger.",
+      "special": "Action special to run once triggered.",
+      "arg1": "First argument passed to the triggered special.",
+      "arg2": "Second argument passed to the triggered special.",
+      "arg3": "Third argument passed to the triggered special.",
+      "arg4": "Fourth argument passed to the triggered special.",
+      "arg5": "Fifth argument passed to the triggered special."
+    }
+  },
+  "SetFogDensity": {
+    "summary": "Sets a sector's fog thickness directly, overriding the usual calculation based on light level.",
+    "params": {
+      "tag": "Tag of the sector to modify.",
+      "density": "Fog thickness to apply, from 0 to 510; higher means thicker fog."
+    }
+  },
+  "SetFont": {
+    "summary": "Switches the font used by the script's later text and HUD message commands.",
+    "params": {
+      "fontlump": "Name of the font lump to switch to."
+    }
+  },
+  "SetGlobalFogParameter": {
+    "summary": "Overrides one of the level's MAPINFO fog settings, such as general fog density, outdoor fog density, or sky fog.",
+    "params": {
+      "property": "Which fog parameter to change.",
+      "value": "New value to give that fog parameter."
+    }
+  },
+  "SetGravity": {
+    "summary": "Sets the overall gravity strength for the entire level.",
+    "params": {
+      "amount": "Gravity value to apply, where 800 is normal, 400 is half, and 1600 is double."
+    }
+  },
+  "SetHudClipRect": {
+    "summary": "Restricts later HUD messages to a rectangular area of the screen, optionally wrapping their text to fit it.",
+    "params": {
+      "x": "Left edge of the clipping rectangle.",
+      "y": "Top edge of the clipping rectangle.",
+      "width": "Width of the clipping rectangle.",
+      "height": "Height of the clipping rectangle.",
+      "wrapwidth": "Pixel width to wrap text to; 0 uses default wrapping behavior.",
+      "aspectratio": "Whether to force a 4:3 layout on wider aspect ratios."
+    }
+  },
+  "SetHudSize": {
+    "summary": "Scales later HUD text and messages as though the screen were a given resolution, useful for image-based fonts or keeping sizes consistent.",
+    "params": {
+      "width": "Simulated horizontal resolution for HUD layout.",
+      "height": "Simulated vertical resolution for HUD layout.",
+      "statusbar": "Whether the simulated area excludes space taken by the status bar."
+    }
+  },
+  "SetHudWrapWidth": {
+    "summary": "Sets the text-wrap width used by later HUD messages without changing the clipping rectangle.",
+    "params": {
+      "wrapwidth": "Pixel width to wrap HUD text to; 0 restores full-width wrapping."
+    }
+  },
+  "SetLineActivation": {
+    "summary": "Changes which activation methods can trigger a line and whether it can be triggered more than once.",
+    "params": {
+      "lineid": "ID of the line to modify.",
+      "activation": "Combination of activation types to allow on the line.",
+      "repeat": "Whether the line's assigned special can be triggered multiple times."
+    }
+  },
+  "SetLineBlocking": {
+    "summary": "Changes what a line blocks movement for, ranging from nothing to creatures only to everything including projectiles.",
+    "params": {
+      "lineid": "ID of the line to modify.",
+      "setting": "Blocking mode to apply to the line."
+    }
+  },
+  "SetLineMonsterBlocking": {
+    "summary": "Turns monster-blocking on or off for a line without affecting players or projectiles.",
+    "params": {
+      "lineid": "ID of the line to modify.",
+      "setting": "Whether monster blocking is turned on or off."
+    }
+  },
+  "SetLineSpecial": {
+    "summary": "Assigns a new action special and its arguments to every line sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) to modify.",
+      "special": "Action special to assign to the line.",
+      "arg0": "First argument for the assigned special.",
+      "arg1": "Second argument for the assigned special.",
+      "arg2": "Third argument for the assigned special.",
+      "arg3": "Fourth argument for the assigned special.",
+      "arg4": "Fifth argument for the assigned special."
+    }
+  },
+  "SetLineTexture": {
+    "summary": "Changes one texture slot on a chosen side of every line sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) to modify.",
+      "line_side": "Which side of the line to change, front or back.",
+      "sidedef_texture": "Which texture slot on that side to change.",
+      "texturename": "Name of the replacement texture; a dash removes the texture."
+    }
+  },
+  "SetMarineSprite": {
+    "summary": "Changes a Scripted Marine's sprite set to match another actor's spawn sprite, which only works correctly if the frame layout matches what a Marine needs.",
+    "params": {
+      "tid": "TID of the Scripted Marine to modify.",
+      "actorclass": "Case-sensitive class name whose spawn sprite to copy."
+    }
+  },
+  "SetMarineWeapon": {
+    "summary": "Equips a Scripted Marine with a specific weapon on the fly.",
+    "params": {
+      "tid": "TID of the Scripted Marine to modify.",
+      "weapon": "Weapon to equip the Marine with."
+    }
+  },
+  "SetMugShotState": {
+    "summary": "Forces the status bar mugshot into a specific SBARINFO-defined state, which holds until interrupted by damage or a weapon pickup.",
+    "params": {
+      "state": "Name of the mugshot state to switch to."
+    }
+  },
+  "SetMusic": {
+    "summary": "Changes the music currently playing on the level, optionally starting at a given position within tracker or multi-track files.",
+    "params": {
+      "song": "Name or path of the music to play; an asterisk restores the map's default track.",
+      "order": "Starting order or track number, for module or multi-track music formats.",
+      "unused": "Reserved parameter with no current effect; best omitted."
+    }
+  },
+  "SetMusicVolume": {
+    "summary": "Scales the volume of whatever music is currently playing.",
+    "params": {
+      "volume": "Multiplier applied to the music volume, from 0 up to 2.0."
+    }
+  },
+  "SetPlayerProperty": {
+    "summary": "Turns a boolean player property on or off for either one player or everyone.",
+    "params": {
+      "who": "Whether to affect all players or just the one who activated the script.",
+      "set": "Whether to turn the property on or off.",
+      "which": "Which player property to change."
+    }
+  },
+  "SetPointer": {
+    "summary": "Assigns one of the activator's stored actor-pointer slots, such as target or tracer, to reference another actor.",
+    "params": {
+      "assign_slot": "Which of the activator's pointer slots to assign.",
+      "tid": "TID of the actor that the pointer should reference.",
+      "pointer_selector": "Which of that actor's own pointers to copy into the slot, if any.",
+      "flags": "Options controlling how the assignment is resolved."
+    }
+  },
+  "SetResultValue": {
+    "summary": "Overrides the calling script's result value, which other scripts or switches can read as a success/failure outcome; it must be set before the script waits on anything.",
+    "params": {
+      "value": "New result value to give the script."
+    }
+  },
+  "SetSectorDamage": {
+    "summary": "Configures periodic damage dealt to actors standing in a sector, including its type and how often it applies, overriding any built-in sector damage settings.",
+    "params": {
+      "tag": "Tag of the sector to configure.",
+      "amount": "Amount of damage applied on each interval.",
+      "damagetype": "Damage type name used for resistances and protection.",
+      "interval": "Tics between successive damage applications.",
+      "leaky": "Chance that protective gear still lets some damage through."
+    }
+  },
+  "SetSectorGlow": {
+    "summary": "Adds a colored light glow to a sector's floor or ceiling, or removes an existing one.",
+    "params": {
+      "tag": "Tag of the sector to apply the glow to.",
+      "plane": "Whether the glow is applied to the ceiling (true) or the floor (false).",
+      "red": "Red component of the glow color; -1 removes the glow entirely.",
+      "green": "Green component of the glow color.",
+      "blue": "Blue component of the glow color.",
+      "height": "Vertical extent of the glow effect."
+    }
+  },
+  "SetSectorTerrain": {
+    "summary": "Overrides a sector's terrain type independently of whatever its floor or ceiling texture would normally imply.",
+    "params": {
+      "tag": "Tag of the sector to configure.",
+      "whichplane": "Whether the terrain is applied to the floor or the ceiling.",
+      "terraintype": "Name of the terrain type to apply."
+    }
+  },
+  "SetSkyScrollSpeed": {
+    "summary": "Changes how fast one of the level's sky layers scrolls, typically used alongside changing the sky itself.",
+    "params": {
+      "sky": "Which sky layer to adjust.",
+      "skyspeed": "New scroll speed for the main sky layer.",
+      "skymistspeed": "New scroll speed for the sky's secondary mist layer."
+    }
+  },
+  "SetSubtitleNumber": {
+    "summary": "Associates a subtitle entry number with a sound, for caption/accessibility purposes.",
+    "params": {
+      "num": "Index of the subtitle entry to set.",
+      "sound": "Sound to associate with that subtitle entry."
+    }
+  },
+  "SetThingSpecial": {
+    "summary": "Assigns an action special and its arguments to matching actors; similar to the linedef version but usable only from within ACS.",
+    "params": {
+      "tid": "TID of the actor(s) to modify; 0 means the activator.",
+      "special": "Action special to assign to the actor(s).",
+      "arg0": "First argument for the assigned special.",
+      "arg1": "Second argument for the assigned special.",
+      "arg2": "Third argument for the assigned special.",
+      "arg3": "Fourth argument for the assigned special.",
+      "arg4": "Fifth argument for the assigned special."
+    }
+  },
+  "SetTranslation": {
+    "summary": "Applies a predefined color translation to matching actors.",
+    "params": {
+      "tid": "TID of the actor(s) to recolor; 0 means the script's activator.",
+      "transname": "Name of the translation to apply."
+    }
+  },
+  "SetUserArray": {
+    "summary": "Writes a value into a non-native user array on matching actors and reports how many actors were processed.",
+    "params": {
+      "tid": "TID of the actor(s) to modify; 0 means the activator.",
+      "name": "Name of the user array to write into.",
+      "pos": "Zero-based index within the array to write to.",
+      "value": "Value to store at that index."
+    }
+  },
+  "SetUserVariable": {
+    "summary": "Writes a value into a non-native user variable on matching actors and reports how many actors were processed.",
+    "params": {
+      "tid": "TID of the actor(s) to modify; 0 means the activator.",
+      "name": "Name of the user variable to write into.",
+      "value": "Value to store in that variable."
+    }
+  },
+  "SetWeapon": {
+    "summary": "Switches the player to a named weapon, succeeding only if that weapon is actually available to them.",
+    "params": {
+      "weaponname": "Name of the weapon to switch to."
+    }
+  },
+  "Sin": {
+    "summary": "Computes the sine of a fixed-point angle.",
+    "params": {
+      "angle": "Fixed-point angle to compute the sine of."
+    }
+  },
+  "SinglePlayer": {
+    "summary": "Reports whether the current game is running in single-player mode.",
+    "params": {}
+  },
+  "SoundSequence": {
+    "summary": "Plays a named sound sequence defined in the game's sound sequence data.",
+    "params": {
+      "sndseq": "Name of the sound sequence to play."
+    }
+  },
+  "SoundSequenceOnActor": {
+    "summary": "Plays a named sound sequence that follows a specific actor as its source.",
+    "params": {
+      "sndseq": "Name of the sound sequence to play."
+    }
+  },
+  "SoundSequenceOnPolyobj": {
+    "summary": "Plays a sound sequence tied to a polyobject; since a polyobject can only run one sequence at a time, it should be called after any move or rotate command rather than before it.",
+    "params": {
+      "sndseq": "Name of the sound sequence to play."
+    }
+  },
+  "SoundSequenceOnSector": {
+    "summary": "Plays a sound sequence anchored to a sector, with a location setting controlling whether it originates from the floor, ceiling, full height, or interior of the sector.",
+    "params": {}
+  },
+  "SoundVolume": {
+    "summary": "Adjusts the playback volume of a sound currently being played by a matching actor.",
+    "params": {
+      "tid": "TID of the actor whose sound volume to change; 0 means the activator.",
+      "channel": "Sound channel the playing sound was started on.",
+      "volume": "New volume level to apply, from silent to full."
+    }
+  },
+  "Spawn": {
+    "summary": "Spawns a new actor at exact coordinates, optionally giving it a TID and facing angle; unlike some similar functions, it does not create teleport fog.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "x": "Fixed-point X coordinate to spawn at.",
+      "y": "Fixed-point Y coordinate to spawn at.",
+      "z": "Absolute fixed-point Z coordinate (height) to spawn at.",
+      "tid": "TID to assign to the new actor.",
+      "angle": "Facing direction to give the new actor."
+    }
+  },
+  "SpawnDecal": {
+    "summary": "Traces outward from an actor and stamps a decal onto the first wall the trace hits.",
+    "params": {
+      "tid": "TID of the actor to trace from; 0 means the activator.",
+      "decalname": "Name of the decal to create.",
+      "flags": "Options controlling how the decal is placed.",
+      "angle": "Fixed-point direction in which to search for a wall.",
+      "zoffset": "Vertical offset of the decal from the actor's middle.",
+      "distance": "Maximum distance to search for a wall to decal."
+    }
+  },
+  "SpawnForced": {
+    "summary": "Works like the basic spawn function, but forces the actor to appear even where the location would normally block it; use with care.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "x": "Fixed-point X coordinate to spawn at.",
+      "y": "Fixed-point Y coordinate to spawn at.",
+      "z": "Absolute fixed-point Z coordinate (height) to spawn at.",
+      "tid": "TID to assign to the new actor.",
+      "angle": "Facing direction to give the new actor."
+    }
+  },
+  "SpawnParticle": {
+    "summary": "Spawns a single visual particle with its own color, size, position, motion, and fade-out behavior.",
+    "params": {
+      "color": "Hex RGB color of the particle.",
+      "fullbright": "Whether the particle ignores sector lighting and renders fully lit.",
+      "lifetime": "How many tics the particle exists before disappearing.",
+      "size": "Size of the particle.",
+      "x": "X coordinate to spawn the particle at.",
+      "y": "Y coordinate to spawn the particle at.",
+      "z": "Z coordinate to spawn the particle at.",
+      "velx": "Initial velocity along the X axis.",
+      "vely": "Initial velocity along the Y axis.",
+      "velz": "Initial velocity along the Z axis.",
+      "accelx": "Acceleration applied along the X axis each tic.",
+      "accely": "Acceleration applied along the Y axis each tic.",
+      "accelz": "Acceleration applied along the Z axis each tic.",
+      "startalpha": "Initial transparency of the particle when spawned.",
+      "fadestep": "How much the particle fades each tic; -1 fades it out automatically over its lifetime."
+    }
+  },
+  "SpawnProjectile": {
+    "summary": "Fires a projectile actor, chosen by class name, from a matching actor; similar to the linedef projectile specials but using a class name instead of a spawn ID.",
+    "params": {
+      "tid": "TID of the actor to fire the projectile from.",
+      "type": "Class name of the projectile actor to spawn.",
+      "angle": "Launch angle for the projectile.",
+      "speed": "Horizontal speed of the projectile.",
+      "vspeed": "Vertical speed of the projectile.",
+      "gravity": "Whether the projectile is affected by gravity.",
+      "newtid": "TID to assign to the spawned projectile."
+    }
+  },
+  "SpawnSpot": {
+    "summary": "Spawns an actor at the location of an existing spot actor rather than at exact coordinates, spawning at every matching spot if more than one shares the TID.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "spottid": "TID of the spot actor(s) to spawn at.",
+      "tid": "TID to assign to the newly spawned actor.",
+      "angle": "Facing direction to give the new actor."
+    }
+  },
+  "SpawnSpotFacing": {
+    "summary": "Spawns an actor at a spot actor's location, taking on that spot's facing angle instead of a specified one.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "spottid": "TID of the spot actor to spawn at.",
+      "tid": "TID to assign to the newly spawned actor."
+    }
+  },
+  "SpawnSpotFacingForced": {
+    "summary": "Works like the facing-spot spawn function, but forces the spawn to succeed even where it would normally be blocked; use with care.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "spottid": "TID of the spot actor to spawn at.",
+      "tid": "TID to assign to the newly spawned actor."
+    }
+  },
+  "SpawnSpotForced": {
+    "summary": "Works like the basic spot spawn function, but forces the spawn to succeed even where it would normally be blocked; use with care.",
+    "params": {
+      "classname": "Class name of the actor to spawn.",
+      "spottid": "TID of the spot actor(s) to spawn at.",
+      "tid": "TID to assign to the newly spawned actor.",
+      "angle": "Facing direction to give the new actor."
+    }
+  },
+  "Sqrt": {
+    "summary": "Computes the square root of an integer or fixed-point number.",
+    "params": {
+      "number": "Value to take the square root of."
+    }
+  },
+  "Stairs_BuildDown": {
+    "summary": "Builds a descending staircase across sectors tagged for stair building, lowering one step at a time with a pause between each.",
+    "params": {
+      "tag": "Tag of the first sector in the staircase.",
+      "speed": "How fast each step descends.",
+      "height": "Height of each individual step.",
+      "delay": "Tics to wait between lowering successive steps.",
+      "reset": "Tics until the stairs rise back to their original height; 0 means never."
+    }
+  },
+  "Stairs_BuildDownDoom": {
+    "summary": "Builds a descending staircase using the original Doom-style timing and speed calculations.",
+    "params": {}
+  },
+  "Stairs_BuildDownDoomSync": {
+    "summary": "Builds a descending staircase in classic Doom style, with step speeds adjusted so they all finish lowering at the same time.",
+    "params": {}
+  },
+  "Stairs_BuildDownSync": {
+    "summary": "Builds a descending staircase where each step's speed is scaled so every step finishes lowering at the same time.",
+    "params": {
+      "tag": "Tag of the first sector in the staircase.",
+      "speed": "Speed of the first step; later steps are scaled to finish together.",
+      "height": "Height of each individual step.",
+      "reset": "Tics until the stairs rise back to their original height; 0 means never."
+    }
+  },
+  "Stairs_BuildUp": {
+    "summary": "Builds an ascending staircase across sectors tagged for stair building, raising one step at a time with a pause between each.",
+    "params": {
+      "tag": "Tag of the first sector in the staircase.",
+      "speed": "How fast each step rises.",
+      "height": "Height of each individual step.",
+      "delay": "Tics to wait between raising successive steps.",
+      "reset": "Tics until the stairs return to their original height; 0 means never."
+    }
+  },
+  "Stairs_BuildUpDoom": {
+    "summary": "Builds a rising staircase from a group of sectors, using the classic Doom staircase-building rules to pick which sectors belong to it.",
+    "params": {
+      "tag": "Tag identifying the first sector of the staircase.",
+      "speed": "Rate at which each step rises.",
+      "height": "Height each step rises by.",
+      "delay": "Number of tics to pause between raising successive steps.",
+      "reset": "Tics before the staircase lowers back to its starting height (0 means it never resets)."
+    }
+  },
+  "Stairs_BuildUpDoomCrush": {
+    "summary": "Builds a rising staircase the same way as the standard Doom staircase special, but crushes anything caught beneath the rising steps.",
+    "params": {}
+  },
+  "Stairs_BuildUpDoomSync": {
+    "summary": "Builds a rising staircase like the Doom staircase special, but times every step so they all finish rising together.",
+    "params": {}
+  },
+  "Stairs_BuildUpSync": {
+    "summary": "Builds a staircase out of sectors flagged with the stairs special type, adjusting each step's speed so every one reaches its final height at the same moment.",
+    "params": {
+      "tag": "Tag of the first sector in the staircase.",
+      "speed": "Rate at which the first step rises; later steps are adjusted so all finish together.",
+      "height": "Height each step rises by.",
+      "reset": "Tics before the staircase lowers back to its starting height (0 means it never resets)."
+    }
+  },
+  "StartConversation": {
+    "summary": "Opens a dialog conversation with the actor identified by talker_tid.",
+    "params": {
+      "talker_tid": "Thing ID of the actor to begin the conversation with.",
+      "facetalker": "Whether the player should turn to face the talking actor (1) or keep its current facing (0)."
+    }
+  },
+  "Static_Init": {
+    "summary": "Configures a special sector property at map startup, reproducing several classic line effects such as custom gravity, damage, lighting, sector links, or sky replacement, chosen by the prop value.",
+    "params": {}
+  },
+  "StopSound": {
+    "summary": "Stops whatever sound is currently playing on a given channel for the actor matching tid.",
+    "params": {
+      "tid": "Thing ID of the actor whose sound should be stopped; 0 targets the script's activator.",
+      "channel": "Which sound channel to stop playback on."
+    }
+  },
+  "StrArg": {
+    "summary": "Converts a string into an integer token that action specials can accept where they expect a numeric argument.",
+    "params": {
+      "string": "The string value to convert into its numeric token form."
+    }
+  },
+  "StrCmp": {
+    "summary": "Compares two strings character by character and reports whether they are equal or which one is alphabetically greater.",
+    "params": {
+      "string1": "First string in the comparison.",
+      "string2": "Second string in the comparison.",
+      "maxcomparenum": "Limits the comparison to only this many leading characters of each string."
+    }
+  },
+  "StrCpy": {
+    "summary": "Copies characters from a source string into a destination character array, optionally starting partway through the source.",
+    "params": {
+      "destination": "Array that receives the copied characters.",
+      "source": "String to copy from.",
+      "source_index": "Character position in the source string to start copying from."
+    }
+  },
+  "StrLeft": {
+    "summary": "Builds a new string made of the first few characters of another string.",
+    "params": {
+      "string": "Source string to take characters from.",
+      "length": "How many leading characters to keep."
+    }
+  },
+  "StrLen": {
+    "summary": "Reports how many characters are in a given string.",
+    "params": {
+      "string": "The string to measure."
+    }
+  },
+  "StrMid": {
+    "summary": "Extracts a substring from the middle of a string, starting at a given position and running for a given number of characters.",
+    "params": {
+      "string": "Source string to extract from.",
+      "start": "Character position where the extracted substring begins.",
+      "length": "Number of characters to extract."
+    }
+  },
+  "StrParam": {
+    "summary": "Builds a new formatted string on the fly, using the same formatting rules as printing or logging text, and returns a reference to it.",
+    "params": {}
+  },
+  "StrRight": {
+    "summary": "Builds a new string made of the last few characters of another string.",
+    "params": {
+      "string": "Source string to take characters from.",
+      "length": "How many trailing characters to keep."
+    }
+  },
+  "SwapActorTeleFog": {
+    "summary": "Swaps an actor's entry and exit teleport-fog types with each other.",
+    "params": {
+      "tid": "Thing ID of the actor to swap fog types for; 0 means the script's activator."
+    }
+  },
+  "TagWait": {
+    "summary": "Pauses the running script until every sector sharing the given tag has finished moving.",
+    "params": {
+      "tag": "Tag of the sector(s) to wait on."
+    }
+  },
+  "TakeActorInventory": {
+    "summary": "Removes a quantity of an inventory item from a specific actor, including items normally protected from being dropped.",
+    "params": {
+      "tid": "Thing ID of the actor to take the item from; 0 affects all players.",
+      "inventory_item": "Name of the inventory item to remove.",
+      "amount": "How many of the item to remove."
+    }
+  },
+  "TakeInventory": {
+    "summary": "Removes a quantity of an inventory item from the script's activator, including items normally protected from being dropped.",
+    "params": {
+      "inventory_item": "Name of the inventory item to remove.",
+      "amount": "How many of the item to remove."
+    }
+  },
+  "Teleport": {
+    "summary": "Moves the activating actor to a teleport destination, optionally narrowing the choice of destination to a tagged sector.",
+    "params": {
+      "tid": "Thing ID of the destination spot to teleport to; a random match is used if several share the ID.",
+      "tag": "Limits the destination search to spots within a sector carrying this tag.",
+      "nosourcefog": "If set, suppresses the teleport fog at the actor's original location."
+    }
+  },
+  "Teleport_EndGame": {
+    "summary": "Ends the current game session.",
+    "params": {}
+  },
+  "Teleport_Line": {
+    "summary": "Silently moves an actor crossing one line to the position of a paired line, without spawning teleport fog.",
+    "params": {
+      "thisid": "Line ID of the line this special is placed on.",
+      "destid": "Line ID of the paired destination line.",
+      "flip": "If set, rotates the teleported actor 180 degrees on arrival."
+    }
+  },
+  "Teleport_NewMap": {
+    "summary": "Sends the player to a different map, arriving at the player-start spot matching a chosen position number.",
+    "params": {
+      "map": "Level number of the map to travel to.",
+      "pos": "Matches the arg0 of the destination player-start spot to use.",
+      "face": "If set, keeps the player's current facing instead of using the new start spot's facing."
+    }
+  },
+  "Teleport_NoFog": {
+    "summary": "Moves the activating actor to a teleport destination instantly, without spawning fog or any delay.",
+    "params": {
+      "tid": "Thing ID of the destination spot; a random match is used if several share the ID.",
+      "useangle": "Chooses how the destination spot's facing angle is applied to the teleported actor.",
+      "tag": "Limits the destination search to spots within a sector carrying this tag.",
+      "keepheight": "If set, keeps the actor's height above the floor the same after teleporting."
+    }
+  },
+  "Teleport_NoStop": {
+    "summary": "Teleports an actor to a destination spot or tagged sector while preserving its current momentum.",
+    "params": {
+      "tid": "Thing ID of the destination teleport spot.",
+      "sectortag": "Used instead of tid on older-format maps to pick a tagged sector's spot.",
+      "nofog": "If set, skips spawning fog at the actor's departure point."
+    }
+  },
+  "Teleport_ZombieChanger": {
+    "summary": "Teleports the activating actor instantly without fog, then forces it into its pain state afterward.",
+    "params": {
+      "tid": "Thing ID of the destination spot; a random match is used if several share the ID.",
+      "tag": "Limits the destination search to spots within a sector carrying this tag."
+    }
+  },
+  "TeleportGroup": {
+    "summary": "Moves a group of actors together from one area to another, preserving their positions relative to each other.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to move; 0 affects only the activator.",
+      "source": "Teleport-destination object the group's current positions are measured against.",
+      "destination": "Teleport-destination object the group is moved relative to.",
+      "movesource": "If set, the reference actor itself is moved along with the rest of the group.",
+      "fog": "Whether to spawn teleport fog during the move."
+    }
+  },
+  "TeleportInSector": {
+    "summary": "Moves a group of actors within a tagged sector to a new area, keeping their positions relative to a reference point consistent.",
+    "params": {
+      "tag": "Tag of the sector the actors are moved from.",
+      "source_tid": "Reference spot the actors' current positions are measured against.",
+      "dest_tid": "Destination spot the actors are moved relative to.",
+      "fog": "Whether to spawn teleport fog during the move.",
+      "group_tid": "Limits which actors in the sector are moved; 0 moves all of them."
+    }
+  },
+  "TeleportOther": {
+    "summary": "Teleports a specified actor to a destination spot, typically used to relocate something other than the script's activator.",
+    "params": {
+      "tid": "Thing ID of the actor to teleport.",
+      "destination_tid": "Thing ID of the map spot to teleport the actor to.",
+      "fog": "Whether to spawn teleport fog during the move."
+    }
+  },
+  "Thing_Activate": {
+    "summary": "Wakes a dormant actor, letting it take damage and fight back, and runs its custom Activate behavior if any is defined.",
+    "params": {
+      "tid": "Thing ID of the actor to activate; 0 means the script's own activator."
+    }
+  },
+  "Thing_ChangeTID": {
+    "summary": "Reassigns the Thing ID of one or more actors to a new value.",
+    "params": {
+      "oldtid": "Current Thing ID of the actor(s) to retag; 0 means the script's activator.",
+      "newtid": "New Thing ID to assign."
+    }
+  },
+  "Thing_Damage": {
+    "summary": "Inflicts damage on actors matching a given Thing ID, with the means-of-death determining what obituary message appears.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to damage; 0 affects whoever activated the script.",
+      "amount": "Amount of damage to deal.",
+      "mod": "Means-of-death type used to pick the obituary message."
+    }
+  },
+  "Thing_Damage2": {
+    "summary": "Inflicts damage on actors matching a given Thing ID, letting the damage type be specified by name rather than a fixed code.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to damage; 0 affects whoever activated the script.",
+      "amount": "Amount of damage to deal.",
+      "type": "Name of the damage type to apply."
+    }
+  },
+  "Thing_Deactivate": {
+    "summary": "Puts a monster back into a dormant state so it cannot take damage or attack, and runs its custom Deactivate behavior if any is defined; has no effect on players.",
+    "params": {
+      "tid": "Thing ID of the actor to deactivate; 0 means the script's own activator."
+    }
+  },
+  "Thing_Destroy": {
+    "summary": "Kills actors selected by Thing ID and/or sector tag, affecting only actors that can normally be damaged.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to destroy; 0 matches by tag alone.",
+      "damage": "Amount of damage to apply; a nonzero value guarantees a kill.",
+      "tag": "Limits the effect to actors within sectors carrying this tag."
+    }
+  },
+  "Thing_Hate": {
+    "summary": "Makes one actor target another as its enemy instead of the player, with several variants controlling whether it also reacts to being attacked itself.",
+    "params": {
+      "hater": "Thing ID of the actor that will be made to attack the target.",
+      "hatee": "Thing ID of the actor that becomes the target.",
+      "type": "Selects which variant of hostile behavior is used."
+    }
+  },
+  "Thing_Move": {
+    "summary": "Relocates an actor to the position of another actor.",
+    "params": {
+      "tid": "Thing ID of the actor to move.",
+      "destid": "Thing ID of the actor whose position becomes the destination.",
+      "nofog": "If set, suppresses the teleport fog normally spawned at both ends of the move."
+    }
+  },
+  "Thing_Projectile": {
+    "summary": "Spawns a projectile actor at a map spot, launched at a given angle and speed.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the projectile at.",
+      "type": "Spawn number identifying which projectile actor to create.",
+      "angle": "Direction the projectile is launched in.",
+      "speed": "Horizontal launch speed of the projectile.",
+      "vspeed": "Vertical launch speed of the projectile; positive values launch upward."
+    }
+  },
+  "Thing_Projectile2": {
+    "summary": "Spawns a projectile like the standard projectile specials, but also assigns it a new Thing ID so it can be referenced afterward.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the projectile at.",
+      "type": "Spawn number identifying which projectile actor to create.",
+      "angle": "Direction the projectile is launched in.",
+      "speed": "Horizontal launch speed of the projectile.",
+      "vspeed": "Vertical launch speed of the projectile.",
+      "gravity": "Whether the spawned projectile falls under gravity as it travels.",
+      "newtid": "Thing ID to assign to the newly spawned projectile."
+    }
+  },
+  "Thing_ProjectileAimed": {
+    "summary": "Spawns a projectile at a map spot and fires it directly at another actor on the map.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the projectile at.",
+      "type": "Spawn number identifying which projectile actor to create.",
+      "speed": "Launch speed of the projectile.",
+      "target": "Thing ID of the actor the projectile is aimed at.",
+      "newtid": "Thing ID to assign to the newly spawned projectile."
+    }
+  },
+  "Thing_ProjectileGravity": {
+    "summary": "Spawns a projectile like the standard projectile special, but makes it fall under gravity as it travels.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the projectile at.",
+      "type": "Spawn number identifying which projectile actor to create.",
+      "angle": "Direction the projectile is launched in.",
+      "speed": "Horizontal launch speed of the projectile.",
+      "vspeed": "Vertical launch speed of the projectile."
+    }
+  },
+  "Thing_ProjectileIntercept": {
+    "summary": "Spawns a projectile that predicts a moving target's path and aims ahead of it, trying to intercept rather than aiming at its current position.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the projectile at.",
+      "type": "Spawn number identifying which projectile actor to create.",
+      "speed": "Launch speed of the projectile; higher speeds make it harder to dodge.",
+      "target": "Thing ID of the actor the projectile tries to intercept.",
+      "newtid": "Thing ID to assign to the newly spawned projectile."
+    }
+  },
+  "Thing_Raise": {
+    "summary": "Brings a dead actor back to life, similar to a resurrecting effect; does not work on players.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to resurrect; 0 targets the script's activator.",
+      "nocheck": "If set, skips the check for enough room before resurrecting."
+    }
+  },
+  "Thing_Remove": {
+    "summary": "Deletes the specified actor from the map entirely.",
+    "params": {
+      "tid": "Thing ID of the actor to remove."
+    }
+  },
+  "Thing_SetConversation": {
+    "summary": "Assigns which dialog conversation an actor uses, or clears it entirely.",
+    "params": {
+      "tid": "Thing ID of the actor to modify; 0 means the script's activator.",
+      "convid": "ID of the conversation to assign; 0 removes any conversation."
+    }
+  },
+  "Thing_SetGoal": {
+    "summary": "Sends a monster walking along a patrol path starting at a given patrol point.",
+    "params": {
+      "tid": "Thing ID of the monster to send patrolling; 0 can target the monster placing this special on itself.",
+      "goal": "Thing ID of the patrol point to head toward first.",
+      "delay": "Seconds to wait before the monster starts moving toward the patrol point.",
+      "dontchasetarget": "If set, the monster keeps following its patrol route even while it has a target, though it still attacks when able."
+    }
+  },
+  "Thing_SetSpecial": {
+    "summary": "Assigns a line-special-like action and up to three arguments to an actor.",
+    "params": {
+      "tid": "Thing ID of the actor to modify; 0 means the script's activator.",
+      "special": "Number of the special to assign to the actor.",
+      "arg0": "First argument value for the assigned special.",
+      "arg1": "Second argument value for the assigned special.",
+      "arg2": "Third argument value for the assigned special."
+    }
+  },
+  "Thing_SetTranslation": {
+    "summary": "Applies a color translation to an actor, optionally matching the translation currently used by the script's activator.",
+    "params": {
+      "tid": "Thing ID of the actor to recolor; 0 means the script's activator.",
+      "translation": "Translation number to apply, or -1 to copy the activator's own translation."
+    }
+  },
+  "Thing_Spawn": {
+    "summary": "Creates a new actor at a map spot, identified by its spawn number.",
+    "params": {
+      "tid": "Thing ID of the map spot where the actor is spawned.",
+      "type": "Spawn number identifying which actor to create.",
+      "angle": "Direction the spawned actor faces.",
+      "newtid": "Thing ID to assign to the newly spawned actor."
+    }
+  },
+  "Thing_SpawnFacing": {
+    "summary": "Creates a new actor at a map spot, facing the same direction the spot itself faces.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the actor at.",
+      "type": "Spawn number identifying which actor to create.",
+      "nofog": "If set, no teleport fog is spawned with the new actor.",
+      "newtid": "Thing ID to assign to the newly spawned actor."
+    }
+  },
+  "Thing_SpawnNoFog": {
+    "summary": "Creates a new actor at a map spot without spawning the usual teleport fog.",
+    "params": {
+      "tid": "Thing ID of the map spot to spawn the actor at.",
+      "type": "Spawn number identifying which actor to create.",
+      "angle": "Direction the spawned actor faces.",
+      "newtid": "Thing ID to assign to the newly spawned actor."
+    }
+  },
+  "Thing_Stop": {
+    "summary": "Instantly halts an actor's current movement by zeroing out its speed and acceleration.",
+    "params": {
+      "tid": "Thing ID of the actor to stop."
+    }
+  },
+  "ThingCount": {
+    "summary": "Counts actors on the map matching a given spawn type, Thing ID, or both; dead monsters are not counted.",
+    "params": {
+      "type": "Spawn number of the actor type to count; a wildcard counts regardless of type.",
+      "tid": "Thing ID to filter by; 0 counts regardless of Thing ID."
+    }
+  },
+  "ThingCountName": {
+    "summary": "Counts actors on the map matching a given class name, optionally also filtered by Thing ID; dead monsters are not counted.",
+    "params": {
+      "classname": "Class name of the actor type to count.",
+      "tid": "Thing ID to filter by; 0 counts regardless of Thing ID."
+    }
+  },
+  "ThingCountNameSector": {
+    "summary": "Counts actors within a tagged sector that match a given class name and Thing ID.",
+    "params": {
+      "classname": "Class name of the actor type to count.",
+      "tid": "Thing ID to filter by; 0 counts regardless of Thing ID.",
+      "tag": "Tag of the sector(s) to search for matching actors."
+    }
+  },
+  "ThingCountSector": {
+    "summary": "Counts living actors within a tagged sector that match a given spawn type and Thing ID.",
+    "params": {
+      "type": "Spawn number of the actor type to count; a wildcard counts regardless of type.",
+      "tid": "Thing ID to filter by; 0 counts regardless of Thing ID.",
+      "tag": "Tag of the sector(s) to search for matching actors."
+    }
+  },
+  "ThingSound": {
+    "summary": "Plays a sound originating from an actor's location, growing quieter with distance like any other positional sound.",
+    "params": {
+      "tid": "Thing ID of the actor the sound plays from.",
+      "sound": "Name of the sound to play, as defined in the sound definitions.",
+      "volume": "Loudness of the sound, from 0 (silent) to 127 (full volume)."
+    }
+  },
+  "ThrustThing": {
+    "summary": "Pushes an actor in a given direction with a given amount of force.",
+    "params": {
+      "angle": "Direction to push the actor in.",
+      "force": "Strength of the push.",
+      "nolimit": "Must be set when the push force exceeds the normal maximum, to allow it anyway.",
+      "tid": "Thing ID of the actor to push; 0 affects the script's activator."
+    }
+  },
+  "ThrustThingZ": {
+    "summary": "Pushes an actor vertically by a given force, either adding to its current vertical speed or resetting it first.",
+    "params": {}
+  },
+  "Timer": {
+    "summary": "Returns how many tics have elapsed since the current level (or hub, for hub maps) began.",
+    "params": {}
+  },
+  "Transfer_CeilingLight": {
+    "summary": "Makes a tagged sector's ceiling use the light level of the sector on the near side of the line.",
+    "params": {
+      "tag": "Tag of the sector whose ceiling light level is affected."
+    }
+  },
+  "Transfer_FloorLight": {
+    "summary": "Makes a tagged sector's floor use the light level of the sector on the near side of the line.",
+    "params": {
+      "tag": "Tag of the sector whose floor light level is affected."
+    }
+  },
+  "Transfer_Heights": {
+    "summary": "Splits a sector into layered regions with an independent fake floor and ceiling, letting a different sector supply the look of deep water or a similar overhead effect.",
+    "params": {
+      "tag": "Tag of the sector that receives the layered fake floor/ceiling effect.",
+      "flags": "Options controlling how the fake floor and ceiling are rendered."
+    }
+  },
+  "Transfer_WallLight": {
+    "summary": "Copies the light level from this line's front sector onto one or more lines sharing a given line ID.",
+    "params": {
+      "lineid": "ID of the line(s) that receive the transferred light level.",
+      "flags": "Options controlling which part of the target line is affected."
+    }
+  },
+  "TranslucentLine": {
+    "summary": "Makes one or more lines see-through by a chosen amount, optionally using additive blending.",
+    "params": {
+      "lineid": "ID of the line(s) to make translucent; 0 affects only the line this is placed on.",
+      "amount": "How transparent the line is, from 0 (nearly invisible) to 255 (fully opaque).",
+      "additive": "Whether the translucency uses additive blending instead of normal blending.",
+      "moreflags": "Extended line flags to apply alongside the translucency."
+    }
+  },
+  "UnMorphActor": {
+    "summary": "Reverts a morphed actor back to its original form.",
+    "params": {
+      "tid": "Thing ID of the actor(s) to revert; 0 means the script's activator.",
+      "force": "Forces the unmorph to succeed even in situations it would normally be blocked."
+    }
+  },
+  "UniqueTID": {
+    "summary": "Returns a Thing ID that is not currently assigned to any actor on the map.",
+    "params": {}
+  },
+  "UseActorInventory": {
+    "summary": "Forces a specific actor to use an inventory item it is carrying, if it has one.",
+    "params": {
+      "tid": "Thing ID of the actor that should use the item; 0 applies it to all players.",
+      "classname": "Class name of the inventory item to use."
+    }
+  },
+  "UseInventory": {
+    "summary": "Forces the script's activator to use an inventory item it is carrying, if it has one.",
+    "params": {
+      "classname": "Class name of the inventory item to use."
+    }
+  },
+  "UsePuzzleItem": {
+    "summary": "Runs a script when a player holding a specific puzzle item uses it, consuming the item in the process; placed on a thing or line rather than called from a script.",
+    "params": {
+      "item": "Puzzle item class/number the player must be holding.",
+      "script": "Script to run when the item is used.",
+      "s_arg1": "First argument passed to the script.",
+      "s_arg2": "Second argument passed to the script.",
+      "s_arg3": "Third argument passed to the script."
+    }
+  },
+  "VectorAngle": {
+    "summary": "Computes the angle of a 2D vector, measured counterclockwise from east.",
+    "params": {
+      "x": "X component of the vector.",
+      "y": "Y component of the vector."
+    }
+  },
+  "VectorLength": {
+    "summary": "Computes the length (magnitude) of a 2D vector.",
+    "params": {
+      "x": "X component of the vector.",
+      "y": "Y component of the vector."
+    }
+  },
+  "Warp": {
+    "summary": "Teleports the calling actor to a position relative to another reference actor, with many flags controlling offset, angle, and velocity handling.",
+    "params": {
+      "tid": "Thing ID of the reference actor to warp relative to.",
+      "xofs": "Forward/backward offset from the reference actor.",
+      "yofs": "Sideways offset from the reference actor.",
+      "zofs": "Vertical offset from the reference actor.",
+      "angle": "Angle offset applied relative to the reference actor's facing.",
+      "flags": "Options controlling how the offset, angle, and appearance of the warp are handled.",
+      "success_state": "State to jump to if the warp succeeds.",
+      "exact": "Whether the success state name must match exactly or a partial match is accepted.",
+      "heightoffset": "Multiplier applied to the reference actor's height to add extra vertical offset.",
+      "radiusoffset": "Multiplier applied to the reference actor's radius to add extra offset.",
+      "pitch": "Amount of pitch to add to the warped actor's view angle."
+    }
+  },
+  "CheckClass": {
+    "summary": "Reports whether a given actor class name is actually defined and recognized by the engine.",
+    "params": {
+      "classname": "Name of the actor class to validate."
+    }
+  },
+  "Floor": {
+    "summary": "Rounds a fixed-point number down to the nearest whole number.",
+    "params": {
+      "value": "The fixed-point number to round down."
+    }
+  },
+  "GetCVar": {
+    "summary": "Returns the integer value of a named console variable, checking the script's activator when the variable is user-scoped.",
+    "params": {
+      "cvar": "Name of the console variable to read."
+    }
+  },
+  "GetCVarString": {
+    "summary": "Returns the text value of a named console variable, checking the script's activator when the variable is user-scoped.",
+    "params": {
+      "cvar": "Name of the console variable to read."
+    }
+  },
+  "GetUserCVarString": {
+    "summary": "Returns the text value of a named user-scoped console variable belonging to a specific player.",
+    "params": {
+      "playernumber": "Player number whose variable to read, from 0 to 7.",
+      "cvar": "Name of the user console variable to read."
+    }
+  },
+  "LineAttack": {
+    "summary": "Fires a hitscan attack from an actor in a given direction, dealing damage and optionally spawning an impact puff.",
+    "params": {
+      "tid": "TID of the actor firing the attack; 0 uses the script's activator.",
+      "angle": "Horizontal direction to fire the attack.",
+      "pitch": "Vertical angle to fire the attack.",
+      "damage": "Amount of damage the attack deals on a hit.",
+      "pufftype": "Actor class spawned as the impact puff.",
+      "damagetype": "Damage type applied by the attack.",
+      "range": "Maximum distance the attack can travel and still hit.",
+      "flags": "Additional options controlling how the attack behaves.",
+      "pufftid": "TID to assign to the spawned puff actor."
+    }
+  },
+  "SetCVar": {
+    "summary": "Writes a new numeric value to a mod-defined console variable; built-in engine variables cannot be changed this way.",
+    "params": {
+      "cvar": "Name of the console variable to set.",
+      "value": "New integer value to assign to it."
+    }
+  },
+  "SetUserCVar": {
+    "summary": "Writes a new numeric value to a mod-defined console variable belonging to a specific player; built-in variables or a missing player cause it to fail.",
+    "params": {
+      "playernumber": "Number identifying the player whose variable to set.",
+      "cvar": "Name of the per-player console variable to set.",
+      "value": "New integer value to assign."
+    }
+  },
+  "SetUserCVarString": {
+    "summary": "Writes a new string value to a mod-defined console variable belonging to a specific player; built-in variables or a missing player cause it to fail.",
+    "params": {
+      "playernumber": "Number identifying the player whose variable to set.",
+      "cvar": "Name of the per-player console variable to set.",
+      "value": "New string value to assign."
+    }
+  },
+  "Fs_Excute": {
+    "summary": "Runs a FraggleScript script, optionally restricted to one side of the triggering line and gated behind a required key.",
+    "params": {
+      "scriptnumber": "Number identifying which FraggleScript script to run.",
+      "side": "Which side of the triggering line can activate this special.",
+      "keynum": "Key required to activate the special, as defined in LOCKDEFS.",
+      "message": "Which message is shown to the player if they lack the required key."
+    }
+  }
+}

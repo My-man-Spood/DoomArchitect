@@ -349,10 +349,23 @@ internal sealed class BcsPreprocessor
     private void AddDiagnostic(string message, int line, int column, BcsDiagnosticSeverity severity = BcsDiagnosticSeverity.Error) =>
         _diagnostics.Add(new BcsDiagnostic(message, line, column, severity, CurrentSourcePath));
 
-    private static string? ResolveIncludePath(string rawPath, string? baseDir)
+    /// <summary>
+    /// A rooted path is used as-is; a relative one resolves against
+    /// <paramref name="baseDir"/> when there is one (a real file-backed
+    /// source). With no base directory at all (a lump/PK3-entry-backed
+    /// source, or a brand new unsaved buffer - this project's own
+    /// in-memory-editing cases, which the real compiler never has, since
+    /// it always runs from a real file on disk) the raw name is passed
+    /// through unchanged rather than failing outright - letting whoever
+    /// supplied <see cref="BcsIncludeResolver.ReadFile"/> decide what a
+    /// bare name like <c>"zcommon.acs"</c> means (a resource-set search,
+    /// for both <c>ScriptDocument</c>'s live diagnostics and
+    /// <c>ScriptCompilerRunner</c>'s own include-discovery pass).
+    /// </summary>
+    private static string ResolveIncludePath(string rawPath, string? baseDir)
     {
         if (Path.IsPathRooted(rawPath)) return rawPath;
-        return baseDir == null ? null : Path.Combine(baseDir, rawPath);
+        return baseDir == null ? rawPath : Path.Combine(baseDir, rawPath);
     }
 
     /// <summary>
@@ -412,12 +425,6 @@ internal sealed class BcsPreprocessor
         var reportDiagnostics = _sourceStack.Count == 1;
 
         var resolved = ResolveIncludePath(rawPath, CurrentDirectory);
-        if (resolved == null)
-        {
-            if (reportDiagnostics) AddDiagnostic($"cannot resolve relative path '{rawPath}' - save this file first", pathToken.Line, pathToken.Column, BcsDiagnosticSeverity.Warning);
-            return;
-        }
-
         var normalized = Path.GetFullPath(resolved);
 
         if (isImport && !_importedPaths.Add(normalized)) return; // already imported anywhere - silent reuse, confirmed real #import semantics

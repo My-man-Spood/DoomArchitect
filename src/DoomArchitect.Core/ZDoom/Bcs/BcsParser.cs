@@ -50,8 +50,12 @@ namespace DoomArchitect.Core.ZDoom.Bcs;
 /// doesn't get a bogus "unknown directive" diagnostic. `strict`, by
 /// contrast, genuinely is valid bare (no `#`) - it's a namespace
 /// qualifier (`strict namespace Foo { ... }`, confirmed from that same
-/// source's `is_namespace`), not a pragma; namespaces aren't modeled by
-/// this pass at all, so it's tolerated and skipped rather than flagged.
+/// source's `is_namespace`), not a pragma - and namespaces ARE modeled
+/// (<see cref="ParseNamespace"/>, <see cref="IsNamespaceStart"/>), a real
+/// block construct, not tolerated-and-skipped: a `strict namespace { ... }`
+/// this pass couldn't recognize at all used to leave its own closing `}`
+/// unconsumed, with nothing left to find it (found live, against a real
+/// `zcommon.bcs` file - see `TODO/scripting-acs-compilation.md`).
 /// </summary>
 /// <summary>
 /// Which kind of declaration-shaped token run <see cref="BcsParser.DeclarationScanner"/>
@@ -195,6 +199,9 @@ public sealed partial class BcsParser
     /// <summary>Every comment token skipped by the most recent <see cref="Advance"/> call to reach <see cref="_current"/> - see <see cref="ExtractDocComment"/>.</summary>
     private List<BcsToken> _currentLeadingComments = new();
 
+    /// <summary>Tokens already pulled from <see cref="_preprocessor"/> while <see cref="PeekAhead"/> looked ahead of <see cref="_current"/>, not yet consumed - <see cref="Advance"/> drains this first, same comment-tracking it already captures today, before pulling a fresh one.</summary>
+    private readonly Queue<(BcsToken Token, List<BcsToken> Comments)> _lookahead = new();
+
     public BcsParser(BcsTokenizer tokenizer, List<BcsDiagnostic> diagnostics, BcsIncludeResolver? includeResolver = null)
     {
         _preprocessor = new BcsPreprocessor(tokenizer, diagnostics, includeResolver);
@@ -252,7 +259,54 @@ public sealed partial class BcsParser
         return new BcsProgram(unit, diagnostics, parser.IncludedPaths);
     }
 
-    private void Advance() => _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
+    private void Advance()
+    {
+        if (_lookahead.Count > 0)
+        {
+            (_current, _currentLeadingComments) = _lookahead.Dequeue();
+            return;
+        }
+
+        _current = _preprocessor.NextSignificantToken(includeNewlines: false, out _currentLeadingComments);
+    }
+
+    /// <summary>The token <paramref name="count"/> positions after <see cref="_current"/> (1 = the very next one) - without consuming it, pulling fresh from <see cref="_preprocessor"/> and buffering into <see cref="_lookahead"/> as needed. Needed for <see cref="IsNamespaceStart"/>'s own real disambiguation (confirmed from `zt-bcc`'s own `is_namespace`), which can need to see up to two tokens past `private`/`internal` before knowing whether it's looking at a namespace or a plain qualified declaration.</summary>
+    private BcsToken PeekAhead(int count)
+    {
+        while (_lookahead.Count < count)
+        {
+            var token = _preprocessor.NextSignificantToken(includeNewlines: false, out var comments);
+            _lookahead.Enqueue((token, comments));
+        }
+
+        return _lookahead.ElementAt(count - 1).Token;
+    }
+
+    /// <summary>
+    /// Confirmed real disambiguation from `zt-bcc`'s own `src/parse/library.c`
+    /// (`is_namespace`): a bare <see cref="BcsTokenType.Strict"/> is always
+    /// a namespace (there's no other real bare use for it - confirmed, see
+    /// this class's own remarks); a bare <see cref="BcsTokenType.Namespace"/>
+    /// only if the very next token is a name or <c>{</c> (an anonymous,
+    /// non-strict, non-hidden namespace with neither isn't real grammar);
+    /// <see cref="BcsTokenType.Private"/>/<see cref="BcsTokenType.Internal"/>
+    /// (not namespace-exclusive on their own - confirmed from `dec.c`'s own
+    /// `read_dec`, they can equally qualify a plain declaration like
+    /// `private int x;`) only count as starting a namespace if followed by
+    /// `strict`, or by `namespace` *and* (one token further) a name or `{`.
+    /// </summary>
+    private bool IsNamespaceStart() => _current.Type switch
+    {
+        BcsTokenType.Strict => true,
+        BcsTokenType.Namespace => PeekAhead(1).Type is BcsTokenType.Identifier or BcsTokenType.OpenCurly,
+        BcsTokenType.Private or BcsTokenType.Internal => PeekAhead(1).Type switch
+        {
+            BcsTokenType.Strict => true,
+            BcsTokenType.Namespace => PeekAhead(2).Type is BcsTokenType.Identifier or BcsTokenType.OpenCurly,
+            _ => false,
+        },
+        _ => false,
+    };
 
     private void AddDiagnostic(string message, BcsToken token) =>
         _diagnostics.Add(new BcsDiagnostic(message, token.Line, token.Column, sourcePath: token.SourcePath));
@@ -301,8 +355,22 @@ public sealed partial class BcsParser
         var unit = new BcsCompilationUnit();
         while (_current.Type != BcsTokenType.EndOfInput)
         {
+            var before = _current;
             var member = ParseTopLevelMember();
             if (member != null) unit.Members.Add(member);
+
+            // Guarantees this loop always makes forward progress, no
+            // matter what ParseTopLevelMember/Recover do - confirmed
+            // real, reproducible hang otherwise: Recover()'s own "leave
+            // a stray '}' at depth 0 for an enclosing SkipBracedBlock to
+            // see" is correct *inside* a block, but ParseTopLevelMember
+            // has no enclosing block to hand it to - a '}' that
+            // shouldn't be here at all (e.g. a namespace body this parser
+            // doesn't model as its own block construct, confirmed live
+            // against a real `strict namespace { ... }` file) left
+            // Recover() returning with _current completely unchanged,
+            // spinning this loop forever on the exact same token.
+            if (ReferenceEquals(_current, before)) Advance();
         }
 
         // #define/#libdefine are now fully consumed by _preprocessor
@@ -323,6 +391,21 @@ public sealed partial class BcsParser
     {
         var start = _current;
 
+        if (IsNamespaceStart()) return ParseNamespace();
+
+        // A lone 'private'/'internal' that IsNamespaceStart already said
+        // isn't one - confirmed real grammar (dec.c's own read_dec): both
+        // can equally qualify a plain declaration ('private int x;'),
+        // not just a namespace. Not modeled (visibility), same as the
+        // already-untracked 'global'/'static'/'const'/'world' qualifiers
+        // ParseVariableDeclaration itself skips - just consumed, then
+        // re-dispatched on whatever actually follows.
+        if (_current.Type is BcsTokenType.Private or BcsTokenType.Internal)
+        {
+            Advance();
+            return ParseTopLevelMember();
+        }
+
         if (_current.Type == BcsTokenType.Hash) return ParseHashDirective();
         if (_current.Type == BcsTokenType.Script) return ParseScript();
         if (_current.Type == BcsTokenType.Special) return ParseSpecial();
@@ -336,18 +419,117 @@ public sealed partial class BcsParser
             return ParseVariableDeclaration();
         }
 
-        // 'strict' alone (bare, no '#') is real grammar - a namespace
-        // qualifier, not a pragma (see this class's own remarks) -
-        // tolerated and skipped since namespaces aren't modeled here.
-        if (_current.Type == BcsTokenType.Strict)
-        {
-            Advance();
-            SkipToSemicolon();
-            return null;
-        }
-
         AddDiagnostic($"unexpected token '{start.Value}'", start);
         return Recover();
+    }
+
+    /// <summary>
+    /// `[private|internal] [strict] namespace [name] { members }` -
+    /// confirmed real grammar from `zt-bcc`'s own `src/parse/library.c`
+    /// (`read_namespace`). Only ever called once <see cref="IsNamespaceStart"/>
+    /// has already confirmed the qualifiers/`namespace` keyword are
+    /// really there, so the consuming loop below never needs to
+    /// re-check for them. Each member is parsed by
+    /// <see cref="ParseTopLevelMember"/> itself - a namespace member can
+    /// be a nested namespace (real grammar:
+    /// `namespace_member ::= namespace_decl | declaration | ...`), which
+    /// this handles for free via the same recursive call, not a second
+    /// copy of this method.
+    /// </summary>
+    private BcsNamespaceDeclaration ParseNamespace()
+    {
+        var start = _current;
+        var docComment = ExtractDocComment(_currentLeadingComments, start.Line);
+
+        var qualifiers = new List<string>();
+        while (_current.Type is BcsTokenType.Private or BcsTokenType.Internal or BcsTokenType.Strict)
+        {
+            qualifiers.Add(_current.Value);
+            Advance();
+        }
+
+        // IsNamespaceStart's own lookahead already guarantees this for
+        // every real case (Namespace/Private/Internal all confirm it's
+        // actually there) - the one exception is a bare Strict, which
+        // (matching the real is_namespace exactly) is unconditionally
+        // treated as a namespace start with no lookahead at all, since
+        // real grammar never has a bare 'strict' NOT followed by one.
+        // Malformed input can still violate that, so this stays a real
+        // check rather than blindly consuming whatever token is here.
+        if (_current.Type != BcsTokenType.Namespace)
+        {
+            AddDiagnostic("expected 'namespace'", _current);
+            return new BcsNamespaceDeclaration
+            {
+                Qualifiers = string.Join(" ", qualifiers),
+                DocComment = docComment,
+                Line = start.Line,
+                Column = start.Column,
+                SourcePath = start.SourcePath,
+            };
+        }
+
+        Advance(); // 'namespace'
+
+        var nameParts = new List<string>();
+        if (_current.Type == BcsTokenType.Identifier)
+        {
+            nameParts.Add(_current.RawValue);
+            Advance();
+            while (_current.Type is BcsTokenType.Dot or BcsTokenType.DoubleColon)
+            {
+                var separator = _current.Value;
+                Advance();
+                if (_current.Type != BcsTokenType.Identifier)
+                {
+                    AddDiagnostic("expected a namespace name", _current);
+                    break;
+                }
+
+                nameParts.Add(separator + _current.RawValue);
+                Advance();
+            }
+        }
+
+        var node = new BcsNamespaceDeclaration
+        {
+            Qualifiers = string.Join(" ", qualifiers),
+            Name = string.Concat(nameParts),
+            DocComment = docComment,
+            Line = start.Line,
+            Column = start.Column,
+            SourcePath = start.SourcePath,
+        };
+
+        if (_current.Type != BcsTokenType.OpenCurly)
+        {
+            AddDiagnostic("expected '{' after 'namespace'", _current);
+            return node;
+        }
+
+        Advance(); // '{'
+
+        while (_current.Type != BcsTokenType.CloseCurly && _current.Type != BcsTokenType.EndOfInput)
+        {
+            var before = _current;
+            var member = ParseTopLevelMember();
+            if (member != null) node.Members.Add(member);
+
+            // Same forward-progress guarantee Parse()'s own top-level
+            // loop already has, and for the exact same reason - nothing
+            // else here specifically needs it today (ParseTopLevelMember's
+            // own Recover() calls are no longer reachable without an
+            // enclosing block to misbehave against, now that this method
+            // itself IS that enclosing block), but a future member kind
+            // failing to advance on some other error path shouldn't be
+            // able to hang this loop either.
+            if (ReferenceEquals(_current, before)) Advance();
+        }
+
+        if (_current.Type == BcsTokenType.CloseCurly) Advance();
+        else AddDiagnostic("unexpected end of file inside a namespace", _current);
+
+        return node;
     }
 
     private BcsNode? ParseHashDirective()
@@ -494,16 +676,14 @@ public sealed partial class BcsParser
     }
 
     /// <summary>
-    /// <c>special [-]decimal ':' identifier '(' ... ')' ... (',' ...)*;</c> -
-    /// one statement can declare several, comma-separated entries
-    /// (confirmed from the real compiler's own `src/parse/dec.c`,
-    /// `p_read_special_list`, dec.c:2437-2451). Each entry's own name is
-    /// the identifier right after its `decimal ':'` pair, at the
-    /// statement's own top level (depth 0, i.e. not inside that entry's
-    /// own `(...)` paramspec list) - a small dedicated scan rather than
-    /// <see cref="DeclarationScanner"/>, which has no "first vs.
-    /// continuation" concept to fit this shape (there's no preceding
-    /// type-keyword trigger here at all).
+    /// <c>special entry (',' entry)* ';'</c> - one statement can declare
+    /// several, comma-separated entries (confirmed from the real
+    /// compiler's own `src/parse/dec.c`, `p_read_special_list`,
+    /// dec.c:2437-2451). Each entry is parsed structurally by
+    /// <see cref="ParseOneSpecialEntry"/> so a real
+    /// <see cref="BcsSymbol.Signature"/> can be built, not just a bare
+    /// name - exactly the parameter info the user reported missing on
+    /// hover for e.g. <c>Thing_Activate()</c>/<c>Exit_Normal()</c>.
     /// </summary>
     private BcsNode ParseSpecial()
     {
@@ -513,21 +693,12 @@ public sealed partial class BcsParser
 
         var headerTokens = new List<string>();
         var names = new List<BcsSymbol>();
-        BcsTokenType? prev1 = null, prev2 = null;
-        var parenDepth = 0;
 
-        while (_current.Type is not (BcsTokenType.Semicolon or BcsTokenType.EndOfInput))
+        while (_current.Type != BcsTokenType.EndOfInput)
         {
-            if (_current.Type == BcsTokenType.OpenParen) parenDepth++;
-            else if (_current.Type == BcsTokenType.CloseParen) parenDepth--;
-            else if (parenDepth == 0 && _current.Type == BcsTokenType.Identifier && prev1 == BcsTokenType.Colon && prev2 == BcsTokenType.LitDecimal)
-            {
-                names.Add(new BcsSymbol(_current.RawValue, BcsSymbolKind.Function, _current.Line, _current.Column, SourcePath: _current.SourcePath));
-            }
-
+            ParseOneSpecialEntry(headerTokens, names);
+            if (_current.Type != BcsTokenType.Comma) break;
             headerTokens.Add(_current.Value);
-            prev2 = prev1;
-            prev1 = _current.Type;
             Advance();
         }
 
@@ -539,6 +710,132 @@ public sealed partial class BcsParser
         node.Names.AddRange(names);
         return node;
     }
+
+    /// <summary>
+    /// One `special` list entry - confirmed real grammar and defaults
+    /// from the real compiler's own `read_special`/
+    /// `read_special_param_dec`/`read_special_param_list`/
+    /// `read_special_param`/`read_special_return_type` (dec.c:2453-2641):
+    /// <c>['-'] decimal ':' identifier '(' params ')' [':' returntype [':' decimal]]</c>.
+    /// <c>params</c> is either a numeric min/max shorthand
+    /// (<c>(5)</c>/<c>(2,5)</c> - an untyped special with no real
+    /// parameter types to show) or a real, comma-separated type list:
+    /// required parameters, then optionally a `;` followed by more,
+    /// now-optional ones - the exact same convention
+    /// <see cref="BcsBuiltinFunctions.Decode"/> already renders with
+    /// <c>[type]</c> brackets, reused here for consistency. A missing
+    /// return type really does default to <c>raw</c>, not <c>void</c>
+    /// (confirmed: <c>int return_spec = SPEC_RAW;</c> before that
+    /// source's own optional `read_special_return_type` call).
+    ///
+    /// Builds a real signature for the common, well-formed case; the
+    /// instant anything doesn't match this shape, gives up on a
+    /// signature for just this one entry (it still gets a bare name,
+    /// same as before this was added) and skips forward to the next
+    /// top-level comma/semicolon via <see cref="SkipSpecialEntryRemainder"/>
+    /// rather than risking a wrong diagnostic on real content - the
+    /// same permissive, recovery-first posture this statement's own
+    /// scanning already had.
+    /// </summary>
+    private void ParseOneSpecialEntry(List<string> headerTokens, List<BcsSymbol> names)
+    {
+        void Consume()
+        {
+            headerTokens.Add(_current.Value);
+            Advance();
+        }
+
+        if (_current.Type == BcsTokenType.OpSubtract) Consume(); // FUNC_EXT marker - not modeled, just consumed
+        if (_current.Type != BcsTokenType.LitDecimal) { SkipSpecialEntryRemainder(headerTokens); return; }
+        Consume();
+
+        if (_current.Type != BcsTokenType.Colon) { SkipSpecialEntryRemainder(headerTokens); return; }
+        Consume();
+
+        if (_current.Type != BcsTokenType.Identifier) { SkipSpecialEntryRemainder(headerTokens); return; }
+        var nameToken = _current;
+        Consume();
+
+        if (_current.Type != BcsTokenType.OpenParen) { SkipSpecialEntryRemainder(headerTokens); return; }
+        Consume();
+
+        var parameters = new List<string>();
+        var confident = true;
+        var optional = false;
+        while (_current.Type != BcsTokenType.CloseParen && _current.Type != BcsTokenType.EndOfInput)
+        {
+            if (_current.Type == BcsTokenType.Comma) { Consume(); continue; }
+            if (_current.Type == BcsTokenType.Semicolon) { optional = true; Consume(); continue; }
+
+            var typeName = SpecialParamTypeName(_current.Type);
+            if (typeName == null) { confident = false; Consume(); continue; } // e.g. the plain min/max-count shorthand's own decimal(s) - not a type keyword
+            parameters.Add(optional ? $"[{typeName}]" : typeName);
+            Consume();
+        }
+
+        if (_current.Type != BcsTokenType.CloseParen)
+        {
+            names.Add(new BcsSymbol(nameToken.RawValue, BcsSymbolKind.Function, nameToken.Line, nameToken.Column, SourcePath: nameToken.SourcePath));
+            return;
+        }
+        Consume();
+
+        string? returnType = null;
+        if (_current.Type == BcsTokenType.Colon)
+        {
+            Consume();
+            returnType = SpecialReturnTypeName(_current.Type);
+            if (returnType != null) Consume();
+            else confident = false;
+
+            // The optional trailing ':'<script-callable-flag> (FUNC_ASPEC
+            // entries only) - not modeled, just consumed so it doesn't get
+            // mistaken for the next entry's own leading ':' by the caller.
+            if (_current.Type == BcsTokenType.Colon)
+            {
+                Consume();
+                if (_current.Type == BcsTokenType.LitDecimal) Consume();
+            }
+        }
+
+        // The real grammar itself has no parameter names at all - only
+        // types (confirmed from read_special_param's own type switch) -
+        // so merge in this project's own researched names
+        // (BcsFunctionDocs.ApplyParameterNames) where available, same as
+        // BcsBuiltinFunctions.TryDescribe does for compiler intrinsics.
+        var signature = confident
+            ? BcsFunctionDocs.ApplyParameterNames($"function {returnType ?? "raw"} {nameToken.RawValue}({string.Join(", ", parameters)})", nameToken.RawValue)
+            : "";
+        names.Add(new BcsSymbol(nameToken.RawValue, BcsSymbolKind.Function, nameToken.Line, nameToken.Column, Signature: signature, SourcePath: nameToken.SourcePath));
+    }
+
+    /// <summary>Skips forward to the next top-level (i.e. not inside some unexpected paren group) comma or semicolon, without extracting anything - the fallback for a `special` entry that didn't match <see cref="ParseOneSpecialEntry"/>'s expected shape, so one malformed entry can't desync the rest of the statement.</summary>
+    private void SkipSpecialEntryRemainder(List<string> headerTokens)
+    {
+        var depth = 0;
+        while (_current.Type != BcsTokenType.EndOfInput)
+        {
+            if (_current.Type == BcsTokenType.OpenParen) depth++;
+            else if (_current.Type == BcsTokenType.CloseParen) depth--;
+            else if (depth <= 0 && _current.Type is BcsTokenType.Comma or BcsTokenType.Semicolon) break;
+
+            headerTokens.Add(_current.Value);
+            Advance();
+        }
+    }
+
+    private static string? SpecialParamTypeName(BcsTokenType type) => type switch
+    {
+        BcsTokenType.Raw => "raw",
+        BcsTokenType.Char or BcsTokenType.Int => "int",
+        BcsTokenType.Fixed => "fixed",
+        BcsTokenType.Bool => "bool",
+        BcsTokenType.Str => "str",
+        _ => null,
+    };
+
+    private static string? SpecialReturnTypeName(BcsTokenType type) =>
+        type == BcsTokenType.Void ? "void" : SpecialParamTypeName(type);
 
     /// <summary>
     /// <c>function TYPE NAME ( params ) { ... }</c> - <see cref="BcsFunctionDeclaration.Name"/>
@@ -635,6 +932,22 @@ public sealed partial class BcsParser
 
         string? name = null;
         if (_current.Type == BcsTokenType.Identifier) { name = _current.RawValue; Advance(); }
+
+        // An optional ': basetype' clause - confirmed real grammar from
+        // dec.c's own read_enum_base_type (e.g. the real zcommon.bcs's
+        // own "enum : fixed { ATTN_NONE = 0.0, ... }", for an enum whose
+        // members are fixed-point, not plain int, values). Not modeled
+        // (this pass doesn't type-check enum members against it), just
+        // consumed correctly so a real file using one doesn't desync the
+        // whole rest of the parse the way this did before - confirmed
+        // live, the base type's own ':' was being seen as "expected '{',
+        // got ':'" instead.
+        if (_current.Type == BcsTokenType.Colon)
+        {
+            Advance();
+            if (_current.Type is BcsTokenType.Int or BcsTokenType.Str or BcsTokenType.Bool or BcsTokenType.Fixed or BcsTokenType.Raw) Advance();
+            else AddDiagnostic("expected an enum base type after ':'", _current);
+        }
 
         var (members, _, _, _, _) = SkipBracedBlock(DeclarationScanMode.EnumMember);
         if (_current.Type == BcsTokenType.Semicolon) Advance();
@@ -845,7 +1158,14 @@ public sealed partial class BcsParser
                 }
 
                 if (_current.Type == BcsTokenType.Semicolon) Advance();
-                else AddDiagnostic("expected ';'", _current);
+                else
+                {
+                    AddDiagnostic("expected ';'", _current);
+                    // Guarantees forward progress - see Parse()'s own
+                    // remarks on the same shape of bug (report, don't
+                    // advance, loop forever on the same token).
+                    if (_current.Type != BcsTokenType.EndOfInput) Advance();
+                }
 
                 atStatementStart = true;
                 continue; // a declaration statement is depth-neutral - any brackets inside its own initializer(s) were already balanced by the expression parser itself, never touching this block's own depth

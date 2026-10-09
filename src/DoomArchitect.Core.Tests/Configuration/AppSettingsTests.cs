@@ -217,4 +217,30 @@ public class AppSettingsTests
 
         Assert.False(reloaded.GetAutoRevealActiveTab());
     }
+
+    [Fact]
+    public void GetScriptCompilerPathOverride_NothingSet_DefaultsToEmpty()
+    {
+        var settings = AppSettings.Empty();
+
+        Assert.Equal(string.Empty, settings.GetScriptCompilerPathOverride());
+    }
+
+    [Fact]
+    public void WithScriptCompilerPathOverride_ThenGet_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithScriptCompilerPathOverride("/opt/zt-bcc/zt-bcc");
+
+        Assert.Equal("/opt/zt-bcc/zt-bcc", settings.GetScriptCompilerPathOverride());
+    }
+
+    [Fact]
+    public void ScriptCompilerPathOverride_ToText_ThenParse_RoundTrips()
+    {
+        var settings = AppSettings.Empty().WithScriptCompilerPathOverride("/opt/zt-bcc/zt-bcc");
+
+        var reloaded = AppSettings.Parse(settings.ToText());
+
+        Assert.Equal("/opt/zt-bcc/zt-bcc", reloaded.GetScriptCompilerPathOverride());
+    }
 }

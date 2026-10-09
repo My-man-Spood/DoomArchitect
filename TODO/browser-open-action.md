@@ -144,6 +144,18 @@ multi-Map-tab support had to land first, a materially bigger change than
   "openable" - it's compiled ACS bytecode, not text; opening/saving it
   through a `CodeEdit` would corrupt it.
 
+### Update: saving a lump, then reopening it, served the pre-save content
+
+Real, reported bug - the lump-save path never called
+`ResourceContainerCache.Invalidate(wadPath)` after writing, unlike
+`SavePk3Entry` (`mapio-pk3-write-back.md`), which already did. The
+write to disk itself was always correct; anything that reopened the
+same WAD afterward through the cache (the resource browser's own tree
+rebuild, a freshly-opened script tab) kept serving the stale,
+pre-save `WadFile` instance instead of re-reading. Fixed by adding the
+same `Invalidate` call `SaveLump` was missing - now mirrors
+`SavePk3Entry` exactly.
+
 ## Resource browser wiring
 
 - `NamedResource` gained `SourcePath` - the full path was already known

@@ -114,6 +114,34 @@ public sealed class BcsCompilationUnit : BcsNode
     public List<BcsNode> Members { get; } = new();
 
     /// <summary>
+    /// <see cref="Members"/> (or a <see cref="BcsNamespaceDeclaration"/>'s
+    /// own nested ones), with every nested namespace's own members
+    /// flattened into the walk - a namespace's function/script/enum/
+    /// variable members already have the same real node types every
+    /// symbol-walking method below already knows how to handle; they just
+    /// weren't being *reached* before this existed. Namespace-qualified
+    /// access (<c>NAME.member</c>) is deliberately not modeled - every
+    /// nested symbol surfaces exactly as if it were a plain top-level one,
+    /// the same simplification this AST already applies everywhere (see
+    /// <see cref="BcsSymbolKind"/>'s own remarks - "not a real type
+    /// system").
+    /// </summary>
+    private static IEnumerable<BcsNode> AllMembers(IEnumerable<BcsNode> members)
+    {
+        foreach (var member in members)
+        {
+            if (member is BcsNamespaceDeclaration ns)
+            {
+                foreach (var nested in AllMembers(ns.Members)) yield return nested;
+            }
+            else
+            {
+                yield return member;
+            }
+        }
+    }
+
+    /// <summary>
     /// Every symbol visible everywhere in the file, regardless of cursor
     /// position - function/script/special names (a script only if
     /// <see cref="BcsScriptDeclaration.IsNamedScript"/>, since a bare
@@ -127,7 +155,7 @@ public sealed class BcsCompilationUnit : BcsNode
     /// </summary>
     private IEnumerable<BcsSymbol> FileScopeSymbols()
     {
-        foreach (var member in Members)
+        foreach (var member in AllMembers(Members))
         {
             switch (member)
             {
@@ -138,8 +166,9 @@ public sealed class BcsCompilationUnit : BcsNode
                             DocComment: function.DocComment, SourcePath: function.SourcePath);
                     break;
                 case BcsSpecialDeclaration special:
-                    // One 'special' statement can declare several, comma-separated entries - a leading doc comment documents the whole statement, so every one of them shares it.
-                    foreach (var name in special.Names) yield return name with { DocComment = special.DocComment };
+                    // One 'special' statement can declare several, comma-separated entries - a leading doc comment documents the whole statement, so every one of them shares it. Real zcommon.bcs special lists essentially never have one, though - fall back to this project's own researched description (see BcsFunctionDocs's own remarks) when there isn't a real one, rather than leaving every one of these ~500 functions with no description at all.
+                    foreach (var name in special.Names)
+                        yield return name with { DocComment = string.IsNullOrEmpty(special.DocComment) ? BcsFunctionDocs.Format(name.Name) ?? "" : special.DocComment };
                     break;
                 case BcsScriptDeclaration script:
                     if (script.IsNamedScript)
@@ -189,7 +218,7 @@ public sealed class BcsCompilationUnit : BcsNode
     {
         var symbols = new HashSet<BcsSymbol>(FileScopeSymbols());
 
-        foreach (var member in Members)
+        foreach (var member in AllMembers(Members))
         {
             switch (member)
             {
@@ -230,7 +259,7 @@ public sealed class BcsCompilationUnit : BcsNode
     {
         var symbols = new List<BcsSymbol>(FileScopeSymbols());
 
-        foreach (var member in Members)
+        foreach (var member in AllMembers(Members))
         {
             if (member is BcsFunctionDeclaration function && function.SourcePath == atPath && WithinBody(line, function.BodyLine, function.BodyEndLine))
             {
@@ -263,7 +292,7 @@ public sealed class BcsCompilationUnit : BcsNode
     {
         bool NameMatches(BcsSymbol symbol) => string.Equals(symbol.Name, name, StringComparison.OrdinalIgnoreCase);
 
-        foreach (var member in Members)
+        foreach (var member in AllMembers(Members))
         {
             if (member is BcsFunctionDeclaration function && function.SourcePath == atPath && WithinBody(line, function.BodyLine, function.BodyEndLine))
             {
@@ -323,6 +352,29 @@ public sealed class BcsDefineDirective : BcsNode
 public sealed class BcsLibraryDirective : BcsNode
 {
     public string Name { get; init; } = string.Empty;
+}
+
+/// <summary>
+/// <c>[private|internal] [strict] namespace [name] { members }</c> -
+/// confirmed real grammar from <c>zt-bcc</c>'s own <c>src/parse/library.c</c>
+/// (<c>read_namespace</c>/<c>is_namespace</c>). <see cref="Name"/> is the
+/// dotted/<c>::</c>-joined path exactly as written (e.g. <c>"Foo.Bar"</c>),
+/// empty for the real, valid anonymous form (<c>strict namespace { ... }</c>
+/// with no name - confirmed real, the shape the real <c>zcommon.bcs</c>
+/// itself uses). <see cref="Qualifiers"/> is the raw leading qualifier
+/// text (e.g. <c>"strict"</c>, <c>"private strict"</c>) - not semantically
+/// modeled (visibility/strictness don't affect symbol collection here),
+/// kept only for fidelity. <see cref="Members"/> can themselves include a
+/// nested <see cref="BcsNamespaceDeclaration"/> (the real grammar allows
+/// arbitrary nesting) - see <see cref="BcsCompilationUnit"/>'s own
+/// <c>AllMembers</c> for how every symbol-walking method flattens through
+/// it without needing to know about namespaces itself.
+/// </summary>
+public sealed class BcsNamespaceDeclaration : BcsNode
+{
+    public string Qualifiers { get; init; } = string.Empty;
+    public string Name { get; init; } = string.Empty;
+    public List<BcsNode> Members { get; } = new();
 }
 
 /// <summary>

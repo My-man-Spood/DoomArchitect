@@ -400,16 +400,59 @@ public sealed class WadFile : IResourceContainer
     public static (IReadOnlyList<WadLump> Lumps, int InsertedIndex) WithAddedScriptsLump(
         IReadOnlyList<WadLump> lumps, int markerIndex, byte[] data)
     {
+        var (isUdmf, _, bodyEnd) = FindMapGroupBounds(lumps, markerIndex);
+        var insertAt = isUdmf ? bodyEnd - 1 : bodyEnd;
+        var result = new List<WadLump>(lumps);
+        result.Insert(insertAt, new WadLump("SCRIPTS", data));
+        return (result, insertAt);
+    }
+
+    /// <summary>The index of this map's own <c>SCRIPTS</c> lump within its group, or -1 if it doesn't have one.</summary>
+    public static int FindScriptsLumpIndex(IReadOnlyList<WadLump> lumps, int markerIndex)
+    {
+        var (_, bodyStart, bodyEnd) = FindMapGroupBounds(lumps, markerIndex);
+        for (var i = bodyStart; i < bodyEnd; i++)
+        {
+            if (lumps[i].Name.Equals("SCRIPTS", StringComparison.OrdinalIgnoreCase)) return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Sets this map's own <c>BEHAVIOR</c> lump to <paramref name="data"/> -
+    /// replacing an existing one's bytes in place
+    /// (<see cref="WithReplacedLumpData"/>) if the group already has one,
+    /// otherwise inserting a new one the same way
+    /// <see cref="WithAddedScriptsLump"/> inserts <c>SCRIPTS</c> (right
+    /// before <c>ENDMAP</c> for a UDMF map, at the group's own end for a
+    /// classic one).
+    /// </summary>
+    public static (IReadOnlyList<WadLump> Lumps, int BehaviorIndex) WithSetBehaviorLump(
+        IReadOnlyList<WadLump> lumps, int markerIndex, byte[] data)
+    {
+        var (isUdmf, bodyStart, bodyEnd) = FindMapGroupBounds(lumps, markerIndex);
+        for (var i = bodyStart; i < bodyEnd; i++)
+        {
+            if (lumps[i].Name.Equals("BEHAVIOR", StringComparison.OrdinalIgnoreCase))
+                return (WithReplacedLumpData(lumps, i, data), i);
+        }
+
+        var insertAt = isUdmf ? bodyEnd - 1 : bodyEnd;
+        var result = new List<WadLump>(lumps);
+        result.Insert(insertAt, new WadLump("BEHAVIOR", data));
+        return (result, insertAt);
+    }
+
+    /// <summary>The shared "where does this map's own lump group start/end" scan <see cref="WithAddedScriptsLump"/>/<see cref="FindScriptsLumpIndex"/>/<see cref="WithSetBehaviorLump"/> all need - <paramref name="markerIndex"/> is the map name lump's own index, <c>BodyStart</c>/<c>BodyEnd</c> bound everything strictly after it (the marker itself excluded, matching <see cref="FindMapLumpGroups"/>'s own convention).</summary>
+    private static (bool IsUdmf, int BodyStart, int BodyEnd) FindMapGroupBounds(IReadOnlyList<WadLump> lumps, int markerIndex)
+    {
         var isUdmf = markerIndex + 1 < lumps.Count
             && lumps[markerIndex + 1].Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase);
         var bodyStart = markerIndex + 1;
         var bodyEnd = isUdmf
             ? FindGroupEnd(lumps, bodyStart, WadMapLumpNames.Udmf, stopAfterName: "ENDMAP")
             : FindGroupEnd(lumps, bodyStart, WadMapLumpNames.Classic);
-
-        var insertAt = isUdmf ? bodyEnd - 1 : bodyEnd;
-        var result = new List<WadLump>(lumps);
-        result.Insert(insertAt, new WadLump("SCRIPTS", data));
-        return (result, insertAt);
+        return (isUdmf, bodyStart, bodyEnd);
     }
 }

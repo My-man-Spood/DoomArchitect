@@ -68,6 +68,31 @@ public static class BcsBbcodeFormatter
 
     public static string EscapePlainText(string text) => EscapeForBbcode(text);
 
-    /// <summary><c>[lb]</c>/<c>[rb]</c> are <see cref="Godot.RichTextLabel"/>'s own documented escape sequences for a literal <c>[</c>/<c>]</c> that shouldn't be read as a tag.</summary>
-    private static string EscapeForBbcode(string text) => text.Replace("[", "[lb]").Replace("]", "[rb]");
+    /// <summary>
+    /// <c>[lb]</c>/<c>[rb]</c> are <see cref="Godot.RichTextLabel"/>'s own
+    /// documented escape sequences for a literal <c>[</c>/<c>]</c> that
+    /// shouldn't be read as a tag. Real, reported bug: two sequential
+    /// <c>string.Replace</c> calls aren't safe here, because the first
+    /// call's own *output* (<c>"[lb]"</c>) contains a <c>]</c> that the
+    /// second call then also matches and re-escapes, corrupting the
+    /// result (confirmed live: a lone <c>"["</c> came out as
+    /// <c>"[lb[rb]"</c>, not <c>"[lb]"</c>) - surfaced once real `[`/`]`
+    /// characters started appearing in hover text (the `[type]`
+    /// optional-parameter notation <see cref="BcsBuiltinFunctions.Decode"/>
+    /// and <c>BcsParser.ParseOneSpecialEntry</c> both use). Walking the
+    /// *original* text once, character by character, guarantees neither
+    /// substitution's own output is ever rescanned.
+    /// </summary>
+    private static string EscapeForBbcode(string text)
+    {
+        var sb = new StringBuilder(text.Length);
+        foreach (var c in text)
+        {
+            if (c == '[') sb.Append("[lb]");
+            else if (c == ']') sb.Append("[rb]");
+            else sb.Append(c);
+        }
+
+        return sb.ToString();
+    }
 }

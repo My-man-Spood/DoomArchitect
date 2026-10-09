@@ -158,15 +158,38 @@ public class BcsProgramTests : IDisposable
         Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "LibFunc" && s.SourcePath == importedPath);
     }
 
+    /// <summary>
+    /// No base directory at all (a brand new unsaved buffer, or a
+    /// lump/PK3-entry-backed tab) - the raw name passes straight through
+    /// to <c>readFile</c> rather than failing before ever trying it (see
+    /// <see cref="BcsPreprocessor"/>'s own remarks on why there's no real
+    /// compiler behavior to verify this against). <see cref="ReadFile"/>
+    /// only ever reads real disk paths, and a bare name with no
+    /// directory doesn't exist as one, so this still correctly reports
+    /// "not found" - just via the same path every other unresolvable
+    /// include already takes, not a separate dead-end.
+    /// </summary>
     [Fact]
-    public void ParseProgram_UnsavedBufferWithNoSourcePath_SkipsRelativeIncludesAndReportsWhy()
+    public void ParseProgram_NoSourcePath_UnresolvedBareInclude_ReportsNotFound()
     {
         var program = BcsParser.ParseProgram("#include \"shared.acs\"\n", null, ReadFile);
 
         Assert.Empty(program.IncludedPaths);
         var diagnostic = Assert.Single(program.Diagnostics);
         Assert.Equal(BcsDiagnosticSeverity.Warning, diagnostic.Severity);
-        Assert.Contains("save this file first", diagnostic.Message);
+        Assert.Contains("included file not found", diagnostic.Message);
+    }
+
+    /// <summary>The case this change actually exists for: a lump/PK3-entry-backed script (no real directory of its own) whose <c>readFile</c> delegate resolves a bare include name some other way (a resource-set search, in <c>ScriptDocument</c>/<c>ScriptCompilerRunner</c> - simulated here with a plain in-memory lookup).</summary>
+    [Fact]
+    public void ParseProgram_NoSourcePath_BareIncludeResolvedViaReadFile_ParsesIt()
+    {
+        string? ReadFromMemory(string path) => path == "shared.acs" ? "function int Helper() { }" : null;
+
+        var program = BcsParser.ParseProgram("#include \"shared.acs\"\n", null, ReadFromMemory);
+
+        Assert.Equal(new[] { "shared.acs" }, program.IncludedPaths);
+        Assert.Contains(program.CollectSymbolsVisibleAt(1), s => s.Name == "Helper");
     }
 
     [Fact]

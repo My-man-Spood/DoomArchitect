@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using DoomArchitect.Core.Compilers;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Map;
@@ -50,6 +51,12 @@ public partial class OpenMapMenu : PanelContainer
 
 	/// <summary>Fired after a successful Save/Save As/Save Into - lets <see cref="MainMenuBar"/> mark the undo stack clean without this class needing to know about it.</summary>
 	public event Action MapSaved;
+
+	/// <summary>Fired right before a save compiles this map's own <c>SCRIPTS</c> lump - lets <see cref="AppShell"/> flush an open, dirty script tab for it first (this class has no visibility into other tabs), mirroring UDB's own implicit-save-before-compiling.</summary>
+	public event Action<string, int> ScriptsLumpSaving;
+
+	/// <summary>Fired right after that compile attempt resolves - an empty error list means success. Lets <see cref="AppShell"/> tint the matching open tab's own lines the same way live diagnostics already are.</summary>
+	public event Action<string, int, IReadOnlyList<ScriptCompileError>> ScriptsCompiled;
 
 	/// <summary>
 	/// <paramref name="SourceWadPath"/> is null for an entry found in an
@@ -879,7 +886,10 @@ public partial class OpenMapMenu : PanelContainer
 		try
 		{
 			var document = new UdmfDocument(_currentMapData, _currentNamespace, _currentUnknownBlocks, Array.Empty<string>());
-			var bytes = MapFileSaver.SaveUdmfMap(originalLumps, document, _currentMapName);
+			var udmfText = UdmfWriter.Write(document);
+			var lumps = MapFileSaver.BuildLumpsForSave(originalLumps, _currentMapName, udmfText);
+			lumps = CompileScriptsIfPresent(path, lumps);
+			var bytes = WadWriter.Write(lumps);
 
 			if (File.Exists(path)) File.Move(path, path + ".bak", overwrite: true);
 			File.WriteAllBytes(path, bytes);
@@ -893,6 +903,52 @@ public partial class OpenMapMenu : PanelContainer
 		{
 			ShowError(ex.Message);
 		}
+	}
+
+	/// <summary>
+	/// Recompiles this map's own <c>SCRIPTS</c> lump into <c>BEHAVIOR</c>,
+	/// if it has one - the overwhelmingly common case (no <c>SCRIPTS</c>
+	/// lump at all) returns <paramref name="lumps"/> completely unchanged,
+	/// zero behavior change from before this existed. A failed compile
+	/// (including "no compiler configured/bundled for this OS yet", which
+	/// is deliberately silent - see <see cref="ScriptCompilerRunner"/>)
+	/// keeps whatever <c>BEHAVIOR</c> bytes were already there; the map's
+	/// own geometry still saves either way.
+	/// </summary>
+	private IReadOnlyList<WadLump> CompileScriptsIfPresent(string path, IReadOnlyList<WadLump> lumps)
+	{
+		var markerIndex = WadFile.FindMarkerIndex(lumps, _currentMapName);
+		var scriptsIndex = markerIndex < 0 ? -1 : WadFile.FindScriptsLumpIndex(lumps, markerIndex);
+		if (scriptsIndex < 0) return lumps;
+
+		ScriptsLumpSaving?.Invoke(path, scriptsIndex);
+
+		// The event above may have just flushed an open script tab straight
+		// to disk (ScriptDocument.Save's own SaveLump, a full independent
+		// WAD rewrite) - re-read just that one lump's bytes fresh rather
+		// than trusting lumps[scriptsIndex], which was snapshotted before
+		// that flush could have happened.
+		var scriptSource = lumps[scriptsIndex].Data;
+		if (File.Exists(path))
+		{
+			var onDisk = WadFile.Read(path);
+			var onDiskMarker = WadFile.FindMarkerIndex(onDisk.Lumps, _currentMapName);
+			var onDiskScriptsIndex = onDiskMarker < 0 ? -1 : WadFile.FindScriptsLumpIndex(onDisk.Lumps, onDiskMarker);
+			if (onDiskScriptsIndex >= 0) scriptSource = onDisk.Lumps[onDiskScriptsIndex].Data;
+		}
+
+		var outcome = ScriptCompilerRunner.Compile(path, scriptSource, CurrentResourcePaths);
+		if (!outcome.IsConfigured) return lumps;
+
+		if (outcome.BehaviorBytes != null)
+		{
+			ScriptsCompiled?.Invoke(path, scriptsIndex, Array.Empty<ScriptCompileError>());
+			return WadFile.WithSetBehaviorLump(lumps, markerIndex, outcome.BehaviorBytes).Lumps;
+		}
+
+		ShowError($"Error while compiling scripts: {outcome.Errors[0].Message}");
+		ScriptsCompiled?.Invoke(path, scriptsIndex, outcome.Errors);
+		return lumps;
 	}
 
 	private void ShowError(string message)

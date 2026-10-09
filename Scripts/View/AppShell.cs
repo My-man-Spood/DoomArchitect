@@ -243,6 +243,11 @@ public partial class AppShell : Control
 	/// recomputing here, so window resizes alone don't need to trigger
 	/// this.
 	/// </summary>
+	/// <summary>The currently active map tab's own configured resources, or none if there isn't one - what a newly-opened script tab's own <c>#include</c>/<c>#import</c> resolution should search beyond a real on-disk sibling file (see <see cref="ScriptDocument.SetIncludeResourcePaths"/>), matching real compilation's own resource search.</summary>
+	private IReadOnlyList<string> CurrentMapResourcePaths() =>
+		(_activeTab >= 0 && _activeTab < _tabContents.Count ? _tabContents[_activeTab] as MapView : null)
+			?.OpenMapMenu.CurrentResourcePaths ?? System.Array.Empty<string>();
+
 	private void UpdateMapViewportLayout()
 	{
 		var activeMapView = _activeTab >= 0 && _activeTab < _tabContents.Count ? _tabContents[_activeTab] as MapView : null;
@@ -314,6 +319,19 @@ public partial class AppShell : Control
 		{
 			_resourceBrowserPanel.Refresh(resources, openMapMenu.CurrentMapContainer, openMapMenu.CurrentMapName, openMapMenu.CurrentWadPath);
 			UpdateTabTitle(mapDocument);
+		};
+		// Flushes an open, dirty script tab for this exact lump straight to
+		// disk before OpenMapMenu compiles it - this class is the only one
+		// that knows about other tabs at all, which is why OpenMapMenu
+		// raises this as an event instead of just doing it itself.
+		openMapMenu.ScriptsLumpSaving += (wadPath, lumpIndex) =>
+		{
+			var open = _tabContents.OfType<ScriptDocument>().FirstOrDefault(d => d.IsLumpFrom(wadPath, lumpIndex));
+			if (open != null && open.IsDirty) open.Save();
+		};
+		openMapMenu.ScriptsCompiled += (wadPath, lumpIndex, errors) =>
+		{
+			_tabContents.OfType<ScriptDocument>().FirstOrDefault(d => d.IsLumpFrom(wadPath, lumpIndex))?.ShowCompileErrors(errors);
 		};
 		// Subscribed here, not after AddChild below - same reasoning as the
 		// two subscriptions above (catches a synchronous dev --file/--map
@@ -506,6 +524,7 @@ public partial class AppShell : Control
 		// the node actually enters the tree, and LoadFile needs _pathLabel/
 		// _codeEdit, which _Ready() is what resolves.
 		_contentArea.AddChild(scriptDocument);
+		scriptDocument.SetIncludeResourcePaths(CurrentMapResourcePaths());
 		scriptDocument.LoadFile(path);
 		scriptDocument.NavigateToFileRequested += OnScriptNavigationRequested;
 		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
@@ -655,6 +674,7 @@ public partial class AppShell : Control
 		var scriptDocument = GD.Load<PackedScene>(ScriptDocumentScenePath).Instantiate<ScriptDocument>();
 		scriptDocument.Visible = false;
 		_contentArea.AddChild(scriptDocument);
+		scriptDocument.SetIncludeResourcePaths(CurrentMapResourcePaths());
 		scriptDocument.LoadLump(request.SourcePath, request.LumpIndex, request.LumpName, request.LumpData);
 		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
 		_tabContents.Add(scriptDocument);
@@ -670,6 +690,7 @@ public partial class AppShell : Control
 		var scriptDocument = GD.Load<PackedScene>(ScriptDocumentScenePath).Instantiate<ScriptDocument>();
 		scriptDocument.Visible = false;
 		_contentArea.AddChild(scriptDocument);
+		scriptDocument.SetIncludeResourcePaths(CurrentMapResourcePaths());
 		scriptDocument.LoadPk3Entry(request.SourcePath, request.Pk3EntryPath, request.Pk3EntryData);
 		scriptDocument.DirtyChanged += () => UpdateTabTitle(scriptDocument);
 		_tabContents.Add(scriptDocument);

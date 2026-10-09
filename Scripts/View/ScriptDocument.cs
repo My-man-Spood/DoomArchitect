@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Core.Compilers;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Settings;
@@ -45,6 +46,7 @@ public partial class ScriptDocument : VBoxContainer
 	private readonly HashSet<int> _diagnosticLines = new();
 	private List<BcsDiagnostic> _diagnostics = new();
 	private BcsProgram _bcsProgram;
+	private ResourceSet _includeResources;
 
 	private static readonly Color ErrorLineColor = new(1, 0, 0, 0.15f);
 	private static readonly Color WarningLineColor = new(1, 1, 0, 0.12f);
@@ -64,10 +66,34 @@ public partial class ScriptDocument : VBoxContainer
 		_wadSourcePath != null && _lumpIndex == lumpIndex
 		&& string.Equals(System.IO.Path.GetFullPath(_wadSourcePath), System.IO.Path.GetFullPath(wadSourcePath), StringComparison.OrdinalIgnoreCase);
 
+	/// <summary>
+	/// Which resources this tab's own <c>#include</c>/<c>#import</c>
+	/// directives can resolve against beyond a real on-disk sibling file -
+	/// the same ones the currently active map tab is using (see
+	/// <c>AppShell.CurrentMapResourcePaths</c>), so a bare name like
+	/// <c>"zcommon.acs"</c> can resolve the same way real compilation
+	/// does (<see cref="ResourceSet.FindIncludeText"/>). An empty list
+	/// (no map active when this tab was opened) just means nothing extra
+	/// resolves - the exact same disk-only behavior this had before.
+	/// </summary>
+	public void SetIncludeResourcePaths(IReadOnlyList<string> resourcePaths) =>
+		_includeResources = new ResourceSet(resourcePaths.Select(ResourceContainerCache.Open).ToList());
+
 	/// <summary>The PK3-entry-backed counterpart of <see cref="IsLumpFrom"/> - whether this tab is already the entry at <paramref name="entryPath"/> inside the PK3 at <paramref name="pk3SourcePath"/>.</summary>
 	public bool IsPk3EntryFrom(string pk3SourcePath, string entryPath) =>
 		_pk3SourcePath != null && string.Equals(_pk3EntryPath, entryPath, StringComparison.OrdinalIgnoreCase)
 		&& string.Equals(System.IO.Path.GetFullPath(_pk3SourcePath), System.IO.Path.GetFullPath(pk3SourcePath), StringComparison.OrdinalIgnoreCase);
+
+	/// <summary>Tints this tab's own lines for a just-finished save's compile errors, reusing the exact <see cref="CodeEdit.SetLineBackgroundColor"/>/<see cref="_diagnosticLines"/> mechanism the live BCS-parser diagnostics above already use - cleared the same way, by the next edit's own <see cref="RefreshBcsHighlightingAndDiagnostics"/>. An empty list is a deliberate no-op (a successful compile doesn't need to clear anything itself - the next edit already will).</summary>
+	public void ShowCompileErrors(IReadOnlyList<ScriptCompileError> errors)
+	{
+		foreach (var error in errors)
+		{
+			var line = Mathf.Clamp(error.Line - 1, 0, _codeEdit.GetLineCount() - 1);
+			_codeEdit.SetLineBackgroundColor(line, ErrorLineColor);
+			_diagnosticLines.Add(line);
+		}
+	}
 
 	/// <summary>
 	/// Raised when go-to-definition (<see cref="OnBcsSymbolLookup"/>)
@@ -267,7 +293,19 @@ public partial class ScriptDocument : VBoxContainer
 		if (messages.Count > 0) return BcsBbcodeFormatter.EscapePlainText(string.Join("\n", messages));
 
 		var declaration = _bcsProgram?.FindDeclaration(word, line + 1);
-		if (declaration is not { } found) return "";
+		if (declaration is not { } found)
+		{
+			// Not a real declared symbol - a true compiler intrinsic like
+			// Print/Delay/SpawnSpot (see BcsBuiltinFunctions's own remarks)
+			// has no declaration to find at all, but is still worth a
+			// signature on hover.
+			var builtin = BcsBuiltinFunctions.TryDescribe(word);
+			if (builtin == null) return "";
+
+			var builtinSignature = BcsBbcodeFormatter.ColorizeCode(builtin);
+			var builtinDoc = BcsFunctionDocs.Format(word);
+			return builtinDoc == null ? builtinSignature : $"{BcsBbcodeFormatter.EscapePlainText(builtinDoc)}\n\n{builtinSignature}";
+		}
 
 		var signature = BcsBbcodeFormatter.ColorizeCode(found.Describe());
 		if (string.IsNullOrEmpty(found.DocComment)) return signature;
@@ -336,6 +374,14 @@ public partial class ScriptDocument : VBoxContainer
 		foreach (var symbol in symbols.DistinctBy(s => (s.Name.ToLowerInvariant(), s.Kind)))
 		{
 			_codeEdit.AddCodeCompletionOption(ToCodeCompletionKind(symbol.Kind), symbol.Name, symbol.Name);
+		}
+
+		// True compiler intrinsics (Print, Delay, SpawnSpot, ...) - never
+		// declared anywhere, so CollectSymbolsVisibleAt above never sees
+		// them (see BcsBuiltinFunctions's own remarks).
+		foreach (var name in BcsBuiltinFunctions.AllNames)
+		{
+			_codeEdit.AddCodeCompletionOption(CodeEdit.CodeCompletionKind.Function, name, name);
 		}
 
 		_codeEdit.UpdateCodeCompletionOptions(true);
@@ -423,8 +469,17 @@ public partial class ScriptDocument : VBoxContainer
 		foreach (var line in _diagnosticLines) _codeEdit.SetLineBackgroundColor(line, Colors.Transparent);
 		_diagnosticLines.Clear();
 
-		_bcsProgram = BcsParser.ParseProgram(text, _filePath, ReadBcsFileFromDisk);
-		_diagnostics = _bcsProgram.Diagnostics;
+		_bcsProgram = BcsParser.ParseProgram(text, _filePath, ReadBcsFile);
+		// Only this tab's own file - an empty SourcePath is BcsDiagnostic's
+		// own "the main file" convention (BcsDiagnostic.cs). Without this
+		// filter, a diagnostic raised while reading an #include'd file
+		// (e.g. a real external library this project's own BCS parser
+		// doesn't yet fully understand - confirmed directly: the real
+		// zcommon.bcs alone produces 1102 of them) gets clamped onto and
+		// painted over this tab's own, completely unrelated lines, once
+		// per diagnostic - wrong regardless of how many there are, and
+		// with enough of them, slow enough to look like a hang.
+		_diagnostics = _bcsProgram.Diagnostics.Where(d => d.SourcePath.Length == 0).ToList();
 		foreach (var diagnostic in _diagnostics)
 		{
 			var line = Mathf.Clamp(diagnostic.Line - 1, 0, _codeEdit.GetLineCount() - 1);
@@ -435,9 +490,33 @@ public partial class ScriptDocument : VBoxContainer
 		_codeEdit.QueueRedraw();
 	}
 
-	/// <summary>The <c>readFile</c> delegate <see cref="BcsParser.ParseProgram"/> needs to resolve an <c>#include</c>/<c>#import</c> - mirrors <see cref="LoadFile"/>'s own existence-check-then-read shape.</summary>
-	private static string ReadBcsFileFromDisk(string path) =>
-		Godot.FileAccess.FileExists(path) ? Godot.FileAccess.GetFileAsString(path) : null;
+	/// <summary>
+	/// The <c>readFile</c> delegate <see cref="BcsParser.ParseProgram"/>
+	/// needs to resolve an <c>#include</c>/<c>#import</c> - a real
+	/// on-disk sibling file first (mirrors <see cref="LoadFile"/>'s own
+	/// existence-check-then-read shape), then <see cref="_includeResources"/>
+	/// for a bare name that isn't one (e.g. a mapper's own shared library,
+	/// which has no meaningful directory for a lump/PK3-entry-backed tab -
+	/// see <see cref="SetIncludeResourcePaths"/>), then
+	/// <see cref="BundledScriptCompiler.ResolveLibDirectory"/>'s own
+	/// <c>zcommon.acs</c>/<c>zcommon.bcs</c> and friends last - confirmed
+	/// NOT something the real engine ships (a real <c>gzdoom.pk3</c> has
+	/// no such entries at all), so a mapper's own resource, if they
+	/// happen to have one, still wins over this fallback.
+	/// </summary>
+	private string ReadBcsFile(string path)
+	{
+		if (Godot.FileAccess.FileExists(path)) return Godot.FileAccess.GetFileAsString(path);
+
+		var fromResources = _includeResources?.FindIncludeText(path);
+		if (fromResources != null) return fromResources;
+
+		var libDirectory = BundledScriptCompiler.ResolveLibDirectory();
+		if (libDirectory == null) return null;
+
+		var bundledPath = System.IO.Path.Combine(libDirectory, System.IO.Path.GetFileName(path));
+		return System.IO.File.Exists(bundledPath) ? System.IO.File.ReadAllText(bundledPath) : null;
+	}
 
 	public void Save()
 	{
@@ -480,6 +559,11 @@ public partial class ScriptDocument : VBoxContainer
 
 		if (System.IO.File.Exists(_wadSourcePath)) System.IO.File.Move(_wadSourcePath, _wadSourcePath + ".bak", overwrite: true);
 		System.IO.File.WriteAllBytes(_wadSourcePath, bytes);
+		// Real, reported bug: without this, re-opening this exact lump
+		// (a fresh tab, or the resource browser's own tree) kept serving
+		// the pre-save content from the still-cached WadFile instance -
+		// SavePk3Entry already did this, this path just missed it.
+		ResourceContainerCache.Invalidate(_wadSourcePath);
 	}
 
 	/// <summary>

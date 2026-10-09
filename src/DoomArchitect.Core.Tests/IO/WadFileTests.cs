@@ -423,4 +423,85 @@ public class WadFileTests
         Assert.Equal("BEHAVIOR", result[6].Name);
         Assert.Equal(new byte[] { 8 }, result[6].Data);
     }
+
+    [Fact]
+    public void FindScriptsLumpIndex_GroupHasOne_ReturnsItsIndex()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("SCRIPTS", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Equal(2, WadFile.FindScriptsLumpIndex(wad.Lumps, 0));
+    }
+
+    [Fact]
+    public void FindScriptsLumpIndex_GroupHasNone_ReturnsMinusOne()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        Assert.Equal(-1, WadFile.FindScriptsLumpIndex(wad.Lumps, 0));
+    }
+
+    [Fact]
+    public void WithSetBehaviorLump_UdmfFormatMap_NoExistingBehavior_InsertsBeforeEndmap()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("SCRIPTS", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, behaviorIndex) = WadFile.WithSetBehaviorLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(3, behaviorIndex);
+        Assert.Equal(5, result.Count);
+        Assert.Equal("BEHAVIOR", result[3].Name);
+        Assert.Equal(new byte[] { 9 }, result[3].Data);
+        Assert.Equal("ENDMAP", result[4].Name);
+    }
+
+    [Fact]
+    public void WithSetBehaviorLump_ClassicFormatMap_NoExistingBehavior_InsertsAtGroupEnd()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("THINGS", Array.Empty<byte>()),
+            ("SCRIPTS", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, behaviorIndex) = WadFile.WithSetBehaviorLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(3, behaviorIndex);
+        Assert.Equal(4, result.Count);
+        Assert.Equal("BEHAVIOR", result[3].Name);
+        Assert.Equal(new byte[] { 9 }, result[3].Data);
+    }
+
+    [Fact]
+    public void WithSetBehaviorLump_ExistingBehaviorLump_ReplacesItsDataInPlace()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("BEHAVIOR", new byte[] { 1 }),
+            ("SCRIPTS", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var (result, behaviorIndex) = WadFile.WithSetBehaviorLump(wad.Lumps, 0, new byte[] { 9 });
+
+        Assert.Equal(2, behaviorIndex);
+        Assert.Equal(5, result.Count);
+        Assert.Equal("BEHAVIOR", result[2].Name);
+        Assert.Equal(new byte[] { 9 }, result[2].Data);
+        Assert.Equal("SCRIPTS", result[3].Name);
+    }
 }

@@ -90,4 +90,10 @@ public sealed class AppSettings
 
     public AppSettings WithAutoRevealActiveTab(bool value) =>
         new(_root.WithAssignment("autorevealactivetab", CfgValue.OfBool(value)));
+
+    /// <summary>An advanced override for the <c>SCRIPTS</c>-&gt;<c>BEHAVIOR</c> compiler path - empty by default, meaning "use the bundled zt-bcc for this OS" (see <c>BundledScriptCompiler</c>). Only needed to point at a different build.</summary>
+    public string GetScriptCompilerPathOverride() => _root.Find("scriptcompilerpathoverride")?.AsString() ?? string.Empty;
+
+    public AppSettings WithScriptCompilerPathOverride(string value) =>
+        new(_root.WithAssignment("scriptcompilerpathoverride", CfgValue.OfString(value)));
 }
