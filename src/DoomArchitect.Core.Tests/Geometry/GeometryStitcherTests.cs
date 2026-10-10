@@ -186,4 +186,66 @@ public class GeometryStitcherTests
         Assert.Same(b, line.Start);
         Assert.Same(a, line.End);
     }
+
+    [Fact]
+    public void FlipLinedefs_TwoSidedLine_SwapsEndpointsAndSides()
+    {
+        var map = new MapData();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var line = map.CreateLinedef(a, b, front, back);
+        var originalFront = line.Front;
+        var originalBack = line.Back;
+        var undoActions = new List<Action>();
+
+        GeometryStitcher.FlipLinedefs(new[] { line }, undoActions);
+
+        Assert.Same(b, line.Start);
+        Assert.Same(a, line.End);
+        Assert.Same(originalBack, line.Front);
+        Assert.Same(originalFront, line.Back);
+    }
+
+    [Fact]
+    public void FlipLinedefs_OneSidedLine_IsLeftUntouched()
+    {
+        var map = new MapData();
+        var sector = map.CreateSector(0, 128);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var line = map.CreateLinedef(a, b, sector, null);
+        var undoActions = new List<Action>();
+
+        GeometryStitcher.FlipLinedefs(new[] { line }, undoActions);
+
+        Assert.Same(a, line.Start);
+        Assert.Same(b, line.End);
+        Assert.NotNull(line.Front);
+        Assert.Null(line.Back);
+        Assert.Empty(undoActions);
+    }
+
+    [Fact]
+    public void FlipLinedefs_Undo_RestoresOriginalEndpointsAndSides()
+    {
+        var map = new MapData();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var line = map.CreateLinedef(a, b, front, back);
+        var originalFront = line.Front;
+        var originalBack = line.Back;
+        var undoActions = new List<Action>();
+
+        GeometryStitcher.FlipLinedefs(new[] { line }, undoActions);
+        undoActions[0]();
+
+        Assert.Same(a, line.Start);
+        Assert.Same(b, line.End);
+        Assert.Same(originalFront, line.Front);
+        Assert.Same(originalBack, line.Back);
+    }
 }

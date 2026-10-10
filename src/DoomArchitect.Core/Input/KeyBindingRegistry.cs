@@ -38,6 +38,7 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("redo", CategoryEdit, "Redo", "Redoes the last undone change.", new KeyBinding("Y", Ctrl: true)),
         new KeyBindingDefinition("delete_item", CategoryEdit, "Delete", "Deletes the current selection (or the hovered element, if nothing is selected) in Vertices/Linedefs/Sectors/Things mode.", new KeyBinding("Delete")),
         new KeyBindingDefinition("dissolve_item", CategoryEdit, "Dissolve", "Deletes the current selection (or the hovered element, if nothing is selected) in Vertices/Linedefs mode, trying to preserve the rest of the map geometry intact. Sectors mode has no separate Dissolve in UDB either - it's the same as Delete there.", new KeyBinding("Backspace")),
+        new KeyBindingDefinition("flip_linedef", CategoryEdit, "Flip Linedef", "In Linedefs mode, reverses the current selection's (or hovered line's) direction - Start/End swapped together with Front/Back, so each side keeps facing the same sector. A pure one-sided line is left untouched.", new KeyBinding("F")),
         new KeyBindingDefinition("save_map", CategoryEdit, "Save Map", "Saves the active map tab to its WAD file - the same action as File > Save Map, which had no keyboard shortcut at all until this was added.", new KeyBinding("S", Ctrl: true)),
         new KeyBindingDefinition("save_document", CategoryEdit, "Save Document", "Saves the active script tab's file to disk.", new KeyBinding("S", Ctrl: true)),
 

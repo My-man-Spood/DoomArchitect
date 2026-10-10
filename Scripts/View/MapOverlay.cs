@@ -358,6 +358,30 @@ public partial class MapOverlay : Control
 		}
 	}
 
+	/// <summary>
+	/// The <c>flip_linedef</c> keybind - UDB's real
+	/// <c>LinedefsMode.FlipLinedefs</c>. Linedefs mode only - UDB's own
+	/// identically-named <c>SectorsMode</c> action is a distinct, bulkier
+	/// "flip every wrong-facing line around this sector" operation, not
+	/// ported here (see <see cref="FlipLinedefsCommand"/>). Falls back to
+	/// the hovered linedef when nothing is selected, matching
+	/// <see cref="DeleteSelection"/>/<see cref="DissolveSelection"/>'s own
+	/// fallback, then drops any pure one-sided line from that set before
+	/// executing - UDB's own filter, applied here rather than inside the
+	/// command, so a selection of only one-sided lines pushes no empty
+	/// no-op step onto the Undo stack.
+	/// </summary>
+	internal void FlipSelection()
+	{
+		if (_mode != EditMode.Linedefs) return;
+
+		var selectedLinedefs = Map.GetSelectedLinedefs().ToList();
+		if (selectedLinedefs.Count == 0 && _linedefHandler.Hovered != null) selectedLinedefs.Add(_linedefHandler.Hovered);
+
+		var flippable = selectedLinedefs.Where(l => l.Back != null || l.Front == null).ToList();
+		if (flippable.Count > 0) UndoStack.Execute(new FlipLinedefsCommand(flippable));
+	}
+
 	public override void _Process(double delta)
 	{
 		if (Visible) QueueRedraw();

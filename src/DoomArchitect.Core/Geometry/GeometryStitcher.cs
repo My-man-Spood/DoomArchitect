@@ -424,27 +424,50 @@ public static class GeometryStitcher
         foreach (var line in lines)
         {
             if (line.Back == null || line.Front != null) continue;
-
-            var originalStart = line.Start;
-            var originalEnd = line.End;
-            var originalFront = line.Front;
-            var originalBack = line.Back;
-
-            line.Start = originalEnd;
-            line.End = originalStart;
-            line.Front = originalBack;
-            line.Back = originalFront;
-            line.MarkAdjacentSectorsDirty();
-
-            undoActions.Add(() =>
-            {
-                line.Start = originalStart;
-                line.End = originalEnd;
-                line.Front = originalFront;
-                line.Back = originalBack;
-                line.MarkAdjacentSectorsDirty();
-            });
+            SwapVerticesAndSides(line, undoActions);
         }
+    }
+
+    /// <summary>
+    /// UDB's real, user-facing <c>LinedefsMode.FlipLinedefs</c>
+    /// (<c>ClassicModes/LinedefsMode.cs</c>) - reverses a linedef's
+    /// direction (Start/End swapped together with Front/Back, so which
+    /// sector each side still faces doesn't change, only which end is
+    /// "first"). A pure one-sided line (Front only, no Back) is left
+    /// untouched, matching UDB's own filter exactly: by convention a
+    /// one-sided wall's Front already faces the right way, and there's
+    /// nothing on the other side to swap into.
+    /// </summary>
+    public static void FlipLinedefs(IReadOnlyList<Linedef> lines, List<Action> undoActions)
+    {
+        foreach (var line in lines)
+        {
+            if (line.Front != null && line.Back == null) continue;
+            SwapVerticesAndSides(line, undoActions);
+        }
+    }
+
+    private static void SwapVerticesAndSides(Linedef line, List<Action> undoActions)
+    {
+        var originalStart = line.Start;
+        var originalEnd = line.End;
+        var originalFront = line.Front;
+        var originalBack = line.Back;
+
+        line.Start = originalEnd;
+        line.End = originalStart;
+        line.Front = originalBack;
+        line.Back = originalFront;
+        line.MarkAdjacentSectorsDirty();
+
+        undoActions.Add(() =>
+        {
+            line.Start = originalStart;
+            line.End = originalEnd;
+            line.Front = originalFront;
+            line.Back = originalBack;
+            line.MarkAdjacentSectorsDirty();
+        });
     }
 
     /// <summary>The candidate whose own bounded segment lies closest to a point - a plain linear scan; this project has no spatial index (UDB shortcuts through its blockmap) for 2D edit-mode geometry queries yet.</summary>

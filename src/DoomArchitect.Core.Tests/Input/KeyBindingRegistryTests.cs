@@ -33,10 +33,10 @@ public class KeyBindingRegistryTests
     [Fact]
     public void All_ContainsExactlyTheDesignedActionCount()
     {
-        // 45, not 44: save_map was added - map saving had no keyboard
-        // shortcut at all before (only save_document, scoped to script
-        // tabs), a real reported gap, not a count anyone meant to change
+        // 46, not 45: flip_linedef was added - UDB's own Flip Linedef
+        // (LinedefsMode.FlipLinedefs, F by default) had no equivalent here
+        // at all, a real requested gap, not a count anyone meant to change
         // casually.
-        Assert.Equal(45, KeyBindingRegistry.All.Count);
+        Assert.Equal(46, KeyBindingRegistry.All.Count);
     }
 }
