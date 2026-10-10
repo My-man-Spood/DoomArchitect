@@ -1,12 +1,13 @@
-[gd_scene format=3]
+[gd_scene format=3 uid="uid://c8yqxkqfxwqjr"]
 
-[ext_resource type="Script" path="res://Scripts/View/AppShell.cs" id="1"]
+[ext_resource type="Script" uid="uid://ntpfnhimpitg" path="res://Scripts/View/AppShell.cs" id="1"]
 [ext_resource type="Theme" uid="uid://cj2ixmf56srbg" path="res://Assets/BaseTheme.tres" id="2"]
 [ext_resource type="Script" uid="uid://d3rertnouig4y" path="res://Scripts/View/MainMenuBar.cs" id="3"]
 [ext_resource type="PackedScene" path="res://Scenes/UI/ResourceBrowserPanel.tscn" id="4"]
-[ext_resource type="Texture2D" path="res://Assets/Icons/icon_chevron.svg" id="5"]
+[ext_resource type="Texture2D" uid="uid://khst6tskh5ta" path="res://Assets/Icons/icon_chevron.svg" id="5"]
 
-[node name="AppShell" type="Control"]
+[node name="AppShell" type="Control" unique_id=1611735585]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -16,36 +17,36 @@ mouse_filter = 2
 theme = ExtResource("2")
 script = ExtResource("1")
 
-[node name="MenuBarLayer" type="CanvasLayer" parent="."]
+[node name="MenuBarLayer" type="CanvasLayer" parent="." unique_id=1818690003]
 layer = 15
 
-[node name="MenuBarPanel" type="PanelContainer" parent="MenuBarLayer"]
+[node name="MenuBarPanel" type="PanelContainer" parent="MenuBarLayer" unique_id=1569870601]
 anchors_preset = 10
 anchor_right = 1.0
 grow_horizontal = 2
 theme = ExtResource("2")
 theme_type_variation = &"TopBarPanel"
 
-[node name="MenuBar" type="MenuBar" parent="MenuBarLayer/MenuBarPanel"]
+[node name="MenuBar" type="MenuBar" parent="MenuBarLayer/MenuBarPanel" unique_id=783805556]
 layout_mode = 2
 size_flags_horizontal = 3
 theme = ExtResource("2")
 script = ExtResource("3")
 
-[node name="File" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar"]
+[node name="File" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar" unique_id=675869354]
 
-[node name="Edit" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar"]
+[node name="Edit" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar" unique_id=276872536]
 
-[node name="Map" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar"]
+[node name="Map" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar" unique_id=16565485]
 
-[node name="Preferences" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar"]
+[node name="Preferences" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar" unique_id=1052928803]
 
-[node name="SelectionBox" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar/Preferences"]
+[node name="SelectionBox" type="PopupMenu" parent="MenuBarLayer/MenuBarPanel/MenuBar/Preferences" unique_id=1347073508]
 
-[node name="TabStripLayer" type="CanvasLayer" parent="."]
+[node name="TabStripLayer" type="CanvasLayer" parent="." unique_id=1878794669]
 layer = 20
 
-[node name="TabStripPanel" type="PanelContainer" parent="TabStripLayer"]
+[node name="TabStripPanel" type="PanelContainer" parent="TabStripLayer" unique_id=1146243640]
 custom_minimum_size = Vector2(0, 24)
 anchors_preset = 10
 anchor_right = 1.0
@@ -53,36 +54,35 @@ grow_horizontal = 2
 theme = ExtResource("2")
 theme_type_variation = &"DocumentTabStripPanel"
 
-[node name="TabBar" type="TabBar" parent="TabStripLayer/TabStripPanel"]
+[node name="TabBar" type="TabBar" parent="TabStripLayer/TabStripPanel" unique_id=898736346]
 layout_mode = 2
 focus_mode = 0
 theme_type_variation = &"DocumentTabBar"
 theme_override_constants/icon_max_width = 14
 
-[node name="ResourceBrowserPanel" parent="." instance=ExtResource("4")]
+[node name="ResourceBrowserPanel" parent="." unique_id=2009874149 instance=ExtResource("4")]
 layout_mode = 1
-anchor_right = 0.0
+anchors_preset = 9
 anchor_bottom = 1.0
-offset_right = 260.0
 offset_top = 32.0
+offset_right = 260.0
 grow_vertical = 2
 
-[node name="BrowserToggleLayer" type="CanvasLayer" parent="."]
+[node name="BrowserToggleLayer" type="CanvasLayer" parent="." unique_id=2080802853]
 layer = 5
 
-[node name="BrowserToggleButton" type="TextureButton" parent="BrowserToggleLayer"]
-layout_mode = 1
+[node name="BrowserToggleButton" type="TextureButton" parent="BrowserToggleLayer" unique_id=1463824407]
+modulate = Color(1, 1, 1, 0.25)
 offset_right = 16.0
 offset_bottom = 48.0
+tooltip_text = "Toggle Resource Browser"
 focus_mode = 0
 mouse_default_cursor_shape = 2
-tooltip_text = "Toggle Resource Browser"
+texture_normal = ExtResource("5")
 ignore_texture_size = true
 stretch_mode = 5
-texture_normal = ExtResource("5")
-modulate = Color(1, 1, 1, 0.25)
 
-[node name="ContentArea" type="Control" parent="."]
+[node name="ContentArea" type="Control" parent="." unique_id=1601989341]
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -93,8 +93,8 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="OpenScriptDialog" type="FileDialog" parent="."]
-title = "Open Script"
+[node name="OpenScriptDialog" type="FileDialog" parent="." unique_id=1773161052]
+title = "Open a File"
 initial_position = 1
 size = Vector2i(640, 480)
 file_mode = 0

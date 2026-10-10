@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://ya7yhdk6ewjw" path="res://Assets/Icons/checkbox_checked_disabled.svg" id="checkbox_checked_disabled"]
 [ext_resource type="Texture2D" uid="uid://dp3gxx4owp7xg" path="res://Assets/Icons/checkbox_unchecked.svg" id="checkbox_unchecked"]
 [ext_resource type="Texture2D" uid="uid://bb328j3s8kdj3" path="res://Assets/Icons/checkbox_unchecked_disabled.svg" id="checkbox_unchecked_disabled"]
-[ext_resource type="Texture2D" path="res://Assets/Icons/icon_close.svg" id="icon_close"]
+[ext_resource type="Texture2D" uid="uid://bwqdkicddbtbe" path="res://Assets/Icons/icon_close.svg" id="icon_close"]
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_8vi0c"]
 bg_color = Color(0.6, 0.6, 0.6, 0)
@@ -20,6 +20,34 @@ corner_radius_bottom_right = 4
 corner_radius_bottom_left = 4
 
 [sub_resource type="StyleBoxEmpty" id="StyleBoxEmpty_checkbox"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_hovered"]
+content_margin_left = 10.0
+content_margin_top = 3.0
+content_margin_right = 10.0
+content_margin_bottom = 3.0
+bg_color = Color(1, 1, 1, 0.08)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_selected"]
+content_margin_left = 10.0
+content_margin_top = 3.0
+content_margin_right = 10.0
+content_margin_bottom = 3.0
+bg_color = Color(0.14, 0.14, 0.16, 1)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_unselected"]
+content_margin_left = 10.0
+content_margin_top = 3.0
+content_margin_right = 10.0
+content_margin_bottom = 3.0
+bg_color = Color(0, 0, 0, 0)
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tabstrip_panel"]
+bg_color = Color(0.07, 0.07, 0.08, 1)
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_lineedit_focus"]
 content_margin_left = 6.0
@@ -88,34 +116,6 @@ corner_radius_bottom_left = 3
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_topbar"]
 bg_color = Color(0.14, 0.14, 0.16, 1)
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tabstrip_panel"]
-bg_color = Color(0.07, 0.07, 0.08, 1)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_unselected"]
-content_margin_left = 10.0
-content_margin_top = 3.0
-content_margin_right = 10.0
-content_margin_bottom = 3.0
-bg_color = Color(0, 0, 0, 0)
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_selected"]
-content_margin_left = 10.0
-content_margin_top = 3.0
-content_margin_right = 10.0
-content_margin_bottom = 3.0
-bg_color = Color(0.14, 0.14, 0.16, 1)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_tab_hovered"]
-content_margin_left = 10.0
-content_margin_top = 3.0
-content_margin_right = 10.0
-content_margin_bottom = 3.0
-bg_color = Color(1, 1, 1, 0.08)
-corner_radius_top_left = 3
-corner_radius_top_right = 3
-
 [resource]
 default_font = ExtResource("5_ukplv")
 default_font_size = 14
@@ -132,6 +132,13 @@ CheckBox/styles/hover = SubResource("StyleBoxEmpty_checkbox")
 CheckBox/styles/hover_pressed = SubResource("StyleBoxEmpty_checkbox")
 CheckBox/styles/normal = SubResource("StyleBoxEmpty_checkbox")
 CheckBox/styles/pressed = SubResource("StyleBoxEmpty_checkbox")
+DocumentTabBar/base_type = &"TabBar"
+DocumentTabBar/icons/close = ExtResource("icon_close")
+DocumentTabBar/styles/tab_hovered = SubResource("StyleBoxFlat_tab_hovered")
+DocumentTabBar/styles/tab_selected = SubResource("StyleBoxFlat_tab_selected")
+DocumentTabBar/styles/tab_unselected = SubResource("StyleBoxFlat_tab_unselected")
+DocumentTabStripPanel/base_type = &"PanelContainer"
+DocumentTabStripPanel/styles/panel = SubResource("StyleBoxFlat_tabstrip_panel")
 LineEdit/styles/focus = SubResource("StyleBoxFlat_lineedit_focus")
 LineEdit/styles/normal = SubResource("StyleBoxFlat_lineedit_normal")
 LineEdit/styles/read_only = SubResource("StyleBoxFlat_lineedit_readonly")
@@ -145,10 +152,3 @@ MenuBar/styles/normal = SubResource("StyleBoxEmpty_menubar")
 MenuBar/styles/pressed = SubResource("StyleBoxFlat_menubar_pressed")
 TopBarPanel/base_type = &"PanelContainer"
 TopBarPanel/styles/panel = SubResource("StyleBoxFlat_topbar")
-DocumentTabStripPanel/base_type = &"PanelContainer"
-DocumentTabStripPanel/styles/panel = SubResource("StyleBoxFlat_tabstrip_panel")
-DocumentTabBar/base_type = &"TabBar"
-DocumentTabBar/icons/close = ExtResource("icon_close")
-DocumentTabBar/styles/tab_selected = SubResource("StyleBoxFlat_tab_selected")
-DocumentTabBar/styles/tab_unselected = SubResource("StyleBoxFlat_tab_unselected")
-DocumentTabBar/styles/tab_hovered = SubResource("StyleBoxFlat_tab_hovered")

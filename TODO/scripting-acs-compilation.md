@@ -355,10 +355,6 @@ down from the 1107 this whole investigation started at.
   separate, smaller, already-contained gap (it no longer leaks into
   whatever script actually `#include`s the file, which is what made
   this look worse than it is).
-- Test Map integration - UDB recompiles before testing too (same
-  `SaveMap` call, a different `SavePurpose`); this project's
-  `TestMapLauncher` uses an entirely separate `BuildCurrentMapBytes`
-  path that doesn't go through this hook.
 - `#library`/multi-lump linking - "Add Library" is still a stub.
 - Per-game-configuration compiler profiles (`TestEngine`-style list) -
   a single global path instead, since mappers don't typically swap ACS
@@ -370,3 +366,42 @@ down from the 1107 this whole investigation started at.
 - Windows/macOS bundled binaries (see above).
 - Verifying the bundled binary survives a real Godot export (see
   above).
+
+## Update: Test Map now forces a save first, closing the stale-`BEHAVIOR` gap above
+
+The user asked, having been reminded of the gap above, whether
+`TestMapLauncher` should get its own separate compile step or whether
+Test Map should just force a save - correctly pointed out this is
+also closer to UDB's own real behavior (its Test Map reuses the exact
+same `SaveMap` call, just tagged with a different internal
+`SavePurpose`, rather than maintaining a second build path).
+
+Added `OpenMapMenu.SaveMapThen(Action onSaved)`: the same save as
+`SaveMap` (including its own "no path yet -> `SaveMapAs`" fallback),
+but calls back once the write actually completes - needed because
+that fallback is asynchronous (opens a dialog and returns; the real
+write happens later, if/when the user picks a file), unlike a save to
+an already-known path, which completes synchronously. `TestMapLauncher.Launch`
+now does its static precondition checks (test engine configured,
+resources configured, command template configured - none of which
+depend on the save) synchronously as before, then defers the rest
+(temp WAD write + process launch) until `SaveMapThen`'s callback
+fires - which is also exactly what runs script compilation, so the
+temp WAD's own `BEHAVIOR` lump is always freshly compiled by
+construction now, not a second, separate concern to wire up.
+
+Changed `Launch`'s own signature from a synchronous `string?` return
+to an `Action<string> onError` callback, since an error can now
+surface either synchronously (precondition failures) or after the
+deferred save completes (temp WAD write/process launch failures) -
+`MainMenuBar.TestMap()` just passes its own existing `ShowError`
+through directly.
+
+Known, accepted limitation (documented on `SaveMapThen` itself): if
+the map has never been saved and the user cancels the resulting Save
+As prompt, the deferred Test Map launch is never explicitly
+cancelled - it just fires on whatever save happens *next* instead,
+since there's no cancel signal wired across the two dialogs involved
+(the file picker and the overwrite-confirm). Harmless (worst case:
+Test Map launches unexpectedly on a later, unrelated save) but not
+fully correct - not worth the extra plumbing for this narrow a case.

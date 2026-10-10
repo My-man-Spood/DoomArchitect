@@ -134,6 +134,14 @@ public partial class OpenMapMenu : PanelContainer
 	private string _pendingSaveIntoPath;
 	private IReadOnlyList<WadLump> _pendingSaveIntoOriginalLumps;
 
+	// Set by SaveMapThen (see its own remarks) right before it falls
+	// through to SaveMapAs for a never-saved-yet map, so the deferred
+	// write that eventually happens - via OnSaveFileSelected/
+	// OnOverwriteConfirmed, same as an ordinary Save As - still picks
+	// the Testing node-builder profile. Consumed (and cleared) at
+	// whichever of those two actually calls WriteMapToFile.
+	private bool _pendingSaveForTesting;
+
 	public override void _Ready()
 	{
 		_fileDialog = GetNode<FileDialog>("FileDialog");
@@ -753,6 +761,57 @@ public partial class OpenMapMenu : PanelContainer
 		WriteMapToFile(_currentWadPath, _currentWad?.Lumps);
 	}
 
+	/// <summary>
+	/// Same save as <see cref="SaveMap"/> (including its own "no path
+	/// yet -> <see cref="SaveMapAs"/>" fallback), but calls
+	/// <paramref name="onSaved"/> once the write actually completes -
+	/// needed because that fallback is asynchronous (it just opens a
+	/// dialog and returns; the real write happens later, if/when the
+	/// user picks a file). Used by <see cref="TestMapLauncher"/> to
+	/// force a save - and, via that, a script recompile
+	/// (<see cref="ScriptsCompiled"/>) - before testing, matching UDB's
+	/// own Test Map behavior.
+	///
+	/// Known, accepted limitation: if the map has never been saved and
+	/// the user then cancels the resulting Save As prompt,
+	/// <paramref name="onSaved"/> is never called for *this* request -
+	/// but the subscription behind it isn't explicitly torn down either
+	/// (no cancel signal to hang that off, across two separate
+	/// confirmation dialogs), so it fires on the *next* save instead,
+	/// whenever that happens. Same goes for <see cref="_pendingSaveForTesting"/>:
+	/// a cancelled attempt leaves it set, so an unrelated later Save As
+	/// would use the Testing node-builder profile once rather than the
+	/// Normal one. Harmless either way (worst case: a caller's deferred
+	/// work runs once, unexpectedly, on a later unrelated save, or nodes
+	/// get built a little faster/rougher than intended that one time) -
+	/// not worth the extra plumbing for this narrow a case.
+	/// </summary>
+	public void SaveMapThen(Action onSaved)
+	{
+		if (_currentMapData == null)
+		{
+			ShowError("No map is currently loaded.");
+			return;
+		}
+
+		if (_currentWadPath != null)
+		{
+			WriteMapToFile(_currentWadPath, _currentWad?.Lumps, forTesting: true);
+			onSaved();
+			return;
+		}
+
+		void Handler()
+		{
+			MapSaved -= Handler;
+			onSaved();
+		}
+
+		MapSaved += Handler;
+		_pendingSaveForTesting = true;
+		SaveMapAs();
+	}
+
 	public void SaveMapAs()
 	{
 		if (_currentMapData == null)
@@ -786,13 +845,15 @@ public partial class OpenMapMenu : PanelContainer
 			return;
 		}
 
-		WriteMapToFile(path, _currentWad?.Lumps);
+		WriteMapToFile(path, _currentWad?.Lumps, _pendingSaveForTesting);
+		_pendingSaveForTesting = false;
 	}
 
 	private void OnOverwriteConfirmed()
 	{
-		WriteMapToFile(_pendingSavePath, _currentWad?.Lumps);
+		WriteMapToFile(_pendingSavePath, _currentWad?.Lumps, _pendingSaveForTesting);
 		_pendingSavePath = null;
+		_pendingSaveForTesting = false;
 	}
 
 	/// <summary>
@@ -880,8 +941,14 @@ public partial class OpenMapMenu : PanelContainer
 	/// <see cref="MapFileSaver"/>/<see cref="WadWriter"/>), deliberately
 	/// not an in-place lump patch, to avoid the kind of subtle WAD
 	/// corruption a partial patch can introduce.
+	///
+	/// <paramref name="forTesting"/> picks which real node-builder
+	/// profile <see cref="NodeBuilderRunner"/> uses - matching UDB's own
+	/// real Save-vs-Test node-builder distinction (confirmed from its
+	/// source): a faster, rougher one (zero-reject) for a Test Map
+	/// launch, a more thorough one for every other save.
 	/// </summary>
-	private void WriteMapToFile(string path, IReadOnlyList<WadLump> originalLumps)
+	private void WriteMapToFile(string path, IReadOnlyList<WadLump> originalLumps, bool forTesting = false)
 	{
 		try
 		{
@@ -889,6 +956,7 @@ public partial class OpenMapMenu : PanelContainer
 			var udmfText = UdmfWriter.Write(document);
 			var lumps = MapFileSaver.BuildLumpsForSave(originalLumps, _currentMapName, udmfText);
 			lumps = CompileScriptsIfPresent(path, lumps);
+			lumps = NodeBuilderRunner.Build(lumps, _currentMapName, forTesting);
 			var bytes = WadWriter.Write(lumps);
 
 			if (File.Exists(path)) File.Move(path, path + ".bak", overwrite: true);

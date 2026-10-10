@@ -327,18 +327,36 @@ public partial class MainMenuBar : MenuBar
 	/// unsaved changes; otherwise asks first. <see cref="MapOverlay.UndoStack"/>
 	/// is null before the very first map ever loads, which reads as "not
 	/// dirty" (nothing to lose yet).
+	///
+	/// Real, reported bug: a popup shown synchronously from directly
+	/// inside a <see cref="PopupMenu.IdPressed"/> handler - this method
+	/// is only ever called from one - can come up positioned on the
+	/// wrong monitor in a multi-screen setup (confirmed live: it looked
+	/// exactly like a hang - the app was actually just waiting on a
+	/// real, responsive dialog sitting off in a corner of a second
+	/// monitor nobody was looking at). The File menu's own native popup
+	/// is still closing at the exact moment <c>IdPressed</c> fires, and
+	/// whichever window/screen Godot resolves as "current" for a brand
+	/// new popup shown in that same instant isn't reliably the main
+	/// window's own screen yet. <see cref="Callable.CallDeferred"/>
+	/// pushes the actual popup to the *next* frame, once that
+	/// transient menu-closing state has settled - the same "wait for
+	/// this frame's own processing to finish first" pattern already
+	/// used elsewhere in this codebase (e.g. <c>AppShell</c>'s own
+	/// deferred layout calls), just for window/screen resolution
+	/// instead of layout sizing.
 	/// </summary>
 	private void RunWithDiscardConfirmationIfDirty(Action action)
 	{
 		if (_overlay.UndoStack?.IsDirty != true)
 		{
-			action();
+			Callable.From(action).CallDeferred();
 			return;
 		}
 
 		_discardChangesDialog ??= CreateDiscardChangesDialog();
 		_pendingDiscardAction = action;
-		_discardChangesDialog.PopupCentered();
+		Callable.From(() => _discardChangesDialog.PopupCentered()).CallDeferred();
 	}
 
 	private ConfirmationDialog CreateDiscardChangesDialog()
@@ -380,11 +398,10 @@ public partial class MainMenuBar : MenuBar
 		};
 	}
 
-	/// <summary>Launches the current map at the last skill/monsters choice - shared by the toolbar's Test Map button and the F9 keybind.</summary>
+	/// <summary>Launches the current map at the last skill/monsters choice - shared by the toolbar's Test Map button and the F9 keybind. Forces a save first (see <see cref="TestMapLauncher"/>'s own remarks), so any error can surface after that save completes, not only synchronously here.</summary>
 	public void TestMap()
 	{
-		var error = TestMapLauncher.Launch(_openMapMenu, _overlay.LastTestSkill, _overlay.LastTestNoMonsters);
-		if (error != null) ShowError(error);
+		TestMapLauncher.Launch(_openMapMenu, _overlay.LastTestSkill, _overlay.LastTestNoMonsters, ShowError);
 	}
 
 	private void OpenPreferences()

@@ -10,18 +10,43 @@ using Godot;
 
 /// <summary>
 /// Test Map's own actual launch - resolves the active <see cref="TestEngine"/>
-/// for the current map's own game configuration, writes a throwaway temp
-/// WAD (never the map's real saved file), builds the launch arguments via
-/// <see cref="TestLaunchCommandBuilder"/>, and starts the source port as a
-/// genuinely independent process via <see cref="OS.CreateProcess(string,string[],bool)"/> -
-/// this project's first use of process-launching. A single, fixed temp
-/// file path is reused across repeated tests in the same session (deleted
-/// and rewritten each time) rather than a fresh one per launch, matching
-/// UDB's own real one-temp-file-per-session approach.
+/// for the current map's own game configuration, forces a real save
+/// first (<see cref="OpenMapMenu.SaveMapThen"/> - matching UDB's own
+/// Test Map, which recompiles before testing too via that same save
+/// path; this is also what actually runs script compilation, so a
+/// stale/missing <c>BEHAVIOR</c> lump is no longer possible), writes a
+/// throwaway temp WAD copy of the just-saved result, builds the launch
+/// arguments via <see cref="TestLaunchCommandBuilder"/>, and starts the
+/// source port as a genuinely independent process via
+/// <see cref="OS.CreateProcess(string,string[],bool)"/> - this project's
+/// first use of process-launching.
+///
+/// A fresh, uniquely-named temp file is written for every launch (the
+/// previous one, if any, is best-effort deleted first) rather than one
+/// fixed path reused across a whole session (UDB's own approach, tried
+/// here first) - switched after a real, reported case of Test Map
+/// showing stale geometry despite a confirmed-correct save (verified:
+/// the temp WAD DoomArchitect built was byte-for-byte identical to the
+/// freshly-saved file on disk) that survived even a full DoomArchitect
+/// restart, which rules out anything *this* process caches - something
+/// downstream (most likely the source port itself, or the OS) appeared
+/// to be keying off the reused path rather than the file's actual
+/// content. Not confirmed against the source port's own code - a
+/// pragmatic, safe hardening either way.
 /// </summary>
 public static class TestMapLauncher
 {
+	private static string _previousTempWadPath;
+
+
 	/// <summary>
+	/// Reports any failure via <paramref name="onError"/> rather than a
+	/// plain return value - unlike before this forced a save first, this
+	/// can no longer always resolve synchronously (a map that's never
+	/// been saved pops a Save As dialog and only actually writes later,
+	/// if/when the user picks a file - see <see cref="OpenMapMenu.SaveMapThen"/>'s
+	/// own remarks on that).
+	///
 	/// This project's resource list has no distinct "which one is the
 	/// IWAD" concept (see <see cref="MapOptionsDialog"/>'s own remarks - it's
 	/// one flat, layered priority list, the map's own file always highest).
@@ -32,11 +57,12 @@ public static class TestMapLauncher
 	/// deliberate simplification, not a hidden assumption elsewhere in the
 	/// codebase.
 	/// </summary>
-	public static string Launch(OpenMapMenu openMapMenu, int skill, bool noMonsters)
+	public static void Launch(OpenMapMenu openMapMenu, int skill, bool noMonsters, Action<string> onError)
 	{
 		if (openMapMenu.CurrentMapName == null)
 		{
-			return "No map is currently loaded.";
+			onError("No map is currently loaded.");
+			return;
 		}
 
 		var kind = openMapMenu.CurrentGameConfigurationKind;
@@ -46,19 +72,22 @@ public static class TestMapLauncher
 
 		if (activeIndex < 0 || activeIndex >= engines.Count)
 		{
-			return $"No test engine configured for {kind} yet - set one up in Preferences > Test Engines.";
+			onError($"No test engine configured for {kind} yet - set one up in Preferences > Test Engines.");
+			return;
 		}
 
 		var engine = engines[activeIndex];
 		if (string.IsNullOrWhiteSpace(engine.ExecutablePath) || !File.Exists(engine.ExecutablePath))
 		{
-			return $"Test engine \"{engine.Name}\"'s executable path is missing or doesn't exist:\n{engine.ExecutablePath}";
+			onError($"Test engine \"{engine.Name}\"'s executable path is missing or doesn't exist:\n{engine.ExecutablePath}");
+			return;
 		}
 
 		var resourcePaths = openMapMenu.CurrentResourcePaths;
 		if (resourcePaths.Count == 0)
 		{
-			return "No IWAD/resources configured for this map yet - set one via Map > Map Options...";
+			onError("No IWAD/resources configured for this map yet - set one via Map > Map Options...");
+			return;
 		}
 
 		var gameConfiguration = GameConfigurations.Get(kind);
@@ -68,18 +97,37 @@ public static class TestMapLauncher
 
 		if (string.IsNullOrWhiteSpace(template))
 		{
-			return $"{kind} has no Test Map command-line template configured.";
+			onError($"{kind} has no Test Map command-line template configured.");
+			return;
 		}
 
-		var tempWadPath = Path.Combine(Path.GetTempPath(), "DoomArchitect_TestMap.wad");
+		// Everything above is a static precondition check, independent of
+		// the map's own saved state; everything below needs the just-saved
+		// result (freshly compiled BEHAVIOR included), so it's deferred
+		// until the save actually completes.
+		openMapMenu.SaveMapThen(() => LaunchAfterSave(openMapMenu, skill, noMonsters, engine, gameConfiguration, template, resourcePaths, onError));
+	}
+
+	private static void LaunchAfterSave(OpenMapMenu openMapMenu, int skill, bool noMonsters, TestEngine engine, IGameConfiguration gameConfiguration, string template, IReadOnlyList<string> resourcePaths, Action<string> onError)
+	{
+		if (_previousTempWadPath != null)
+		{
+			try { File.Delete(_previousTempWadPath); }
+			catch (Exception) { /* best-effort - a locked/already-gone previous temp file isn't fatal to this launch */ }
+		}
+
+		var tempWadPath = Path.Combine(Path.GetTempPath(), $"DoomArchitect_TestMap_{Guid.NewGuid():N}.wad");
 		try
 		{
 			File.WriteAllBytes(tempWadPath, openMapMenu.BuildCurrentMapBytes());
 		}
 		catch (Exception ex)
 		{
-			return $"Couldn't write the temporary test WAD: {ex.Message}";
+			onError($"Couldn't write the temporary test WAD: {ex.Message}");
+			return;
 		}
+
+		_previousTempWadPath = tempWadPath;
 
 		var additionalResourcePaths = ExcludeRequiredArchives(resourcePaths.Skip(1), gameConfiguration);
 
@@ -88,7 +136,7 @@ public static class TestMapLauncher
 			openMapMenu.CurrentMapName, skill, noMonsters);
 
 		var pid = OS.CreateProcess(engine.ExecutablePath, arguments.ToArray());
-		return pid == -1 ? $"Couldn't launch \"{engine.Name}\" ({engine.ExecutablePath})." : null;
+		if (pid == -1) onError($"Couldn't launch \"{engine.Name}\" ({engine.ExecutablePath}).");
 	}
 
 	/// <summary>

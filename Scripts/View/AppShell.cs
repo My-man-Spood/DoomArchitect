@@ -106,8 +106,12 @@ public partial class AppShell : Control
 		_mainMenuBar.CreateMapTabRequested = showOpenDialog =>
 		{
 			var mapView = CreateMapViewTab();
-			if (showOpenDialog) mapView.OpenMapMenu.ShowOpenFileDialog();
-			else mapView.OpenMapMenu.ShowNewMapDialog();
+			// Deferred - same reasoning as MainMenuBar.RunWithDiscardConfirmationIfDirty's
+			// own remarks: this whole lambda still runs synchronously inside
+			// the File menu's own IdPressed, so showing either dialog here
+			// directly is exposed to the exact same wrong-monitor risk.
+			if (showOpenDialog) Callable.From(mapView.OpenMapMenu.ShowOpenFileDialog).CallDeferred();
+			else Callable.From(mapView.OpenMapMenu.ShowNewMapDialog).CallDeferred();
 		};
 
 		_browserToggleButton.Pressed += OnToggleResourceBrowser;
