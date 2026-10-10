@@ -235,3 +235,41 @@
       silently return `false` for every point, which is exactly as
       confusing to debug as it sounds and cost a real detour before being
       traced back to the test's own geometry rather than the fix.
+
+      **Update, nudge now applies to the whole 3D selection:** the user's
+      own UDB muscle memory expected arrow-key nudging to move every
+      selected wall's texture together, not just the one under the
+      crosshair - confirmed against UDB's own real source
+      (`MoveTextureByOffset`/`GetSelectedObjects`: the full selection when
+      non-empty, falling back to just the live target otherwise) rather
+      than assumed. The real complication, surfaced before writing any
+      code: UDB's own 3D selection tracks individual wall *parts*
+      (Upper/Middle/Lower, each side, separately selectable) - "nudge the
+      selection" is unambiguous there, since every selected thing already
+      knows its own part. This project's selection
+      (`_selectedLinedefs3D`) only tracks whole linedefs - the very
+      reason `HandleTextureNudge` (and `AdjustTargetHeight`) originally
+      scoped itself to just the live target in the first place. Rather
+      than guess at a resolution, asked the user directly: the part kind
+      (Upper/Middle/Lower) always comes from whatever's actually under
+      the crosshair - there's no other source for it at this
+      granularity - applied to every selected linedef's side(s), front
+      and back checked independently (one linedef's "front" means
+      nothing on a different, unrelated linedef), that actually have
+      that same part textured; a side without that texture is skipped
+      rather than touched.
+
+      New `MapView.ResolveNudgeTargets(Sidedef hoveredSide, WallPartKind partKind)`
+      yields just the hovered side when nothing's selected (unchanged
+      single-target behavior) or every qualifying side across the
+      selection otherwise. The camera-relative X-flip check (see above)
+      moved from a single upfront computation to per-side inside the
+      loop - a multi-selection can freely mix walls running in different
+      directions, each needing its own independent flip against the
+      camera's current right vector; computing it once from only the
+      hovered wall would nudge "Left"/"Right" the wrong screen-direction
+      for any selected wall not running the same way as the one under the
+      crosshair. Every affected side's own sector gets marked dirty
+      (collected in a `HashSet<Sector>` first, so a multi-linedef nudge
+      sharing a sector doesn't mark it dirty more than once) rather than
+      just the single sector the original single-target version touched.

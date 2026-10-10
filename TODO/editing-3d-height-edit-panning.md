@@ -47,3 +47,52 @@
       (matching `FreeFlyCamera`'s already-established Escape/left-click
       capture toggle) - a popup opened while the OS cursor is still
       captured/hidden would otherwise be unreachable to actually click.
+
+## Update: the floor-vs-ceiling selection ambiguity this entry flagged became a real, reported problem
+
+The original scope note above ("multi-select-then-scroll would be
+ambiguous without a real redesign") stopped being theoretical: with
+one merged `_selectedSectors3D` (just *which sectors*, never *which
+surface*), clicking a ceiling visually highlighted its floor too (the
+highlight code drew both unconditionally for every selected sector,
+with nothing to tell them apart), and there was no way to select a
+floor and a ceiling together and raise both in one scroll, even though
+that's exactly what UDB's own real `raisesector8`/`lowersector8`
+already do (`GetSelectedObjects` collects *every* selected object
+regardless of type and applies the same delta to each one's own
+`OnChangeTargetHeight`).
+
+Did the real redesign instead of continuing to flag around it: split
+into `_selectedFloors3D`/`_selectedCeilings3D` (two independent
+`HashSet<Sector>`), matching UDB's own real `VisualFloor`/`VisualCeiling` -
+genuinely separate selectable objects there, which is exactly why UDB
+never had this ambiguity in the first place. `TargetHighlight.UpdateHighlights`
+now draws a sector's floor/ceiling highlight only when that specific
+surface is in the matching set, never both from one merged list.
+`AdjustTargetHeight` now matches UDB's own real selection-wide
+behavior exactly: every selected floor's `FloorHeight` *and* every
+selected ceiling's `CeilingHeight` move together in one scroll, as a
+single combined undo step, falling back to just the live target
+(unchanged from before) only when both selections are empty - the
+same "selection wins outright, falls back to the live target when
+empty" rule this project already follows everywhere else
+(`ResolveNudgeTargets`, the connected-texture-select extension).
+`HandleThreeDEditClick`'s own "which sectors to edit" is now the union
+of both sets (editing doesn't need the floor/ceiling distinction - the
+Sector dialog edits both fields together regardless).
+
+The classic-2D bridge (entering/leaving 3D mode) has nothing finer to
+preserve, since a 2D sector selection has no floor/ceiling concept at
+all: entering 3D seeds *both* sets from a 2D-selected sector; leaving
+3D counts a sector as 2D-selected if *either* of its two 3D surfaces
+is selected.
+
+Also added in the same pass, a separate real gap surfaced alongside
+this one: a `deselect_all` keybind (`C` by default, UDB's own real
+`clearselection` - a `BaseAction` shared across its classic and
+visual modes both - which had no equivalent here at all). Matches UDB's
+own real scope exactly rather than 3D-only: clears every selected
+floor/ceiling/wall/thing in 3D mode, or every selected vertex/linedef/
+sector/thing at once in 2D (`MapData`'s own four `ClearSelected*`
+methods, matching UDB's own real
+`ClearSelection(true, true, true, true, true, true)`).

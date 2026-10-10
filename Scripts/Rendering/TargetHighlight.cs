@@ -10,7 +10,9 @@ namespace DoomArchitect.Rendering;
 
 /// <summary>
 /// Every highlighted surface in the 3D view: the current hover/crosshair
-/// target, plus every selected Sector/Linedef/Thing - rebuilt as a pool of
+/// target, plus every selected Floor/Ceiling/Linedef/Thing (a Sector's
+/// floor and ceiling are tracked, and so highlighted, independently -
+/// selecting one must never also highlight the other) - rebuilt as a pool of
 /// child <see cref="MeshInstance3D"/>s each time <see cref="UpdateHighlights"/>
 /// is called (see its own remarks), rather than as one single mesh the
 /// way this class originally worked when it only ever showed one target
@@ -95,15 +97,14 @@ public partial class TargetHighlight : Node3D
     /// <c>MapOverlay</c>'s 2D view uses.
     /// </summary>
     public void UpdateHighlights(
-        MapTarget? hoverTarget, IEnumerable<Sector> selectedSectors, IEnumerable<Linedef> selectedLinedefs,
-        IEnumerable<Thing> selectedThings, MapVector2 viewerPosition)
+        MapTarget? hoverTarget, IEnumerable<Sector> selectedFloors, IEnumerable<Sector> selectedCeilings,
+        IEnumerable<Linedef> selectedLinedefs, IEnumerable<Thing> selectedThings, MapVector2 viewerPosition)
     {
         foreach (var instance in _highlightInstances) instance.QueueFree();
         _highlightInstances.Clear();
 
-        var hoverSector = hoverTarget is { Kind: TargetSurfaceKind.Floor or TargetSurfaceKind.Ceiling }
-            ? hoverTarget.Value.Sector
-            : null;
+        var hoverFloor = hoverTarget is { Kind: TargetSurfaceKind.Floor } ? hoverTarget.Value.Sector : null;
+        var hoverCeiling = hoverTarget is { Kind: TargetSurfaceKind.Ceiling } ? hoverTarget.Value.Sector : null;
         var hoverLinedef = hoverTarget is { Kind: TargetSurfaceKind.Wall }
             ? hoverTarget.Value.WallSegment!.Value.Side.Linedef
             : null;
@@ -111,10 +112,15 @@ public partial class TargetHighlight : Node3D
             ? hoverTarget.Value.Thing
             : null;
 
-        foreach (var sector in selectedSectors)
+        foreach (var sector in selectedFloors)
         {
-            if (sector == hoverSector) continue;
+            if (sector == hoverFloor) continue;
             AddFlat(sector, sector.FloorHeight, FloorCeilingOffset, _selectedMaterial);
+        }
+
+        foreach (var sector in selectedCeilings)
+        {
+            if (sector == hoverCeiling) continue;
             AddFlat(sector, sector.CeilingHeight, -FloorCeilingOffset, _selectedMaterial);
         }
 
