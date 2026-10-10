@@ -67,9 +67,9 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("texture_nudge_down", CategoryTexture, "Nudge Texture Down", "Nudges the targeted wall's texture offset down.", new KeyBinding("Down"), AllowEcho: true),
         new KeyBindingDefinition("texture_nudge_amount_x8_modifier", CategoryTexture, "Nudge by 8 Pixels", "While held, nudges the targeted texture by 8 pixels instead of 1.", new KeyBinding("Alt")),
         new KeyBindingDefinition("texture_nudge_amount_grid_modifier", CategoryTexture, "Nudge by Grid Size", "While held, nudges the targeted texture by the current grid size instead of 1 pixel.", new KeyBinding("Ctrl")),
-        new KeyBindingDefinition("texture_auto_align", CategoryTexture, "Auto-Align Texture", "Aligns the targeted wall's texture with its same-textured neighbors.", new KeyBinding("A")),
-        new KeyBindingDefinition("texture_auto_align_axis_swap_modifier", CategoryTexture, "Auto-Align Vertically Instead", "While held, auto-align affects the texture's vertical offset instead of horizontal.", new KeyBinding("Shift")),
-        new KeyBindingDefinition("texture_auto_align_both_modifier", CategoryTexture, "Auto-Align Both Axes", "While held, auto-align affects both the texture's horizontal and vertical offset.", new KeyBinding("Ctrl")),
+        new KeyBindingDefinition("texture_auto_align", CategoryTexture, "Auto-Align Texture", "Aligns the targeted wall's texture with its same-textured neighbors.", new KeyBinding("E")),
+        new KeyBindingDefinition("texture_auto_align_axis_swap_modifier", CategoryTexture, "Auto-Align Vertically Instead", "While held, auto-align affects the texture's vertical offset instead of horizontal.", new KeyBinding("Ctrl")),
+        new KeyBindingDefinition("texture_auto_align_both_modifier", CategoryTexture, "Auto-Align Both Axes", "While held, auto-align affects both the texture's horizontal and vertical offset.", new KeyBinding("Q")),
         new KeyBindingDefinition("texture_copy", CategoryTexture, "Copy Texture", "Copies the targeted wall/floor/ceiling's texture. Paste with Ctrl+V or Middle Mouse Button (not rebindable).", new KeyBinding("C", Ctrl: true)),
         new KeyBindingDefinition("paste_selection", CategoryEdit, "Paste", "Pastes the copied texture onto the targeted wall/floor/ceiling.", new KeyBinding("V", Ctrl: true)),
 
