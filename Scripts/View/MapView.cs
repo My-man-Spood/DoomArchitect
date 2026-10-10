@@ -261,7 +261,7 @@ public partial class MapView : Node3D
 
 		foreach (var sector in _map.GetDirtySectors())
 		{
-			var mesh = SectorMeshBuilder.Build(sector);
+			var mesh = SectorMeshBuilder.Build(sector, _textureCache);
 			var instances = _sectorMeshes[sector];
 			instances.Floor.Mesh = mesh.Floor;
 			instances.Ceiling.Mesh = mesh.Ceiling;
@@ -973,7 +973,7 @@ public partial class MapView : Node3D
 
 	private void CreateSectorMeshInstances(Sector sector)
 	{
-		var mesh = SectorMeshBuilder.Build(sector);
+		var mesh = SectorMeshBuilder.Build(sector, _textureCache);
 		var floor = new MeshInstance3D { Mesh = mesh.Floor };
 		var ceiling = new MeshInstance3D { Mesh = mesh.Ceiling, Layers = ThreeDOnlyRenderLayer };
 		ApplyFlatMaterial(floor, sector.FloorTexture);

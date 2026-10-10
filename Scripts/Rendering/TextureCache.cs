@@ -79,6 +79,13 @@ public sealed class TextureCache
         return material;
     }
 
+    /// <summary>Pixel dimensions of a flat, needed to build floor/ceiling UVs at native scale - mirrors <see cref="GetWallTextureSize"/>. Unlike a wall's "-" (no texture, a real, valid, never-rendered state), a sector's Floor/Ceiling texture is always rendered, so there's no analogous caller-side sentinel case to skip here - whatever name resolves to (down to <see cref="TextureSet"/>'s own placeholder for a genuinely missing one) is always the real size to build against.</summary>
+    public Vector2I GetFlatTextureSize(string name)
+    {
+        var texture = GetFlatMaterial(name).AlbedoTexture;
+        return new Vector2I(texture.GetWidth(), texture.GetHeight());
+    }
+
     /// <summary>
     /// The sprite material/size/offset for a Thing's resolved type, or null
     /// if the sprite lump isn't present in the currently loaded WAD - an
