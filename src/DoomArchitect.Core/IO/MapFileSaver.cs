@@ -24,9 +24,24 @@ public static class MapFileSaver
     /// <list type="bullet">
     /// <item><paramref name="originalLumps"/> is null (brand-new file): returns just
     /// [marker, TEXTMAP, ENDMAP].</item>
-    /// <item>an existing UDMF group under that marker: only the
-    /// <c>TEXTMAP</c> lump is replaced, every other lump in the group
-    /// (BEHAVIOR/ZNODES/etc.) is preserved byte-for-byte.</item>
+    /// <item>an existing UDMF group under that marker: the <c>TEXTMAP</c>
+    /// lump is replaced, as are <c>ZNODES</c>/<c>BLOCKMAP</c>/<c>REJECT</c> -
+    /// real, reported bug: those three are precomputed *from* the
+    /// geometry (BSP nodes, the movement/collision grid, line-of-sight
+    /// visibility), so carrying them over byte-for-byte after a real
+    /// geometry edit leaves them silently stale - the saved file's own
+    /// TEXTMAP is correct (confirmed: DoomArchitect's own reload, and a
+    /// byte-for-byte diff of the saved file, both show the edit), but a
+    /// real engine given stale ZNODES renders/collides according to the
+    /// *old* BSP tree, which is indistinguishable from "my changes
+    /// aren't there" during Test Map even though they genuinely are, in
+    /// the TEXTMAP data. Dropped rather than rebuilt here - every UDMF-
+    /// supporting source port (confirmed: GZDoom) already builds all
+    /// three on its own when they're simply absent, so removing them is
+    /// sufficient and doesn't need this project to implement its own
+    /// node-building algorithm. Every other lump in the group
+    /// (BEHAVIOR/DIALOGUE/SCRIPTS - not geometry-derived) is still
+    /// preserved byte-for-byte, same as before.</item>
     /// <item>an existing classic (binary-format) group under that marker:
     /// removed wholesale and replaced with a fresh UDMF group - saving a
     /// classic map is a deliberate upgrade-to-UDMF, since
@@ -74,7 +89,9 @@ public static class MapFileSaver
             for (var i = nextIndex; i < groupEnd; i++)
             {
                 var lump = originalLumps[i];
-                result.Add(lump.Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase) ? textMapLump : lump);
+                if (lump.Name.Equals("TEXTMAP", StringComparison.OrdinalIgnoreCase)) { result.Add(textMapLump); continue; }
+                if (IsStaleAfterGeometryEdit(lump.Name)) continue;
+                result.Add(lump);
             }
 
             result.AddRange(originalLumps.Skip(groupEnd));
@@ -95,4 +112,18 @@ public static class MapFileSaver
         result.AddRange(originalLumps.Skip(nextIndex));
         return result;
     }
+
+    /// <summary>
+    /// <c>ZNODES</c> (BSP nodes), <c>BLOCKMAP</c> (the movement/collision
+    /// grid), and <c>REJECT</c> (line-of-sight visibility) are all
+    /// precomputed purely *from* a map's geometry - genuinely stale,
+    /// not just unused, the moment that geometry changes. Every UDMF-
+    /// supporting source port rebuilds them on its own when they're
+    /// simply absent, so dropping them here (rather than carrying over
+    /// what's now incorrect data) is both correct and sufficient.
+    /// </summary>
+    private static bool IsStaleAfterGeometryEdit(string lumpName) =>
+        lumpName.Equals("ZNODES", StringComparison.OrdinalIgnoreCase) ||
+        lumpName.Equals("BLOCKMAP", StringComparison.OrdinalIgnoreCase) ||
+        lumpName.Equals("REJECT", StringComparison.OrdinalIgnoreCase);
 }

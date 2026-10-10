@@ -444,7 +444,43 @@ public sealed class WadFile : IResourceContainer
         return (result, insertAt);
     }
 
-    /// <summary>The shared "where does this map's own lump group start/end" scan <see cref="WithAddedScriptsLump"/>/<see cref="FindScriptsLumpIndex"/>/<see cref="WithSetBehaviorLump"/> all need - <paramref name="markerIndex"/> is the map name lump's own index, <c>BodyStart</c>/<c>BodyEnd</c> bound everything strictly after it (the marker itself excluded, matching <see cref="FindMapLumpGroups"/>'s own convention).</summary>
+    /// <summary>
+    /// Inserts whatever lumps a node builder added to
+    /// <paramref name="builtLumps"/>'s own copy of this map's group that
+    /// <paramref name="lumps"/>'s own copy doesn't already have, by name
+    /// (right before <c>ENDMAP</c> for a UDMF map, at the group's own end
+    /// for a classic one) - confirmed live that a real node builder
+    /// (zdbsp) only ever adds <c>ZNODES</c> for the flags this project
+    /// uses, but this doesn't hardcode that: whatever's actually new is
+    /// what gets inserted, so a different tool/flag combination that
+    /// also wrote e.g. <c>BLOCKMAP</c>/<c>REJECT</c> would be picked up
+    /// the same way. Everything else in <paramref name="lumps"/> - other
+    /// maps, resources - is left completely alone; only this one map's
+    /// own group is touched, and only by what's genuinely new, never a
+    /// wholesale trust of <paramref name="builtLumps"/>'s own handling
+    /// of content outside the one map it was asked to rebuild.
+    /// </summary>
+    public static IReadOnlyList<WadLump> WithGeometryLumpsFrom(
+        IReadOnlyList<WadLump> lumps, int markerIndex, IReadOnlyList<WadLump> builtLumps, int builtMarkerIndex)
+    {
+        var (isUdmf, bodyStart, bodyEnd) = FindMapGroupBounds(lumps, markerIndex);
+        var existingNames = new HashSet<string>(
+            lumps.Skip(bodyStart).Take(bodyEnd - bodyStart).Select(l => l.Name), StringComparer.OrdinalIgnoreCase);
+
+        var (_, builtBodyStart, builtBodyEnd) = FindMapGroupBounds(builtLumps, builtMarkerIndex);
+        var newLumps = builtLumps.Skip(builtBodyStart).Take(builtBodyEnd - builtBodyStart)
+            .Where(l => !existingNames.Contains(l.Name))
+            .ToList();
+
+        if (newLumps.Count == 0) return lumps;
+
+        var insertAt = isUdmf ? bodyEnd - 1 : bodyEnd;
+        var result = new List<WadLump>(lumps);
+        result.InsertRange(insertAt, newLumps);
+        return result;
+    }
+
+    /// <summary>The shared "where does this map's own lump group start/end" scan <see cref="WithAddedScriptsLump"/>/<see cref="FindScriptsLumpIndex"/>/<see cref="WithSetBehaviorLump"/>/<see cref="WithGeometryLumpsFrom"/> all need - <paramref name="markerIndex"/> is the map name lump's own index, <c>BodyStart</c>/<c>BodyEnd</c> bound everything strictly after it (the marker itself excluded, matching <see cref="FindMapLumpGroups"/>'s own convention).</summary>
     private static (bool IsUdmf, int BodyStart, int BodyEnd) FindMapGroupBounds(IReadOnlyList<WadLump> lumps, int markerIndex)
     {
         var isUdmf = markerIndex + 1 < lumps.Count

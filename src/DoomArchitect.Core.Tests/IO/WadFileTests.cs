@@ -504,4 +504,69 @@ public class WadFileTests
         Assert.Equal(new byte[] { 9 }, result[2].Data);
         Assert.Equal("SCRIPTS", result[3].Name);
     }
+
+    /// <summary>Real, reported bug: a node builder's own real output (ZNODES) needs to land back in the saved file - see MapFileSaver's own remarks on why it's dropped before this ever runs.</summary>
+    [Fact]
+    public void WithGeometryLumpsFrom_BuiltLumpsHaveANewOne_InsertsItBeforeEndmap()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("BEHAVIOR", new byte[] { 1 }),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var builtBytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("BEHAVIOR", new byte[] { 1 }),
+            ("ZNODES", new byte[] { 9, 9, 9 }),
+            ("ENDMAP", Array.Empty<byte>()));
+        var builtWad = WadFile.Read(new MemoryStream(builtBytes));
+
+        var result = WadFile.WithGeometryLumpsFrom(wad.Lumps, 0, builtWad.Lumps, 0);
+
+        Assert.Equal(new[] { "MAP01", "TEXTMAP", "BEHAVIOR", "ZNODES", "ENDMAP" }, result.Select(l => l.Name));
+        Assert.Equal(new byte[] { 9, 9, 9 }, result[3].Data);
+    }
+
+    [Fact]
+    public void WithGeometryLumpsFrom_BuiltLumpsHaveNothingNew_ReturnsTheOriginalLumpsUnchanged()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var result = WadFile.WithGeometryLumpsFrom(wad.Lumps, 0, wad.Lumps, 0);
+
+        Assert.Same(wad.Lumps, result);
+    }
+
+    /// <summary>Only the targeted map's own group is ever touched - a second map elsewhere in the same file is left completely alone, regardless of what the node builder's own output looked like around it.</summary>
+    [Fact]
+    public void WithGeometryLumpsFrom_WadHasAnotherMap_LeavesItCompletelyUntouched()
+    {
+        var bytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("ENDMAP", Array.Empty<byte>()),
+            ("MAP02", Array.Empty<byte>()),
+            ("TEXTMAP", new byte[] { 2 }),
+            ("ENDMAP", Array.Empty<byte>()));
+        var wad = WadFile.Read(new MemoryStream(bytes));
+
+        var builtBytes = WadTestBuilder.Build(
+            ("MAP01", Array.Empty<byte>()),
+            ("TEXTMAP", Array.Empty<byte>()),
+            ("ZNODES", new byte[] { 9 }),
+            ("ENDMAP", Array.Empty<byte>()));
+        var builtWad = WadFile.Read(new MemoryStream(builtBytes));
+
+        var result = WadFile.WithGeometryLumpsFrom(wad.Lumps, 0, builtWad.Lumps, 0);
+
+        Assert.Equal(new[] { "MAP01", "TEXTMAP", "ZNODES", "ENDMAP", "MAP02", "TEXTMAP", "ENDMAP" }, result.Select(l => l.Name));
+        Assert.Equal(new byte[] { 2 }, result[5].Data);
+    }
 }

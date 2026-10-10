@@ -66,6 +66,38 @@ public class MapFileSaverTests
         Assert.Equal("ENDMAP", result[3].Name);
     }
 
+    /// <summary>
+    /// Real, reported bug: a geometry edit saved correctly (confirmed:
+    /// the saved file's own TEXTMAP had it, and DoomArchitect's own
+    /// reload showed it), but never showed up when testing in a real
+    /// source port. Root cause: ZNODES/BLOCKMAP/REJECT are precomputed
+    /// *from* the geometry - carrying them over byte-for-byte after a
+    /// real edit left them silently stale, and the source port used
+    /// that stale data (old BSP tree) for actual rendering/collision
+    /// rather than the freshly-written TEXTMAP. Every UDMF-supporting
+    /// source port rebuilds these on its own when they're simply
+    /// absent, so dropping them (rather than this project implementing
+    /// its own node-builder) is the real fix.
+    /// </summary>
+    [Fact]
+    public void BuildLumpsForSave_ExistingUdmfGroupWithPrecomputedGeometryLumps_DropsThemAsStale()
+    {
+        var original = new[]
+        {
+            new WadLump("MAP01", Array.Empty<byte>()),
+            new WadLump("TEXTMAP", Encoding.ASCII.GetBytes("old text")),
+            new WadLump("ZNODES", new byte[] { 1 }),
+            new WadLump("BLOCKMAP", new byte[] { 2 }),
+            new WadLump("REJECT", new byte[] { 3 }),
+            new WadLump("BEHAVIOR", new byte[] { 4 }),
+            new WadLump("ENDMAP", Array.Empty<byte>()),
+        };
+
+        var result = MapFileSaver.BuildLumpsForSave(original, "MAP01", "new text");
+
+        Assert.Equal(new[] { "MAP01", "TEXTMAP", "BEHAVIOR", "ENDMAP" }, result.Select(l => l.Name));
+    }
+
     [Fact]
     public void BuildLumpsForSave_ExistingUdmfGroup_LeavesLumpsAfterTheGroupUntouched()
     {
