@@ -224,6 +224,71 @@ public class UdmfReaderTests
         Assert.Equal(5L, linedef.Fields["arg0"].Value);
     }
 
+    /// <summary>
+    /// "twosided" is a known, handled field (see <see cref="Map.Linedef.TwoSided"/>'s
+    /// own remarks - it's a real stored property, kept in sync at
+    /// <see cref="Map.MapData"/>'s mutation sites, not a generic custom
+    /// field) - a loaded file's own value for it must not also linger as
+    /// a generic custom field, which would get written back out as a
+    /// stale duplicate alongside the real property's own value.
+    /// </summary>
+    [Fact]
+    public void Read_TwosidedField_IsNotTreatedAsACustomField()
+    {
+        var text = "namespace = \"doom\"; vertex { x = 0; y = 0; } vertex { x = 64; y = 0; } " +
+            "linedef { v1 = 0; v2 = 1; twosided = true; }";
+
+        var doc = UdmfReader.Read(text);
+
+        var linedef = Assert.Single(doc.Map.Linedefs);
+        Assert.False(linedef.Fields.ContainsKey("twosided"));
+    }
+
+    /// <summary>
+    /// A one-sided linedef (no "sideback") whose file explicitly disagrees
+    /// and says <c>twosided = true</c> anyway - the explicit value must
+    /// win over what <see cref="Map.Linedef.Back"/> alone would imply,
+    /// matching UDB's own real semantics (a mapper-editable flag that can
+    /// genuinely drift from Front/Back, which is exactly the kind of real
+    /// map issue UDB's own error checks exist to catch, not something this
+    /// reader should silently "correct").
+    /// </summary>
+    [Fact]
+    public void Read_ExplicitTwosidedField_OverridesComputedValueEvenWhenItDisagrees()
+    {
+        var text = "namespace = \"doom\"; vertex { x = 0; y = 0; } vertex { x = 64; y = 0; } " +
+            "sidedef { sector = 0; } sector { } " +
+            "linedef { v1 = 0; v2 = 1; sidefront = 0; twosided = true; }";
+
+        var doc = UdmfReader.Read(text);
+
+        var linedef = Assert.Single(doc.Map.Linedefs);
+        Assert.Null(linedef.Back);
+        Assert.True(linedef.TwoSided);
+    }
+
+    /// <summary>
+    /// A genuinely two-sided linedef (both sidedefs present) from a file
+    /// that never wrote "twosided" at all - this project's own writer
+    /// never emitted the field until a prior bug was fixed, so older
+    /// saved content needs to self-heal via the same Front/Back-derived
+    /// fallback <see cref="Map.MapData.CreateLinedef"/> already applies,
+    /// rather than defaulting to false per the bare UDMF spec.
+    /// </summary>
+    [Fact]
+    public void Read_MissingTwosidedField_FallsBackToComputedValueFromSidedefs()
+    {
+        var text = "namespace = \"doom\"; vertex { x = 0; y = 0; } vertex { x = 64; y = 0; } " +
+            "sidedef { sector = 0; } sidedef { sector = 0; } sector { } " +
+            "linedef { v1 = 0; v2 = 1; sidefront = 0; sideback = 1; }";
+
+        var doc = UdmfReader.Read(text);
+
+        var linedef = Assert.Single(doc.Map.Linedefs);
+        Assert.NotNull(linedef.Back);
+        Assert.True(linedef.TwoSided);
+    }
+
     [Fact]
     public void Read_UnrecognizedSectorField_BecomesCustomField()
     {

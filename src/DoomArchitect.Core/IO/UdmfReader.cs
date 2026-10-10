@@ -17,7 +17,11 @@ public static class UdmfReader
     private static readonly HashSet<string> KnownVertexFields = new() { "x", "y" };
     private static readonly HashSet<string> KnownSectorFields =
         new() { "heightfloor", "heightceiling", "texturefloor", "textureceiling", "lightlevel" };
-    private static readonly HashSet<string> KnownLinedefFields = new() { "v1", "v2", "sidefront", "sideback" };
+    // "twosided" is read into Linedef.TwoSided directly (see its own
+    // remarks for the full story) - excluded here so a loaded file's own
+    // value doesn't *also* linger in the generic custom-fields bag and
+    // get written back out as a stale duplicate alongside it.
+    private static readonly HashSet<string> KnownLinedefFields = new() { "v1", "v2", "sidefront", "sideback", "twosided" };
     private static readonly HashSet<string> KnownSidedefFields =
         new() { "sector", "offsetx", "offsety", "texturetop", "texturebottom", "texturemiddle" };
     private static readonly HashSet<string> KnownThingFields = new() { "x", "y", "height", "angle", "type" };
@@ -122,6 +126,15 @@ public static class UdmfReader
             var back = ResolveSidedef(block.Find("sideback")?.AsInt() ?? -1, sidedefBlocks, sectors, i, "back", warnings);
 
             var linedef = map.CreateLinedef(start, end, front?.Sector, back?.Sector);
+            // CreateLinedef already set TwoSided from front/back directly
+            // (correct when the file has no "twosided" of its own at all -
+            // older content, or anything from a source that never wrote
+            // it) - a real, explicit value in the file itself always wins,
+            // even if it disagrees with front/back (see Linedef.TwoSided's
+            // own remarks on why that's a real state to preserve, not an
+            // inconsistency to silently normalize away).
+            var explicitTwoSided = block.Find("twosided")?.AsBool();
+            if (explicitTwoSided.HasValue) linedef.TwoSided = explicitTwoSided.Value;
             ApplyFields(linedef.Fields, block, KnownLinedefFields);
 
             if (front.HasValue) ApplySidedefData(linedef.Front!, front.Value.Block);

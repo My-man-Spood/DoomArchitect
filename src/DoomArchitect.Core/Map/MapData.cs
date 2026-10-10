@@ -74,8 +74,20 @@ public sealed class MapData
         end.AddLinedef(linedef);
         _linedefs.Add(linedef);
 
+        ApplySidedFlags(linedef);
         return linedef;
     }
+
+    /// <summary>
+    /// Mirrors Ultimate Doom Builder's own real <c>Linedef.ApplySidedFlags</c> -
+    /// called at every site in this file that attaches or detaches a
+    /// sidedef, so <see cref="Linedef.TwoSided"/> reflects reality after
+    /// any *normal* edit, the same way UDB's own callers keep its
+    /// equivalent flag in sync (see that property's own remarks for why
+    /// this is a real, stored flag rather than something computed on
+    /// the fly).
+    /// </summary>
+    private static void ApplySidedFlags(Linedef linedef) => linedef.TwoSided = linedef.Front != null && linedef.Back != null;
 
     /// <summary>
     /// Detaches a linedef from both its endpoint vertices and both its
@@ -254,6 +266,10 @@ public sealed class MapData
         if (linedef.Front != null) linedef.Front.Sector.NeedsRebuild = true;
         if (linedef.Back != null) linedef.Back.Sector.NeedsRebuild = true;
 
+        // Only newLinedef is a fresh object here - the original keeps
+        // its own existing sides (and thus its own already-correct
+        // TwoSided) throughout a split.
+        ApplySidedFlags(newLinedef);
         return newLinedef;
     }
 
@@ -386,6 +402,8 @@ public sealed class MapData
             donor.Sector.NeedsRebuild = true;
             if (front) target.Front = created; else target.Back = created;
         }
+
+        ApplySidedFlags(target);
     }
 
     /// <summary>
@@ -433,6 +451,7 @@ public sealed class MapData
         }
 
         sector.NeedsRebuild = true;
+        ApplySidedFlags(linedef);
     }
 
     /// <summary>

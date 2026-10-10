@@ -100,6 +100,12 @@ public static class UdmfWriter
             UdmfTreeWriter.WriteAssignment(sb, 1, "v2", vertexIndex[linedef.End]);
             UdmfTreeWriter.WriteAssignment(sb, 1, "sidefront", linedef.Front != null ? sidedefIndex[linedef.Front] : -1);
             UdmfTreeWriter.WriteAssignment(sb, 1, "sideback", linedef.Back != null ? sidedefIndex[linedef.Back] : -1);
+            // Real, reported bug: never written before, even though a
+            // real back sidedef was present - see Linedef.TwoSided's own
+            // remarks for the full story (GZDoom's own node-building
+            // trusts this real, named UDMF field over inferring two-
+            // sidedness from sideback alone).
+            if (linedef.TwoSided) UdmfTreeWriter.WriteAssignment(sb, 1, "twosided", true);
             WriteFields(sb, linedef.Fields);
             EndBlock(sb);
         }

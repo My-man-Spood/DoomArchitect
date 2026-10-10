@@ -85,6 +85,34 @@ public class UdmfWriterTests
 
         Assert.Contains("sideback = -1;", text);
         Assert.Contains("sidefront = 0;", text);
+        Assert.DoesNotContain("twosided", text);
+    }
+
+    /// <summary>
+    /// Real, reported bug: never written at all before, even for a real
+    /// two-sided line - GZDoom's own node-building trusts this real,
+    /// independent UDMF field (confirmed against the base spec: "line
+    /// has two sides," a bool defaulting false) over inferring two-
+    /// sidedness from <c>sideback</c> alone, so its absence silently
+    /// built walls GZDoom treated as sealed/one-sided even though
+    /// <c>sideback</c> pointed at a real sidedef - confirmed live
+    /// against a minimal reproduction (two tiny interior pillar
+    /// sectors, completely invisible walls in GZDoom, fixed by manually
+    /// setting this exact flag in the editor UI).
+    /// </summary>
+    [Fact]
+    public void Write_LinedefWithBackSidedef_WritesTwosidedTrue()
+    {
+        var map = new MapData();
+        var v0 = map.CreateVertex(new Vector2(0, 0));
+        var v1 = map.CreateVertex(new Vector2(64, 0));
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(16, 128);
+        map.CreateLinedef(v0, v1, front, back);
+
+        var text = UdmfWriter.Write(EmptyDocument(map));
+
+        Assert.Contains("twosided = true;", text);
     }
 
     [Fact]

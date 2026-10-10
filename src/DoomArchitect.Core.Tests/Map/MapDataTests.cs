@@ -80,6 +80,44 @@ public class MapDataTests
         Assert.Equal(new Vector2(12, 34), vertex.Position);
     }
 
+    /// <summary>The real, named UDMF concept (see <see cref="Linedef.TwoSided"/>'s own remarks) - stored and kept in sync by <c>MapData</c>'s own mutation sites, matching UDB's <c>ApplySidedFlags</c> pattern, so it's already correct right after construction with no separate sync call needed here.</summary>
+    [Fact]
+    public void CreateLinedef_WithBothSides_IsTwoSided()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(0, 0));
+        var v2 = map.CreateVertex(new Vector2(64, 0));
+
+        var linedef = map.CreateLinedef(v1, v2, front: map.CreateSector(0, 128), back: map.CreateSector(0, 96));
+
+        Assert.True(linedef.TwoSided);
+    }
+
+    [Fact]
+    public void CreateLinedef_WithOnlyAFrontSide_IsNotTwoSided()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(0, 0));
+        var v2 = map.CreateVertex(new Vector2(64, 0));
+
+        var linedef = map.CreateLinedef(v1, v2, front: map.CreateSector(0, 128), back: null);
+
+        Assert.False(linedef.TwoSided);
+    }
+
+    [Fact]
+    public void AttachOrRetargetSidedef_GivingAOneSidedLinedefABack_MakesItTwoSided()
+    {
+        var map = new MapData();
+        var v1 = map.CreateVertex(new Vector2(0, 0));
+        var v2 = map.CreateVertex(new Vector2(64, 0));
+        var linedef = map.CreateLinedef(v1, v2, front: map.CreateSector(0, 128), back: null);
+
+        map.AttachOrRetargetSidedef(linedef, front: false, map.CreateSector(0, 96));
+
+        Assert.True(linedef.TwoSided);
+    }
+
     [Fact]
     public void CreateLinedef_RegistersItselfOnBothEndpoints()
     {
@@ -1075,6 +1113,23 @@ public class MapDataTests
 
         Assert.NotNull(second.Front);
         Assert.Null(second.Back);
+        Assert.False(second.TwoSided);
+    }
+
+    [Fact]
+    public void SplitLinedef_TwoSidedWall_LeavesTheNewHalfTwoSidedToo()
+    {
+        var map = new MapData();
+        var front = map.CreateSector(0, 128);
+        var back = map.CreateSector(0, 96);
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(100, 0));
+        var linedef = map.CreateLinedef(a, b, front, back);
+        var mid = map.CreateVertex(new Vector2(50, 0));
+
+        var second = map.SplitLinedef(linedef, mid);
+
+        Assert.True(second.TwoSided);
     }
 
     [Fact]
@@ -1253,6 +1308,7 @@ public class MapDataTests
         Assert.Equal("FRONTTEX", keep.Front.MiddleTexture);
         Assert.Equal("BACKTEX", keep.Back.MiddleTexture);
         Assert.DoesNotContain(remove, map.Linedefs);
+        Assert.True(keep.TwoSided);
     }
 
     [Fact]
