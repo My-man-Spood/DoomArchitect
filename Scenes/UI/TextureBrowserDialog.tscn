@@ -23,16 +23,14 @@ size_flags_vertical = 3
 layout_mode = 2
 placeholder_text = "Filter..."
 
-[node name="Gallery" type="ItemList" parent="Container/GalleryPanel"]
+[node name="Gallery" type="ScrollContainer" parent="Container/GalleryPanel"]
 layout_mode = 2
 size_flags_vertical = 3
 custom_minimum_size = Vector2(880, 480)
-icon_mode = 0
-fixed_icon_size = Vector2i(128, 128)
-same_column_width = true
-max_columns = 0
-theme_override_constants/h_separation = 12
-theme_override_constants/v_separation = 8
+horizontal_scroll_mode = 0
+
+[node name="GalleryContent" type="Control" parent="Container/GalleryPanel/Gallery"]
+layout_mode = 2
 
 [node name="TreePanel" type="VBoxContainer" parent="Container"]
 layout_mode = 2

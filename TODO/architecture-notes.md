@@ -37,3 +37,27 @@
   the next delimiter, UDMF's cannot; `.cfg` has `include()` and
   case-sensitive keys, UDMF has neither). Following UDB's own precedent
   here rather than guessing.
+
+- **`Scripts/Controls/` - a real library of reusable UI building blocks,
+  not another per-feature folder.** Everything under `Scripts/View/` is
+  Godot script attached to one specific scene/dialog (global namespace,
+  by this project's own established convention, matching how Godot's
+  own scene-script attachment expects it); `Scripts/Controls/` is for
+  genuinely generic, feature-agnostic UI mechanisms with no scene of
+  their own - given a real namespace (`DoomArchitect.Controls`), same
+  as the existing precedent for plain non-Node helper classes
+  (`DoomArchitect.Rendering`, `Scripts/Rendering/`).
+  First (and so far only) resident: `VirtualizedGrid<TItem, TCell>` -
+  extracted out of `TextureBrowserDialog`'s own gallery once a real
+  performance regression made clear that "one real Godot node per item
+  in a Container" doesn't scale, and the fix (a small, recycled pool of
+  cells covering only the visible viewport) wasn't going to be a one-off
+  need. Deliberately a plain C# class, not itself a `Control`/`Node`:
+  Godot's node/property/signal system doesn't support open generic
+  types, so making the *generic controller* a plain class that drives an
+  existing `ScrollContainer`/`Control` pair (rather than trying to make
+  it a real, attachable scene node) is what lets it be generic at all.
+  A consumer's own cell type implements the small `IVirtualizedGridCell<TItem>`
+  interface; nothing else is required to reuse it for a different
+  large-collection-by-thumbnail (or by anything else uniform-sized)
+  picker later.

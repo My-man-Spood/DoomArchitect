@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Controls;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Textures;
 using DoomArchitect.Rendering;
@@ -9,9 +10,17 @@ using Godot;
 /// <summary>
 /// Browse and pick a wall texture or flat by thumbnail - a per-resource
 /// tree ("All" plus one node per loaded WAD/PK3) alongside a live-filtered
-/// icon gallery. Single-click selects only; double-click (or Enter, via
-/// <see cref="ItemList.ItemActivated"/>) confirms and closes exactly like
-/// OK.
+/// icon gallery, driven by the shared, reusable
+/// <see cref="VirtualizedGrid{TItem,TCell}"/> (<see cref="_grid"/>) rather
+/// than Godot's built-in <see cref="ItemList"/> (used here originally):
+/// that control renders every item's icon/text internally with no
+/// per-item overlay slot for a real size-badge node, and a first attempt
+/// at giving every name its own permanent cell node instead was a real,
+/// reported performance problem on a large resource set - see
+/// <see cref="VirtualizedGrid{TItem,TCell}"/>'s own remarks for why.
+///
+/// Single click selects only; double-click (or Enter, via
+/// <see cref="OnConfirmed"/>) confirms and closes exactly like OK.
 ///
 /// <see cref="Browse"/>'s <c>flats</c> parameter is a fixed split - a
 /// Sector's Floor/Ceiling fields always browse flats, a Linedef's
@@ -29,17 +38,35 @@ using Godot;
 /// <see cref="TextureIconCache"/>, which starts warming the moment a map
 /// loads (see <c>MapView</c>), long before this dialog is ever opened. A
 /// shared gray placeholder icon stands in for anything not decoded yet;
-/// <see cref="_Process"/> just re-polls the cache each frame for whatever
-/// is currently displayed and swaps in the real icon once it's ready.
+/// <see cref="_Process"/> re-polls the cache each frame for whatever's
+/// currently pooled by <see cref="_grid"/> (not the full list - only ever
+/// a handful of names at once) and pushes the real icon in once it's
+/// ready (<see cref="VirtualizedGrid{TItem,TCell}.UpdateItem"/>).
 /// </summary>
 public partial class TextureBrowserDialog : AcceptDialog
 {
+	private static readonly PackedScene CellScene = GD.Load<PackedScene>("res://Scenes/UI/TextureGalleryCell.tscn");
+
+	/// <summary>
+	/// <see cref="TextureGalleryCell.tscn"/>'s own real footprint (128
+	/// wide root + 4px margins either side; ~120 preview + a few px
+	/// VBoxContainer separation + a ~20px name label + 4px margins top/
+	/// bottom) plus the gap the gallery used to get for free from a
+	/// container's own spacing, before <see cref="VirtualizedGrid{TItem,TCell}"/>
+	/// started positioning cells by hand.
+	/// </summary>
+	private static readonly Vector2 CellSize = new(128f, 152f);
+	private static readonly Vector2 CellGap = new(12f, 8f);
+
 	private Tree _tree;
 	private TreeItem _allNode;
 	private LineEdit _filterEdit;
-	private ItemList _gallery;
+	private VirtualizedGrid<TextureGalleryItem, TextureGalleryCell> _grid;
 
 	private readonly Dictionary<TreeItem, NamedResource> _resourceByTreeItem = new();
+
+	/// <summary>Names already handed a real (non-null) icon at least once - cleared on every new <see cref="Browse"/> call since the same name can legitimately mean a different real icon across different maps/resource sets (<see cref="_icons"/> itself gets reseeded then too).</summary>
+	private readonly HashSet<string> _resolvedNames = new(StringComparer.OrdinalIgnoreCase);
 
 	private TextureSet _textures;
 	private IReadOnlyList<NamedResource> _resources = Array.Empty<NamedResource>();
@@ -53,12 +80,15 @@ public partial class TextureBrowserDialog : AcceptDialog
 	{
 		_tree = GetNode<Tree>("Container/TreePanel/ResourceTree");
 		_filterEdit = GetNode<LineEdit>("Container/GalleryPanel/FilterEdit");
-		_gallery = GetNode<ItemList>("Container/GalleryPanel/Gallery");
+
+		var galleryScroll = GetNode<ScrollContainer>("Container/GalleryPanel/Gallery");
+		var galleryContent = GetNode<Control>("Container/GalleryPanel/Gallery/GalleryContent");
+		_grid = new VirtualizedGrid<TextureGalleryItem, TextureGalleryCell>(galleryScroll, galleryContent, CellScene, CellSize, CellGap);
+		_grid.ItemActivated += (_, item) => ConfirmSelection(item.Name);
 
 		_tree.HideRoot = true;
 		_tree.ItemSelected += RefreshGalleryList;
 		_filterEdit.TextChanged += _ => RefreshGalleryList();
-		_gallery.ItemActivated += index => ConfirmSelection(_displayedNames[(int)index]);
 
 		Confirmed += OnConfirmed;
 	}
@@ -73,6 +103,7 @@ public partial class TextureBrowserDialog : AcceptDialog
 		_flats = flats;
 		_mixTexturesAndFlats = mixTexturesAndFlats;
 		_onSelected = onSelected;
+		_resolvedNames.Clear();
 
 		PopulateTree();
 		_allNode.Select(0);
@@ -103,8 +134,8 @@ public partial class TextureBrowserDialog : AcceptDialog
 
 	private void OnConfirmed()
 	{
-		var selected = _gallery.GetSelectedItems();
-		if (selected.Length > 0) ConfirmSelection(_displayedNames[selected[0]]);
+		var index = _grid.SelectedIndex;
+		if (index >= 0 && index < _displayedNames.Count) ConfirmSelection(_displayedNames[index]);
 	}
 
 	private void ConfirmSelection(string name)
@@ -140,11 +171,7 @@ public partial class TextureBrowserDialog : AcceptDialog
 			.OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
 			.ToList();
 
-		_gallery.Clear();
-		foreach (var name in _displayedNames)
-		{
-			_gallery.AddItem(name, GetIcon(name));
-		}
+		_grid.SetItems(_displayedNames.Select(n => new TextureGalleryItem(n, _resolvedNames.Contains(n) ? ResolveIcon(n) : null)).ToList());
 	}
 
 	/// <summary>
@@ -159,26 +186,27 @@ public partial class TextureBrowserDialog : AcceptDialog
 		var index = _displayedNames.FindIndex(n => string.Equals(n, name, StringComparison.OrdinalIgnoreCase));
 		if (index < 0) return;
 
-		_gallery.Select(index);
-		_gallery.EnsureCurrentIsVisible();
+		_grid.SelectIndex(index);
+		_grid.ScrollToIndex(index);
 	}
 
 	private ImageTexture ResolveIcon(string name) => _icons.GetIcon(name, preferFlat: _flats, _mixTexturesAndFlats);
 
-	private ImageTexture GetIcon(string name) => ResolveIcon(name) ?? PlaceholderIcon.Instance;
-
-	/// <summary>Re-checks every currently displayed name each frame and swaps in the real icon once the ambient <see cref="TextureIconCache"/> finishes it - this dialog never triggers decoding, only observes it.</summary>
 	public override void _Process(double delta)
 	{
 		if (!Visible) return;
 
-		for (var i = 0; i < _displayedNames.Count; i++)
+		_grid.Update();
+
+		foreach (var (index, item) in _grid.ActiveItems)
 		{
-			var icon = ResolveIcon(_displayedNames[i]);
-			if (icon != null && _gallery.GetItemIcon(i) != icon)
-			{
-				_gallery.SetItemIcon(i, icon);
-			}
+			if (_resolvedNames.Contains(item.Name)) continue;
+
+			var icon = ResolveIcon(item.Name);
+			if (icon == null) continue;
+
+			_resolvedNames.Add(item.Name);
+			_grid.UpdateItem(index, new TextureGalleryItem(item.Name, icon));
 		}
 	}
 }
