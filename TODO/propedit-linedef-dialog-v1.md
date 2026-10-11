@@ -239,3 +239,29 @@ state the same way `ScriptCompilerRunner`'s own integration tests do
 rather than a plain unit test, the latter is pure Godot UI wiring,
 same established
 convention as every other dialog in this project.
+
+## Update: Front/Back per-texture-part fields never marked the 3D view dirty
+
+A real, reported bug: editing a Front/Back tab's per-texture-part
+(Upper/Middle/Lower) offset, scale, or light-override and clicking OK
+correctly wrote the UDMF field (confirmed - the 18 real field names, and
+`LinedefWallBuilder.GetPartTransform` already correctly reads every one
+of them for 3D UV computation, both exonerated first) - but the 3D view
+never visually updated at all, even after confirming. The whole-sidedef
+offset fields (`OffsetX`/`OffsetY`, live-applied, and the texture name
+fields, OK-only) both correctly call `_map.MarkDirty(side.Sector)`
+through `SetPropertyCommand`'s own `onChanged` hook; the per-part fields
+go through a plain `SetFieldCommand` instead (no typed property to set,
+just a `Fields` entry), which had no equivalent hook at all - so
+`Sector.NeedsRebuild` was never set, and the 3D mesh stayed stale until
+some unrelated edit happened to trigger a rebuild.
+
+Fixed by porting `SetPropertyCommand`'s own optional `onChanged`
+callback onto `SetFieldCommand` too (no owner parameter the way that
+one's gets - this command has no single typed owner, just a `UniFields`
+bag, so the caller closes over whatever it needs) - every per-part
+field write in `LinedefEditDialog.AddSideCommands` now passes
+`() => _map.MarkDirty(side.Sector)`, the exact same callback the
+already-working fields use. New `SetFieldCommandTests` coverage for the
+callback itself (invoked on both `Do`/`Undo`, and genuinely optional) -
+3 new tests, 1185 total passing.

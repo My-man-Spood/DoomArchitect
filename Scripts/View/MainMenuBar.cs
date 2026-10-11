@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using DoomArchitect.Core.Geometry;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Settings;
@@ -32,6 +33,7 @@ public partial class MainMenuBar : MenuBar
 	private SectorEditDialog _sectorEditDialog;
 	private LinedefEditDialog _linedefEditDialog;
 	private ThingEditDialog _thingEditDialog;
+	private MapErrorCheckDialog _mapErrorCheckDialog;
 	private AcceptDialog _errorDialog;
 	private ConfirmationDialog _discardChangesDialog;
 
@@ -146,9 +148,11 @@ public partial class MainMenuBar : MenuBar
 
 		var mapMenu = GetNode<PopupMenu>("Map");
 		mapMenu.AddItem("Map Options...", 0);
+		mapMenu.AddItem("Check Map for Errors...", 1);
 		mapMenu.IdPressed += id =>
 		{
 			if (id == 0) _openMapMenu?.ShowMapOptionsForCurrentMap();
+			else if (id == 1 && _overlay != null) OpenMapErrorCheckDialog();
 		};
 
 		var preferencesMenu = GetNode<PopupMenu>("Preferences");
@@ -256,6 +260,69 @@ public partial class MainMenuBar : MenuBar
 				ShowError("Edit Selection currently only supports Sectors, Linedefs, and Things modes.");
 				break;
 		}
+	}
+
+	/// <summary>
+	/// UDB's real "Check Map for Errors" (its own dedicated edit mode with
+	/// a non-modal results window - ported here as a plain menu item +
+	/// dialog instead, this project's own scale and existing dialog
+	/// conventions don't need a whole new mode for it) - re-runs every
+	/// check fresh each time, same "recompute, don't cache" convention
+	/// <c>OpenMapMenu.BuildScriptCatalog</c> already established.
+	/// </summary>
+	private void OpenMapErrorCheckDialog()
+	{
+		_mapErrorCheckDialog ??= CreateMapErrorCheckDialog();
+		_mapErrorCheckDialog.SetResults(MapErrorChecker.RunAll(_overlay.Map));
+		_mapErrorCheckDialog.PopupCentered();
+	}
+
+	private MapErrorCheckDialog CreateMapErrorCheckDialog()
+	{
+		var dialog = GD.Load<PackedScene>("res://Scenes/UI/MapErrorCheckDialog.tscn").Instantiate<MapErrorCheckDialog>();
+		AddChild(dialog);
+		dialog.ResultActivated += OnMapErrorResultActivated;
+		return dialog;
+	}
+
+	/// <summary>
+	/// Selects whichever kind of element a result actually carries,
+	/// preferring Linedefs &gt; Sectors &gt; Vertices when a result spans
+	/// more than one kind (e.g. a self-referencing linedef also names its
+	/// own sector) - the more specific element is almost always the more
+	/// useful one to land on - then jumps the camera to the result's own
+	/// precomputed bounds.
+	/// </summary>
+	private void OnMapErrorResultActivated(MapErrorResult result)
+	{
+		var map = _overlay.Map;
+
+		// ToggleSelect, not SelectOnly, in the loop - SelectOnly clears the
+		// *entire* selection every time it's called, which inside a loop
+		// would leave only the last element selected. Safe to flip
+		// unconditionally here since every target was just cleared first,
+		// so none of them can already be selected going in.
+		if (result.Linedefs.Count > 0)
+		{
+			_overlay.Mode = EditMode.Linedefs;
+			map.ClearSelectedLinedefs();
+			foreach (var linedef in result.Linedefs) map.ToggleSelect(linedef);
+		}
+		else if (result.Sectors.Count > 0)
+		{
+			_overlay.Mode = EditMode.Sectors;
+			map.ClearSelectedSectors();
+			foreach (var sector in result.Sectors) map.ToggleSelect(sector);
+		}
+		else if (result.Vertices.Count > 0)
+		{
+			_overlay.Mode = EditMode.Vertices;
+			map.ClearSelectedVertices();
+			foreach (var vertex in result.Vertices) map.ToggleSelect(vertex);
+		}
+
+		_overlay.CenterOnArea(result.BoundsMin, result.BoundsMax);
+		_overlay.QueueRedraw();
 	}
 
 	private void OpenSectorEditDialogFor(IReadOnlyList<Sector> sectors)

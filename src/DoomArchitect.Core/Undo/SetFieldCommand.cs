@@ -22,12 +22,27 @@ public sealed class SetFieldCommand : ICommand
     private readonly string key;
     private readonly UniValue? oldValue;
     private readonly UniValue? newValue;
+    private readonly Action? onChanged;
 
-    public SetFieldCommand(UniFields fields, string key, UniValue? newValue)
+    /// <param name="onChanged">
+    /// <see cref="SetPropertyCommand{TOwner,TValue}"/>'s own optional
+    /// post-apply hook, ported here too - a real, reported bug this
+    /// fixes: a field-only edit (e.g. a sidedef's own per-texture-part
+    /// offset, which has no typed property of its own to go through
+    /// <see cref="SetPropertyCommand{TOwner,TValue}"/> instead) saved
+    /// correctly but never marked the owning sector dirty, so the 3D
+    /// view stayed visually stale until some unrelated edit happened to
+    /// trigger a rebuild. No owner parameter the way that class's own
+    /// callback gets one - this command has no single typed "owner" to
+    /// hand back, just a <see cref="UniFields"/> bag - so the caller
+    /// closes over whatever it needs instead.
+    /// </param>
+    public SetFieldCommand(UniFields fields, string key, UniValue? newValue, Action? onChanged = null)
     {
         this.fields = fields;
         this.key = key;
         this.newValue = newValue;
+        this.onChanged = onChanged;
         oldValue = fields.TryGetValue(key, out var existing) ? existing : null;
     }
 
@@ -39,5 +54,6 @@ public sealed class SetFieldCommand : ICommand
     {
         if (value == null) fields.Remove(key);
         else fields[key] = value;
+        onChanged?.Invoke();
     }
 }

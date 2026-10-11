@@ -558,10 +558,10 @@ public partial class LinedefEditDialog : AcceptDialog
 			}
 		}
 
-		AddIfChangedIntegerField(commands, side.Fields, "light", snapshot.Light, controls.LightEdit.Text, defaultValue: 0);
+		AddIfChangedIntegerField(commands, side.Fields, "light", snapshot.Light, controls.LightEdit.Text, defaultValue: 0, onChanged: () => _map.MarkDirty(side.Sector));
 		if (_touchedCheckBoxes.Contains(controls.LightAbsoluteCheck))
 		{
-			AddIfChangedBoolField(commands, side.Fields, "lightabsolute", snapshot.LightAbsolute, controls.LightAbsoluteCheck.ButtonPressed);
+			AddIfChangedBoolField(commands, side.Fields, "lightabsolute", snapshot.LightAbsolute, controls.LightAbsoluteCheck.ButtonPressed, onChanged: () => _map.MarkDirty(side.Sector));
 		}
 
 		for (var i = 0; i < controls.Parts.Length; i++)
@@ -570,39 +570,39 @@ public partial class LinedefEditDialog : AcceptDialog
 			var partSnapshot = snapshot.Parts[i];
 			var suffix = PartDefs[i].UdmfSuffix;
 
-			AddIfChangedFloatField(commands, side.Fields, $"offsetx_{suffix}", partSnapshot.OffsetX, part.OffsetXEdit.Text, defaultValue: 0.0);
-			AddIfChangedFloatField(commands, side.Fields, $"offsety_{suffix}", partSnapshot.OffsetY, part.OffsetYEdit.Text, defaultValue: 0.0);
-			AddIfChangedFloatField(commands, side.Fields, $"scalex_{suffix}", partSnapshot.ScaleX, part.ScaleXEdit.Text, defaultValue: 1.0);
-			AddIfChangedFloatField(commands, side.Fields, $"scaley_{suffix}", partSnapshot.ScaleY, part.ScaleYEdit.Text, defaultValue: 1.0);
-			AddIfChangedIntegerField(commands, side.Fields, $"light_{suffix}", partSnapshot.Light, part.LightEdit.Text, defaultValue: 0);
+			AddIfChangedFloatField(commands, side.Fields, $"offsetx_{suffix}", partSnapshot.OffsetX, part.OffsetXEdit.Text, defaultValue: 0.0, onChanged: () => _map.MarkDirty(side.Sector));
+			AddIfChangedFloatField(commands, side.Fields, $"offsety_{suffix}", partSnapshot.OffsetY, part.OffsetYEdit.Text, defaultValue: 0.0, onChanged: () => _map.MarkDirty(side.Sector));
+			AddIfChangedFloatField(commands, side.Fields, $"scalex_{suffix}", partSnapshot.ScaleX, part.ScaleXEdit.Text, defaultValue: 1.0, onChanged: () => _map.MarkDirty(side.Sector));
+			AddIfChangedFloatField(commands, side.Fields, $"scaley_{suffix}", partSnapshot.ScaleY, part.ScaleYEdit.Text, defaultValue: 1.0, onChanged: () => _map.MarkDirty(side.Sector));
+			AddIfChangedIntegerField(commands, side.Fields, $"light_{suffix}", partSnapshot.Light, part.LightEdit.Text, defaultValue: 0, onChanged: () => _map.MarkDirty(side.Sector));
 			if (_touchedCheckBoxes.Contains(part.LightAbsoluteCheck))
 			{
-				AddIfChangedBoolField(commands, side.Fields, $"lightabsolute_{suffix}", partSnapshot.LightAbsolute, part.LightAbsoluteCheck.ButtonPressed);
+				AddIfChangedBoolField(commands, side.Fields, $"lightabsolute_{suffix}", partSnapshot.LightAbsolute, part.LightAbsoluteCheck.ButtonPressed, onChanged: () => _map.MarkDirty(side.Sector));
 			}
 		}
 	}
 
-	private static void AddIfChangedIntegerField(List<ICommand> commands, UniFields fields, string key, long originalValue, string fieldText, long defaultValue)
+	private static void AddIfChangedIntegerField(List<ICommand> commands, UniFields fields, string key, long originalValue, string fieldText, long defaultValue, Action onChanged = null)
 	{
 		var newValue = NumericFieldExpression.ResolveInteger(fieldText, originalValue) ?? originalValue;
 		if (newValue == originalValue) return;
 
-		commands.Add(new SetFieldCommand(fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Integer, newValue)));
+		commands.Add(new SetFieldCommand(fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Integer, newValue), onChanged));
 	}
 
-	private static void AddIfChangedFloatField(List<ICommand> commands, UniFields fields, string key, double originalValue, string fieldText, double defaultValue)
+	private static void AddIfChangedFloatField(List<ICommand> commands, UniFields fields, string key, double originalValue, string fieldText, double defaultValue, Action onChanged = null)
 	{
 		var newValue = NumericFieldExpression.Resolve(fieldText, originalValue) ?? originalValue;
 		if (newValue == originalValue) return;
 
-		commands.Add(new SetFieldCommand(fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Float, newValue)));
+		commands.Add(new SetFieldCommand(fields, key, newValue == defaultValue ? null : new UniValue(UniversalType.Float, newValue), onChanged));
 	}
 
-	private static void AddIfChangedBoolField(List<ICommand> commands, UniFields fields, string key, bool originalValue, bool newValue)
+	private static void AddIfChangedBoolField(List<ICommand> commands, UniFields fields, string key, bool originalValue, bool newValue, Action onChanged = null)
 	{
 		if (newValue == originalValue) return;
 
-		commands.Add(new SetFieldCommand(fields, key, newValue ? new UniValue(UniversalType.Boolean, true) : null));
+		commands.Add(new SetFieldCommand(fields, key, newValue ? new UniValue(UniversalType.Boolean, true) : null, onChanged));
 	}
 
 	private static string SharedOrBlank(IEnumerable<double> values)

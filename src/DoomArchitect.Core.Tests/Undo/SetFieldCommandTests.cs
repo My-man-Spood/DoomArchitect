@@ -66,6 +66,42 @@ public class SetFieldCommandTests
     }
 
     [Fact]
+    public void Do_WithOnChanged_InvokesIt()
+    {
+        var fields = new UniFields();
+        var changedCount = 0;
+        var command = new SetFieldCommand(fields, "special", new UniValue(UniversalType.Integer, 9L), onChanged: () => changedCount++);
+
+        command.Do();
+
+        Assert.Equal(1, changedCount);
+    }
+
+    [Fact]
+    public void Undo_WithOnChanged_InvokesItAgain()
+    {
+        var fields = new UniFields();
+        var changedCount = 0;
+        var command = new SetFieldCommand(fields, "special", new UniValue(UniversalType.Integer, 9L), onChanged: () => changedCount++);
+        command.Do();
+
+        command.Undo();
+
+        Assert.Equal(2, changedCount);
+    }
+
+    [Fact]
+    public void Do_WithNoOnChanged_DoesNotThrow()
+    {
+        var fields = new UniFields();
+        var command = new SetFieldCommand(fields, "special", new UniValue(UniversalType.Integer, 9L));
+
+        command.Do();
+
+        Assert.Equal(9L, fields["special"].Value);
+    }
+
+    [Fact]
     public void CommandGroup_Undo_RevertsBothFieldsInOneStep()
     {
         var fieldsA = new UniFields();

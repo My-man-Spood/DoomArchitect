@@ -257,6 +257,9 @@ public partial class MapOverlay : Control
 
 	public void DecreaseGridSize() => _grid.DecreaseGridSize();
 
+	/// <summary>"Jump to this" for a map-error result or anything else referring to a map-space area - see <see cref="MapOverlayCamera.CenterOnArea"/>.</summary>
+	public void CenterOnArea(MapVector2 min, MapVector2 max) => _camera.CenterOnArea(min, max);
+
 	/// <summary>
 	/// Holding the independently rebindable <c>grid_snap_invert_modifier</c>
 	/// action (default Shift) inverts whatever the persistent toggle is

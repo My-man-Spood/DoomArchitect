@@ -113,12 +113,24 @@ public sealed class LinedefOverlayHandler
 	/// A tiny tick from the linedef's midpoint towards its front side - the
 	/// same "front sidedef is on the right walking Start-&gt;End" rule
 	/// <see cref="Core.Geometry.SectorTracer"/> relies on, made visible.
+	///
+	/// A real, reported bug this guards against: a genuinely degenerate
+	/// (zero-length, both endpoints coincident) linedef - from corrupted
+	/// map data, not something this method itself should ever need to
+	/// repair - silently produced a NaN direction here (<see cref="MapVector2.Normalize"/>
+	/// of a zero vector doesn't throw), which propagated into Godot's own
+	/// native line-drawing and spammed "Vector2 cannot be normalized"
+	/// warnings on every single redraw. Same zero-length guard
+	/// <see cref="DrawOverlayHandler.DrawDirectionTick"/> already uses.
 	/// </summary>
 	private void DrawFrontIndicator(CanvasItem target, Linedef linedef, Color color)
 	{
 		var start = linedef.Start.Position;
 		var end = linedef.End.Position;
-		var direction = MapVector2.Normalize(end - start);
+		var delta = end - start;
+		if (delta.LengthSquared() < 0.0001f) return;
+
+		var direction = MapVector2.Normalize(delta);
 		var rightNormal = new MapVector2(direction.Y, -direction.X);
 		var midpoint = (start + end) / 2f;
 

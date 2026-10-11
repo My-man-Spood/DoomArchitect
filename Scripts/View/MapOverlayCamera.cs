@@ -107,4 +107,23 @@ public sealed class MapOverlayCamera
 		var after = Unproject(motion.Position);
 		Camera.Position += (before - after).ToWorld(0f);
 	}
+
+	/// <summary>
+	/// "Jump to this" for a map-error result (or any other map-space
+	/// area) - recenters on the area's own midpoint via the same before/
+	/// after-unproject-then-shift-camera trick <see cref="ZoomAt"/>/
+	/// <see cref="PanView"/> already establish, and zooms out just enough
+	/// to fit it (never in - an area already comfortably visible stays
+	/// at whatever zoom the user already had). UDB's own real
+	/// <c>ClassicMode.CenterOnArea</c> default padding factor.
+	/// </summary>
+	public void CenterOnArea(MapVector2 min, MapVector2 max, float paddingFactor = 0.6f)
+	{
+		var center = (min + max) / 2f;
+		var currentCenter = Unproject(_viewport.GetViewportRect().Size / 2f);
+		Camera.Position += (center - currentCenter).ToWorld(0f);
+
+		var neededSize = System.MathF.Max(max.X - min.X, max.Y - min.Y) / paddingFactor;
+		if (neededSize > Camera.Size) Camera.Size = Mathf.Clamp(neededSize, MinCameraSize, MaxCameraSize);
+	}
 }

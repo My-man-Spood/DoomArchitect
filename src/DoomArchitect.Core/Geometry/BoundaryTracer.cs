@@ -509,7 +509,16 @@ public static class BoundaryTracer
         return new Loop(vertices);
     }
 
-    /// <summary>A point just off to the side <paramref name="side"/> represents, used to test which traced loop actually contains it.</summary>
+    /// <summary>
+    /// A point just off to the side <paramref name="side"/> represents, used
+    /// to test which traced loop actually contains it. A genuinely
+    /// degenerate (zero-length) linedef - corrupted map data, not something
+    /// this method itself can repair - has no real side to offset toward;
+    /// falls back to the (degenerate) midpoint itself rather than silently
+    /// producing NaN (<see cref="Vector2.Normalize"/> of a zero vector
+    /// doesn't throw), which would otherwise poison every containment test
+    /// downstream.
+    /// </summary>
     internal static Vector2 SidePoint(LinedefSide side)
     {
         const float offset = 0.1f;
@@ -517,7 +526,10 @@ public static class BoundaryTracer
         var a = side.Linedef.Start.Position;
         var b = side.Linedef.End.Position;
         var mid = (a + b) / 2f;
-        var direction = Vector2.Normalize(b - a);
+        var delta = b - a;
+        if (delta.LengthSquared() < 0.0001f) return mid;
+
+        var direction = Vector2.Normalize(delta);
         var rightNormal = new Vector2(direction.Y, -direction.X);
 
         return side.Front ? mid + rightNormal * offset : mid - rightNormal * offset;
