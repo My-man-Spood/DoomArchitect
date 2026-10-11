@@ -244,18 +244,31 @@ public partial class ActionArgumentsEditor : VBoxContainer
 
 			if (info.EnumOptions != null)
 			{
+				// Explicitly set either way (never left alone) - Godot's own
+				// OptionButton auto-selects its first added item cosmetically
+				// once populated, with no way to tell "genuinely selected"
+				// apart from "just defaulted to showing item 0" from the
+				// Selected property alone. Leaving that default in place for
+				// a mixed selection or a real stored value with no matching
+				// option (0/unset is never itself a real enum entry) lied
+				// about the actual data - a real, reported case of exactly
+				// this (a Movement Speed argument silently stored as 0/unset
+				// while the dropdown confidently showed its first option
+				// selected) led a mapper to believe it was already set
+				// correctly when it never had been.
 				var shared = values.All(v => v == values[0]) ? (long?)values[0] : null;
-				if (shared == null) continue;
-
 				var matchIndex = -1;
-				for (var idx = 0; idx < row.EnumEdit.ItemCount; idx++)
+				if (shared != null)
 				{
-					if (row.EnumEdit.GetItemMetadata(idx).AsInt64() != shared.Value) continue;
-					matchIndex = idx;
-					break;
+					for (var idx = 0; idx < row.EnumEdit.ItemCount; idx++)
+					{
+						if (row.EnumEdit.GetItemMetadata(idx).AsInt64() != shared.Value) continue;
+						matchIndex = idx;
+						break;
+					}
 				}
 
-				if (matchIndex >= 0) row.EnumEdit.Selected = matchIndex;
+				row.EnumEdit.Selected = matchIndex;
 			}
 			else
 			{
