@@ -6,4 +6,5 @@ public enum EditMode
 	Sectors,
 	Things,
 	Draw,
+	MakeSector,
 }

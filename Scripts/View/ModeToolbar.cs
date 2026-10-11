@@ -1,7 +1,7 @@
 using Godot;
 
 /// <summary>
-/// Five radio-style buttons mirroring the V/L/S/T/W edit-mode keybinds -
+/// Six radio-style buttons mirroring the V/L/S/T/W/M edit-mode keybinds -
 /// either input drives the same <see cref="EditMode"/> on
 /// <see cref="Overlay"/>. Lives on its own <c>UI</c> canvas layer, drawn
 /// on top of and kept deliberately separate from <c>MapOverlay</c>'s
@@ -21,6 +21,7 @@ public partial class ModeToolbar : HBoxContainer
 	private Button _sectorButton;
 	private Button _thingButton;
 	private Button _drawButton;
+	private Button _makeSectorButton;
 	private Button _continuousDrawButton;
 
 	public override void _Ready()
@@ -30,6 +31,7 @@ public partial class ModeToolbar : HBoxContainer
 		_sectorButton = GetNode<Button>($"{ButtonsPath}/SectorModeButton");
 		_thingButton = GetNode<Button>($"{ButtonsPath}/ThingModeButton");
 		_drawButton = GetNode<Button>($"{ButtonsPath}/DrawModeButton");
+		_makeSectorButton = GetNode<Button>($"{ButtonsPath}/MakeSectorModeButton");
 		_continuousDrawButton = GetNode<Button>($"{ButtonsPath}/ContinuousDrawToggleButton");
 
 		_vertexButton.Toggled += pressed => OnToggled(pressed, EditMode.Vertices);
@@ -37,6 +39,7 @@ public partial class ModeToolbar : HBoxContainer
 		_sectorButton.Toggled += pressed => OnToggled(pressed, EditMode.Sectors);
 		_thingButton.Toggled += pressed => OnToggled(pressed, EditMode.Things);
 		_drawButton.Toggled += pressed => OnToggled(pressed, EditMode.Draw);
+		_makeSectorButton.Toggled += pressed => OnToggled(pressed, EditMode.MakeSector);
 		_continuousDrawButton.Toggled += OnContinuousDrawToggled;
 	}
 
@@ -49,6 +52,7 @@ public partial class ModeToolbar : HBoxContainer
 		_sectorButton.SetPressedNoSignal(Overlay.Mode == EditMode.Sectors);
 		_thingButton.SetPressedNoSignal(Overlay.Mode == EditMode.Things);
 		_drawButton.SetPressedNoSignal(Overlay.Mode == EditMode.Draw);
+		_makeSectorButton.SetPressedNoSignal(Overlay.Mode == EditMode.MakeSector);
 		_continuousDrawButton.SetPressedNoSignal(Overlay.ContinuousDrawing);
 	}
 

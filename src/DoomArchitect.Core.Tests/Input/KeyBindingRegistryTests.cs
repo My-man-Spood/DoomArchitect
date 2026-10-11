@@ -33,10 +33,10 @@ public class KeyBindingRegistryTests
     [Fact]
     public void All_ContainsExactlyTheDesignedActionCount()
     {
-        // 49, not 48: select_connected_height_modifier was added - UDB's
-        // own real Ctrl-held "same height" mode for connected selection
-        // had no equivalent here at all, a real requested gap, not a
-        // count anyone meant to change casually.
-        Assert.Equal(49, KeyBindingRegistry.All.Count);
+        // 50, not 49: mode_make_sector was added - Make Sector mode,
+        // porting UDB's own real sector-repair tool, had no equivalent
+        // here at all, a real requested gap, not a count anyone meant to
+        // change casually.
+        Assert.Equal(50, KeyBindingRegistry.All.Count);
     }
 }

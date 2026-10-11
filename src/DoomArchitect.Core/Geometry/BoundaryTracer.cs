@@ -274,9 +274,27 @@ public static class BoundaryTracer
         var claimed = new HashSet<Linedef>(allLines.Select(l => l.Linedef));
         var ignoredStarts = new HashSet<Vertex>();
 
+        // Every hole found so far, one level deep inside outerLoop - a
+        // real, reported bug this fixes: for three concentric rings
+        // (sector 1 innermost, sector 2 around it, sector 3 outermost),
+        // finding sector 2's own outer boundary as the first hole here
+        // left sector 1's own, completely separate boundary vertices
+        // still "inside outerLoop and unclaimed" on the next iteration -
+        // they're genuinely inside outerLoop, just two levels deep, not
+        // a second hole *of outerLoop itself*. Without this, that
+        // boundary got wrongly traced as a second hole of sector 3,
+        // handing sector 1's own sidedef there to sector 3 instead of
+        // sector 2 - corrupting both the live sector data (sector 2's
+        // own hole-around-sector-1 silently disappearing, so hovering it
+        // highlighted sector 1 too) and the saved map (sector 1 ending
+        // up directly, physically adjacent to sector 3, skipped past
+        // sector 2 entirely - e.g. Floor_LowerToNearest on sector 1
+        // dropping straight to sector 3's height).
+        var nestedHoles = new List<Loop>();
+
         while (true)
         {
-            var candidate = FindUnclaimedVertexInside(map, outerLoop, claimed, ignoredStarts);
+            var candidate = FindUnclaimedVertexInside(map, outerLoop, claimed, ignoredStarts, nestedHoles);
             if (candidate == null) return;
 
             var startSide = FindOutwardSide(candidate);
@@ -301,34 +319,40 @@ public static class BoundaryTracer
 
             allLines.AddRange(lines!);
             foreach (var side in lines!) claimed.Add(side.Linedef);
+            nestedHoles.Add(loop);
         }
     }
 
     /// <summary>
-    /// The right-most vertex, strictly inside <paramref name="outerLoop"/>,
-    /// that still has at least one linedef not already accounted for in
+    /// The right-most vertex, strictly inside <paramref name="outerLoop"/>
+    /// and not nested one level deeper inside any of
+    /// <paramref name="nestedHoles"/> already found, that still has at
+    /// least one linedef not already accounted for in
     /// <paramref name="claimed"/> - a candidate seed for another hole to
     /// discover. Searches every vertex in the map, not just ones touching
     /// already-claimed linedefs.
     /// </summary>
-    private static Vertex? FindUnclaimedVertexInside(MapData map, Loop outerLoop, HashSet<Linedef> claimed, HashSet<Vertex> ignore)
+    private static Vertex? FindUnclaimedVertexInside(MapData map, Loop outerLoop, HashSet<Linedef> claimed, HashSet<Vertex> ignore, List<Loop> nestedHoles)
     {
-        // A vertex that's part of the outer loop's own boundary can still
-        // have other, unclaimed linedefs attached (e.g. a box split by one
-        // new diagonal - the diagonal's own endpoints still touch the
-        // box's other, unused sides) without being a real interior hole
-        // seed - excluded explicitly rather than trusted to point-in-
-        // polygon containment, which is ambiguous for a point sitting
-        // exactly on the polygon's own boundary.
+        // A vertex that's part of the outer loop's own boundary (or one of
+        // the already-found holes' own boundaries) can still have other,
+        // unclaimed linedefs attached (e.g. a box split by one new
+        // diagonal - the diagonal's own endpoints still touch the box's
+        // other, unused sides) without being a real interior hole seed -
+        // excluded explicitly rather than trusted to point-in-polygon
+        // containment, which is ambiguous for a point sitting exactly on
+        // the polygon's own boundary.
         var outerVertices = new HashSet<Vertex>(outerLoop.Vertices);
+        var nestedHoleVertices = new HashSet<Vertex>(nestedHoles.SelectMany(h => h.Vertices));
         Vertex? best = null;
 
         foreach (var vertex in map.Vertices)
         {
-            if (ignore.Contains(vertex) || outerVertices.Contains(vertex)) continue;
+            if (ignore.Contains(vertex) || outerVertices.Contains(vertex) || nestedHoleVertices.Contains(vertex)) continue;
             if (vertex.Linedefs.Count == 0) continue;
             if (vertex.Linedefs.All(claimed.Contains)) continue;
             if (!outerLoop.Contains(vertex.Position)) continue;
+            if (nestedHoles.Any(hole => hole.Contains(vertex.Position))) continue;
             if (best == null || vertex.Position.X > best.Position.X) best = vertex;
         }
 

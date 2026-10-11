@@ -142,6 +142,59 @@ public class BoundaryTracerTests
         Assert.Contains(result, s => s.Linedef.Start.Position == new Vector2(40, 40));
     }
 
+    /// <summary>
+    /// Three concentric rings (an innermost pillar, a border ring around
+    /// it, and this outermost box around that) - a real, reported bug:
+    /// tracing the outermost box's own potential sector wrongly swallowed
+    /// the innermost pillar's boundary too, as if it were a *second* hole
+    /// of the outer box, when it's actually nested one level deeper (a
+    /// hole of the middle ring, not of the outer box itself). Only the
+    /// middle ring's own outer edge is a real hole *of this box*.
+    /// </summary>
+    [Fact]
+    public void FindPotentialSectorAt_ThreeConcentricRings_DoesNotSwallowTheInnermostPillarsOwnBoundary()
+    {
+        var map = new MapData();
+        var a = map.CreateVertex(new Vector2(0, 0));
+        var b = map.CreateVertex(new Vector2(0, 200));
+        var c = map.CreateVertex(new Vector2(200, 200));
+        var d = map.CreateVertex(new Vector2(200, 0));
+        var outerAb = map.CreateLinedef(a, b, null, null);
+        map.CreateLinedef(b, c, null, null);
+        map.CreateLinedef(c, d, null, null);
+        map.CreateLinedef(d, a, null, null);
+
+        // The middle ring's own outer edge - the one real hole of the
+        // outer box above, same counter-clockwise hole convention as
+        // FindPotentialSectorAt_BoxWithAHoleInsideIt_ReturnsBothOuterAndInnerSides.
+        var m0 = map.CreateVertex(new Vector2(40, 40));
+        var m1 = map.CreateVertex(new Vector2(160, 40));
+        var m2 = map.CreateVertex(new Vector2(160, 160));
+        var m3 = map.CreateVertex(new Vector2(40, 160));
+        map.CreateLinedef(m0, m1, null, null);
+        map.CreateLinedef(m1, m2, null, null);
+        map.CreateLinedef(m2, m3, null, null);
+        map.CreateLinedef(m3, m0, null, null);
+
+        // The innermost pillar - nested inside the middle ring, not a
+        // direct hole of the outer box at all.
+        var p0 = map.CreateVertex(new Vector2(80, 80));
+        var p1 = map.CreateVertex(new Vector2(120, 80));
+        var p2 = map.CreateVertex(new Vector2(120, 120));
+        var p3 = map.CreateVertex(new Vector2(80, 120));
+        map.CreateLinedef(p0, p1, null, null);
+        map.CreateLinedef(p1, p2, null, null);
+        map.CreateLinedef(p2, p3, null, null);
+        map.CreateLinedef(p3, p0, null, null);
+
+        var result = BoundaryTracer.FindPotentialSectorAt(map, outerAb, front: true);
+
+        Assert.NotNull(result);
+        Assert.Equal(8, result!.Count);
+        Assert.Contains(result, s => s.Linedef.Start.Position == new Vector2(40, 40));
+        Assert.DoesNotContain(result, s => s.Linedef.Start.Position == new Vector2(80, 80));
+    }
+
     [Fact]
     public void FindPotentialSectorAt_WithADanglingStubOffOneCorner_StillFindsOnlyTheBoxItself()
     {

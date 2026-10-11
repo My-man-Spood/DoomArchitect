@@ -63,6 +63,7 @@ public partial class MapOverlay : Control
 	private readonly SectorOverlayHandler _sectorHandler;
 	private readonly ThingOverlayHandler _thingHandler;
 	private readonly DrawOverlayHandler _drawHandler;
+	private readonly MakeSectorOverlayHandler _makeSectorHandler;
 	private readonly TagIndicatorOverlayHandler _tagIndicatorHandler;
 
 	public MapOverlay()
@@ -75,6 +76,7 @@ public partial class MapOverlay : Control
 		_sectorHandler = new SectorOverlayHandler(this, _camera, _marquee);
 		_thingHandler = new ThingOverlayHandler(this, _camera, _marquee);
 		_drawHandler = new DrawOverlayHandler(this, _camera);
+		_makeSectorHandler = new MakeSectorOverlayHandler(this, _camera);
 		_tagIndicatorHandler = new TagIndicatorOverlayHandler(this, _camera, _linedefHandler, _sectorHandler);
 	}
 
@@ -428,6 +430,9 @@ public partial class MapOverlay : Control
 			case EditMode.Draw:
 				_drawHandler.HandleInput(@event);
 				break;
+			case EditMode.MakeSector:
+				_makeSectorHandler.HandleInput(@event);
+				break;
 		}
 	}
 
@@ -448,6 +453,7 @@ public partial class MapOverlay : Control
 		_vertexHandler.Draw(this);
 		_thingHandler.Draw(this);
 		_drawHandler.Draw(this);
+		_makeSectorHandler.Draw(this);
 		_marquee.Draw(this);
 	}
 }

@@ -1537,6 +1537,7 @@ public partial class MapView : Node3D
 		if (key.IsActionPressed("mode_sectors")) { _overlay.Mode = EditMode.Sectors; return; }
 		if (key.IsActionPressed("mode_things")) { _overlay.Mode = EditMode.Things; return; }
 		if (key.IsActionPressed("mode_draw")) { _overlay.Mode = EditMode.Draw; return; }
+		if (key.IsActionPressed("mode_make_sector")) { _overlay.Mode = EditMode.MakeSector; return; }
 		if (key.IsActionPressed("toggle_snap")) { _overlay.SnapEnabled = !_overlay.SnapEnabled; return; }
 		if (key.IsActionPressed("toggle_dynamic_grid")) { _overlay.DynamicGridSizeEnabled = !_overlay.DynamicGridSizeEnabled; return; }
 		if (key.IsActionPressed("grid_size_decrease")) { _overlay.DecreaseGridSize(); return; }

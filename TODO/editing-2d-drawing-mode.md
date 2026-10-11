@@ -457,3 +457,85 @@
       `autoclosedrawing`) still isn't - remains its own separate,
       deliberately out-of-scope item, confirmed directly against source
       to be architecturally distinct from stitching correctness.
+
+## Update: a real nested-hole bug in `BoundaryTracer`, and Make Sector mode
+
+A real, reported bug: three *concentric* rings (an innermost pillar, a
+border ring around it, an outer ring around that) traced wrong when the
+outer ring was drawn - `BoundaryTracer.FindInnerLines` found the middle
+ring's own outer edge as the outer ring's one real hole correctly, but
+then kept scanning and picked up the innermost pillar's own, separate
+boundary too, as if it were a *second* hole of the outer ring, when it's
+actually nested one level deeper (a hole of the middle ring, not of the
+outer ring itself) - `FindUnclaimedVertexInside` only checked "inside
+the outer loop," never "already inside a hole already found." Handed
+the pillar's own boundary sidedef straight to the outer sector, skipping
+the middle ring entirely - corrupting both the live sector data (hovering
+the middle ring in Sectors mode highlighted the pillar too, since the
+middle ring's own sector lost its inner hole) and, for real, already-
+saved maps, actual GZDoom gameplay (`Floor_LowerToNearest` on the pillar
+dropped straight to the outer ring's height). Fixed by tracking every
+hole found so far and excluding anything nested inside one from being
+picked as another hole of the *outer* loop - `BoundaryTracerTests`
+gained a real concentric-rings regression test, confirmed to fail
+without the fix (12 sides instead of 8, swallowing the pillar) and pass
+with it.
+
+The fix only prevents this for newly drawn geometry going forward - it
+can't retroactively repair sectors already saved that way, and manually
+redrawing them wasn't an option. Ported UDB's own real **Make Sectors
+Mode** (`MakeSectorMode.cs`) as the fix: a dedicated `EditMode.MakeSector`
+(toolbar button + `M` key, alongside V/L/S/T/W) that traces a potential
+sector boundary from whichever linedef side the mouse is nearest to
+(`BoundaryTracer.FindPotentialSectorAt`) and, on click, commits it via
+`MakeSectorCommand` - which **steals** any already-existing sidedef along
+the traced boundary away from whatever sector currently (even wrongly)
+owns it, UDB's own real `Tools.MakeSector` behavior. Clicking inside a
+corrupted region re-derives the correct boundary from the map's real
+current geometry and reassigns sidedef ownership correctly, with zero
+manual redrawing.
+
+The hard part needed no new Core logic at all - `SectorMaker.CreateAndPopulateSector`
+(UDB's own `Tools.MakeSector`, inheriting properties from whichever
+existing sidedef matches) and `GeometryStitcher.FlipBackwardLinedefs`
+(UDB's own post-`MakeSector` "flip any linedef left with only a back
+side" cleanup) were already ported and proven, just used automatically
+and narrowly by `DissolveLinedefsCommand.RepairIfNowInvalid` - this mode
+is the first place either gets invoked directly, interactively, by the
+user. `MakeSectorOverlayHandler`'s own hover preview highlights the
+traced lines and flat-fills (via `SectorOverlayHandler.Fill`, already
+public) every existing sector the trace would actually consume.
+
+Icon: extracted UDB's own real `NewSector2.png` directly from its
+source tree rather than reusing Sector mode's icon (same 16x16 RGBA
+format every other mode icon here already uses - dropped straight in).
+
+**Two real issues found testing against the user's own actual corrupted
+map, both fixed:**
+- The preview fill originally reused `MapOverlayColors.Hover` at the
+  same alpha `SectorOverlayHandler`'s own plain hover highlight already
+  uses - for a corrupted sector (this mode's whole reason to exist) the
+  preview was pixel-identical to, and so indistinguishable from,
+  ordinary Sectors-mode hover, giving no real signal about what this
+  mode would actually do. Now its own distinct color, with a bolder
+  trace-line outline.
+- UDB's own secondary "flash polygon" feedback (the just-created
+  sector flashes solid white, then fades back to its real floor color
+  over 300ms, confirming *which* sector a click just built/repaired)
+  was initially skipped as not worth porting - turned out to be
+  something the user specifically wanted, not a nice-to-have. Ported
+  for real: `MakeSectorCommand` now exposes the sector it created,
+  `MakeSectorOverlayHandler` captures its floor triangles (the same
+  trace -&gt; nest -&gt; cut -&gt; ear-clip pipeline
+  `SectorOverlayHandler.Fill` itself uses, just cached as raw triangles
+  instead of drawn immediately) and renders them solid white, linearly
+  fading via `Time.GetTicksMsec()` - independent of the current mode or
+  hover, so the fade plays out fully even after switching away, matching
+  UDB's own real behavior (the flash belongs to the sector just made,
+  not to still being in this mode).
+
+No new Core tests needed for the mode itself (no new Core logic - purely
+packaging already-tested primitives into an interactive command); no
+coverage for `MakeSectorOverlayHandler`'s own hover/input/flash wiring,
+same established convention as every other mode in this project (Draw
+included).

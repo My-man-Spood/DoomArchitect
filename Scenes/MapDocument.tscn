@@ -18,6 +18,7 @@
 [ext_resource type="Texture2D" path="res://Assets/Icons/icon_tag.svg" id="16"]
 [ext_resource type="Script" path="res://Scripts/View/TestMapToolbar.cs" id="17"]
 [ext_resource type="Texture2D" path="res://Assets/Icons/test_map.png" id="18"]
+[ext_resource type="Texture2D" path="res://Assets/Icons/mode_make_sector.png" id="19"]
 
 [sub_resource type="Environment" id="Environment_1"]
 background_mode = 1
@@ -146,6 +147,16 @@ focus_mode = 0
 toggle_mode = true
 button_group = SubResource("ButtonGroup_1")
 icon = ExtResource("14")
+expand_icon = true
+
+[node name="MakeSectorModeButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer"]
+custom_minimum_size = Vector2(28, 28)
+layout_mode = 2
+tooltip_text = "Make Sector mode (M) - build or repair a sector from the nearest linedef side"
+focus_mode = 0
+toggle_mode = true
+button_group = SubResource("ButtonGroup_1")
+icon = ExtResource("19")
 expand_icon = true
 
 [node name="ContinuousDrawToggleButton" type="Button" parent="UI/TopBar/ToolbarMargin/TopToolbar/EditingModeButtonGroup/MarginContainer/HBoxContainer"]

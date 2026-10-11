@@ -48,6 +48,7 @@ public static class KeyBindingRegistry
         new KeyBindingDefinition("mode_sectors", CategoryModes, "Sectors Mode", "Switches to Sectors editing mode.", new KeyBinding("S")),
         new KeyBindingDefinition("mode_things", CategoryModes, "Things Mode", "Switches to Things editing mode.", new KeyBinding("T")),
         new KeyBindingDefinition("mode_draw", CategoryModes, "Draw Mode", "Switches to Draw Lines mode.", new KeyBinding("W")),
+        new KeyBindingDefinition("mode_make_sector", CategoryModes, "Make Sector Mode", "Switches to Make Sector mode - traces a sector boundary from the nearest linedef side and builds (or repairs) a sector from it on click.", new KeyBinding("M")),
         new KeyBindingDefinition("toggle_2d_3d", CategoryModes, "Toggle 2D/3D View", "Switches between the 2D top-down view and the 3D visual view.", new KeyBinding("Tab")),
 
         new KeyBindingDefinition("pan_view_modifier", CategoryView, "Pan View", "While held, moving the mouse pans the 2D view instead of interacting with the map.", new KeyBinding("Space")),
