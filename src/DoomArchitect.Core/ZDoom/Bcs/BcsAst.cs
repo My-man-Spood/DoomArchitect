@@ -124,9 +124,12 @@ public sealed class BcsCompilationUnit : BcsNode
     /// nested symbol surfaces exactly as if it were a plain top-level one,
     /// the same simplification this AST already applies everywhere (see
     /// <see cref="BcsSymbolKind"/>'s own remarks - "not a real type
-    /// system").
+    /// system"). Internal rather than private so <see cref="BcsScriptCatalog"/>
+    /// can reuse the identical namespace-flattening walk for its own,
+    /// differently-filtered pass (every script declaration, not just
+    /// named ones).
     /// </summary>
-    private static IEnumerable<BcsNode> AllMembers(IEnumerable<BcsNode> members)
+    internal static IEnumerable<BcsNode> AllMembers(IEnumerable<BcsNode> members)
     {
         foreach (var member in members)
         {

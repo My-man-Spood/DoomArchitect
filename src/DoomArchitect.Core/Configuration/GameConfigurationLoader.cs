@@ -129,7 +129,9 @@ public static class GameConfigurationLoader
             var title = argBlock.Find("title")?.AsString() ?? $"Argument {i + 1}";
             var enumName = argBlock.Find("enum")?.AsString();
             var enumOptions = enumName != null ? enums.GetValueOrDefault(enumName) : null;
-            args.Add(new ArgumentInfo(title, Used: true, enumOptions));
+            var str = argBlock.Find("str")?.AsBool() ?? false;
+            var titleStr = str ? argBlock.Find("titlestr")?.AsString() : null;
+            args.Add(new ArgumentInfo(title, Used: true, enumOptions, str, titleStr));
         }
 
         return args;

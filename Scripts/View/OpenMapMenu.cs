@@ -2,12 +2,14 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Text;
 using DoomArchitect.Core.Compilers;
 using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.IO;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.ZDoom;
+using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Settings;
 using Godot;
 
@@ -1017,6 +1019,118 @@ public partial class OpenMapMenu : PanelContainer
 		ShowError($"Error while compiling scripts: {outcome.Errors[0].Message}");
 		ScriptsCompiled?.Invoke(path, scriptsIndex, outcome.Errors);
 		return lumps;
+	}
+
+	/// <summary>
+	/// Every script declared in this map's own <c>SCRIPTS</c> lump (and
+	/// whatever it <c>#include</c>s) - <see cref="ActionArgumentsEditor"/>'s
+	/// own arg0 dropdown for the ACS_Execute family. Empty with no
+	/// <c>SCRIPTS</c> lump at all, the overwhelmingly common case.
+	/// Reparsed fresh every call - cheap (one lump's worth of text, the
+	/// same parser already runs live on every keystroke in an open
+	/// Script tab), so there's nothing worth caching. Only resolves
+	/// <c>#include</c>s against <see cref="CurrentResourcePaths"/>'
+	/// configured resources, not real on-disk sibling files - the exact
+	/// same scope <see cref="ScriptCompilerRunner"/>'s own internal
+	/// discovery-only parse (<c>ExtractResourceIncludes</c>) already has
+	/// (this is an info-extraction pass, not a full compile - a missing
+	/// include here just means that file's own scripts don't show up in
+	/// the dropdown, not a build failure).
+	/// </summary>
+	internal IReadOnlyList<ScriptCatalogEntry> BuildScriptCatalog()
+	{
+		var location = FindScriptsLumpLocation();
+		if (location == null) return Array.Empty<ScriptCatalogEntry>();
+
+		var resources = new ResourceSet(_currentResourcePaths.Select(ResourceContainerCache.Open).ToList());
+		var scriptText = Encoding.UTF8.GetString(location.Value.LumpData);
+		var program = BcsParser.ParseProgram(scriptText, sourcePath: null, resources.FindIncludeText);
+
+		return BcsScriptCatalog.Build(program.Unit);
+	}
+
+	/// <summary>
+	/// The current map's own <c>SCRIPTS</c> lump, by index/name/data -
+	/// shared between <see cref="BuildScriptCatalog"/> (which needs its
+	/// text) and the arg0 "Go to Script" button (which needs its
+	/// identity, to reopen it as a tab via
+	/// <see cref="ResourceOpenRequest"/>). Null when there's no current
+	/// map, or it has no <c>SCRIPTS</c> lump at all.
+	/// </summary>
+	internal (int LumpIndex, string LumpName, byte[] LumpData)? FindScriptsLumpLocation()
+	{
+		if (_currentWad?.Lumps == null) return null;
+
+		var markerIndex = WadFile.FindMarkerIndex(_currentWad.Lumps, _currentMapName);
+		var scriptsIndex = markerIndex < 0 ? -1 : WadFile.FindScriptsLumpIndex(_currentWad.Lumps, markerIndex);
+		if (scriptsIndex < 0) return null;
+
+		var lump = _currentWad.Lumps[scriptsIndex];
+		return (scriptsIndex, lump.Name, lump.Data);
+	}
+
+	/// <summary>
+	/// The arg0 "Go to Script" button's own resolution for a script
+	/// reached via <c>#include</c> (<paramref name="includePath"/> is
+	/// the literal include text, e.g. <c>"acs/souls.acs"</c>, from
+	/// <see cref="ScriptCatalogEntry.SourcePath"/>) - re-finds which of
+	/// <see cref="_currentResourcePaths"/>' own containers actually
+	/// supplied it (the same priority-ordered search
+	/// <see cref="ResourceSet.FindIncludeText"/> already does, just
+	/// keeping the winning container's own identity instead of
+	/// discarding it for text), then builds whatever
+	/// <see cref="ResourceOpenRequest"/> shape that container kind
+	/// needs - a WAD lump (needs its own index, found via
+	/// <see cref="WadFile.Lumps"/>, since <see cref="WadFile.FindByPath"/>
+	/// treats <paramref name="includePath"/> as a bare lump name and
+	/// only ever returns bytes), a PK3 entry (its own
+	/// <see cref="IResourceContainer.FindByPath"/> already resolves the
+	/// full nested path, so the include text itself doubles as the
+	/// entry path - fine for <see cref="ScriptDocument.IsPk3EntryFrom"/>'s
+	/// own plain string comparison, though a bare-title-written include
+	/// that only matches via that container's own title-fallback would
+	/// open as a second, separately-tracked tab rather than reuse one
+	/// opened via the full path - a real but minor edge case, not worth
+	/// a new <c>Pk3File</c> accessor just to chase it), or a loose file
+	/// (<see cref="DirectoryResource.ResolveAbsolutePath"/> already
+	/// gives the real on-disk path directly). Null if nothing in this
+	/// map's own configured resources actually supplies it.
+	/// </summary>
+	internal ResourceOpenRequest FindIncludeOpenRequest(string includePath)
+	{
+		foreach (var resourcePath in _currentResourcePaths.AsEnumerable().Reverse())
+		{
+			var container = ResourceContainerCache.Open(resourcePath);
+			var data = container.FindByPath(includePath);
+			if (data == null) continue;
+
+			switch (container)
+			{
+				case WadFile wad:
+					var bareName = Path.GetFileNameWithoutExtension(includePath);
+					var lumps = wad.Lumps;
+					for (var i = 0; i < lumps.Count; i++)
+					{
+						if (!string.Equals(lumps[i].Name, bareName, StringComparison.OrdinalIgnoreCase)) continue;
+						return new ResourceOpenRequest { SourcePath = resourcePath, LumpIndex = i, LumpName = lumps[i].Name, LumpData = data };
+					}
+
+					break;
+
+				case DirectoryResource dir:
+					if (dir.ResolveAbsolutePath(includePath) is { } absolutePath)
+					{
+						return new ResourceOpenRequest { SourcePath = absolutePath, FilePath = absolutePath };
+					}
+
+					break;
+
+				case Pk3File:
+					return new ResourceOpenRequest { SourcePath = resourcePath, Pk3EntryPath = includePath, Pk3EntryData = data };
+			}
+		}
+
+		return null;
 	}
 
 	private void ShowError(string message)

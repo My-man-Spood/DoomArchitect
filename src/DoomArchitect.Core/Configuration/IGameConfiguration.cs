@@ -39,8 +39,16 @@ public sealed record ThingTypeInfo(
 /// <see cref="EnumOptions"/> is null for a plain numeric argument, or the
 /// value/label pairs to show as a dropdown instead when the action's
 /// <c>.cfg</c> entry names a shared enum list.
+/// <see cref="Str"/> (the <c>.cfg</c> <c>str</c> key) marks a slot that can
+/// legitimately hold a string instead of a number - real UDB usage is
+/// exactly arg0 of the ACS_Execute family (80/81/82/83/84/85/226): a
+/// script reference naming the script instead of numbering it.
+/// <see cref="TitleStr"/> (the <c>.cfg</c> <c>titlestr</c> key) is the
+/// label to show while that slot is in its string form (e.g. "Script
+/// Name" instead of "Script Number") - null when <see cref="Str"/> is
+/// false, since nothing ever reads it then.
 /// </summary>
-public sealed record ArgumentInfo(string Title, bool Used, IReadOnlyList<ArgumentEnumOption>? EnumOptions);
+public sealed record ArgumentInfo(string Title, bool Used, IReadOnlyList<ArgumentEnumOption>? EnumOptions, bool Str = false, string? TitleStr = null);
 
 /// <summary>One labeled choice in a shared <c>enums</c> list an argument can reference by name.</summary>
 public sealed record ArgumentEnumOption(long Value, string Title);

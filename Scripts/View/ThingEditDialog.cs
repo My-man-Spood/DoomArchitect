@@ -7,6 +7,7 @@ using DoomArchitect.Core.Configuration;
 using DoomArchitect.Core.Editing;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Undo;
+using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Rendering;
 using Godot;
 
@@ -112,6 +113,9 @@ public partial class ThingEditDialog : AcceptDialog
 	private Action<int> _onTypeChanged;
 	private bool _suppressLiveApply;
 
+	/// <summary>Bubbled straight from <see cref="_actionEditor"/>'s own event of the same name - see <see cref="MainMenuBar"/>'s subscription for how it's resolved into an actual tab navigation.</summary>
+	public event Action<ScriptCatalogEntry> NavigateToScriptRequested;
+
 	public override void _Ready()
 	{
 		_tabs = GetNode<TabContainer>("Container/Tabs");
@@ -148,6 +152,7 @@ public partial class ThingEditDialog : AcceptDialog
 		_floatBobPhaseEdit = GetNode<StepperLineEdit>("Container/Tabs/ActionTagMisc/VboxContainer/HBoxContainer/BehaviourBox/Content/FloatBobPhaseRow/FloatBobPhaseEdit");
 
 		_actionEditor = GetNode<ActionArgumentsEditor>("Container/Tabs/ActionTagMisc/VboxContainer/ActionBox/Content/ActionArgumentsEditor");
+		_actionEditor.NavigateToScriptRequested += entry => NavigateToScriptRequested?.Invoke(entry);
 		_tagsEditor = GetNode<MapTagsEditor>("Container/Tabs/ActionTagMisc/VboxContainer/IdentificationBox/Content/MapTagsEditor");
 
 		_typePicker.TypeIdTextChanged += ApplyRealTimeType;
@@ -196,7 +201,7 @@ public partial class ThingEditDialog : AcceptDialog
 
 	public void SetThings(
 		IReadOnlyList<Thing> things, MapData map, IGameConfiguration gameConfiguration, UndoStack undoStack, Action onLiveChange,
-		SpriteIconCache spriteIconCache, Action<int> onTypeChanged = null)
+		SpriteIconCache spriteIconCache, IReadOnlyList<ScriptCatalogEntry> scriptCatalog, Action<int> onTypeChanged = null)
 	{
 		_things = things;
 		_map = map;
@@ -213,7 +218,7 @@ public partial class ThingEditDialog : AcceptDialog
 			flagKeys.ToDictionary(f => f.Key, f => t.Fields.GetBool(f.Key, false))));
 
 		_typePicker.Setup(gameConfiguration, spriteIconCache);
-		_actionEditor.Setup(things.Select(t => t.Fields).ToList(), gameConfiguration);
+		_actionEditor.Setup(things.Select(t => t.Fields).ToList(), gameConfiguration, scriptCatalog);
 		_tagsEditor.SetThings(things, map);
 
 		_touchedFlags.Clear();

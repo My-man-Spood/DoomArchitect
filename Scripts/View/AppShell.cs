@@ -99,6 +99,7 @@ public partial class AppShell : Control
 
 		_mainMenuBar.BuildMenus();
 		_mainMenuBar.OpenScriptRequested = () => _openScriptDialog.PopupCentered();
+		_mainMenuBar.NavigateToScriptRequested += OnNavigateToScriptRequested;
 		// No existing OpenMapMenu instance to act on when no Map tab is
 		// active (one lives inside each MapView's own scene, nowhere
 		// else) - create a fresh, blank one first, then show the dialog
@@ -550,6 +551,42 @@ public partial class AppShell : Control
 		var existing = _tabContents.OfType<ScriptDocument>()
 			.FirstOrDefault(d => string.Equals(d.FilePath, path, System.StringComparison.OrdinalIgnoreCase));
 		var target = existing ?? OpenScriptTab(path);
+
+		SwitchTo(_tabContents.IndexOf(target));
+		target.NavigateTo(line, column);
+	}
+
+	/// <summary>
+	/// arg0's "Go to Script" button (<c>MainMenuBar.NavigateToScriptRequested</c>,
+	/// already resolved there into a concrete openable identity - a
+	/// loose file, a PK3 entry, or a WAD lump, depending on where the
+	/// script's own declaration actually lives) - the same three
+	/// find-or-open branches <see cref="OnResourceOpenRequested"/>
+	/// already has (minus its <c>MapName</c> one - a script's
+	/// declaration is never a map), plus the line/column jump every
+	/// branch here ends with that one doesn't.
+	/// </summary>
+	private void OnNavigateToScriptRequested(ResourceOpenRequest request, int line, int column)
+	{
+		ScriptDocument target;
+		if (request.FilePath != null)
+		{
+			var existingFile = _tabContents.OfType<ScriptDocument>()
+				.FirstOrDefault(d => string.Equals(d.FilePath, request.FilePath, System.StringComparison.OrdinalIgnoreCase));
+			target = existingFile ?? OpenScriptTab(request.FilePath);
+		}
+		else if (request.Pk3EntryPath != null)
+		{
+			var existingEntry = _tabContents.OfType<ScriptDocument>()
+				.FirstOrDefault(d => d.IsPk3EntryFrom(request.SourcePath, request.Pk3EntryPath));
+			target = existingEntry ?? OpenPk3EntryScriptTab(request);
+		}
+		else
+		{
+			var existingLump = _tabContents.OfType<ScriptDocument>()
+				.FirstOrDefault(d => d.IsLumpFrom(request.SourcePath, request.LumpIndex));
+			target = existingLump ?? OpenLumpScriptTab(request);
+		}
 
 		SwitchTo(_tabContents.IndexOf(target));
 		target.NavigateTo(line, column);

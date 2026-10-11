@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using DoomArchitect.Core.Map;
+using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Settings;
 using Godot;
 
@@ -33,6 +34,9 @@ public partial class MainMenuBar : MenuBar
 	private ThingEditDialog _thingEditDialog;
 	private AcceptDialog _errorDialog;
 	private ConfirmationDialog _discardChangesDialog;
+
+	/// <summary>Resolved from a Linedef/Thing dialog's own <c>NavigateToScriptRequested</c> (arg0's Ctrl+Click) into something <c>AppShell</c> can act on directly - see <see cref="OnNavigateToScriptRequested"/>.</summary>
+	public event Action<ResourceOpenRequest, int, int> NavigateToScriptRequested;
 
 	/// <summary>
 	/// Every <see cref="OpenMapMenu"/> <see cref="SetActiveMap"/> has ever
@@ -279,7 +283,7 @@ public partial class MainMenuBar : MenuBar
 		_linedefEditDialog ??= CreateLinedefEditDialog();
 		_linedefEditDialog.SetLinedefs(
 			linedefs, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
-			_overlay.TextureSet, _overlay.NamedResources, _overlay.TextureIconCache);
+			_overlay.TextureSet, _overlay.NamedResources, _overlay.TextureIconCache, _openMapMenu.BuildScriptCatalog());
 		_linedefEditDialog.PopupCentered();
 	}
 
@@ -287,6 +291,7 @@ public partial class MainMenuBar : MenuBar
 	{
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/LinedefEditDialog.tscn").Instantiate<LinedefEditDialog>();
 		AddChild(dialog);
+		dialog.NavigateToScriptRequested += OnNavigateToScriptRequested;
 		return dialog;
 	}
 
@@ -297,7 +302,7 @@ public partial class MainMenuBar : MenuBar
 		_thingEditDialog ??= CreateThingEditDialog();
 		_thingEditDialog.SetThings(
 			things, _overlay.Map, _overlay.GameConfiguration, _overlay.UndoStack, () => _overlay.QueueRedraw(),
-			_overlay.SpriteIconCache, onTypeChanged: type => _overlay.LastUsedThingType = type);
+			_overlay.SpriteIconCache, _openMapMenu.BuildScriptCatalog(), onTypeChanged: type => _overlay.LastUsedThingType = type);
 		_thingEditDialog.PopupCentered();
 	}
 
@@ -305,7 +310,46 @@ public partial class MainMenuBar : MenuBar
 	{
 		var dialog = GD.Load<PackedScene>("res://Scenes/UI/ThingEditDialog.tscn").Instantiate<ThingEditDialog>();
 		AddChild(dialog);
+		dialog.NavigateToScriptRequested += OnNavigateToScriptRequested;
 		return dialog;
+	}
+
+	/// <summary>
+	/// Resolves a selected <see cref="ScriptCatalogEntry"/> (already
+	/// known to have a real source - see <c>ActionArgumentsEditor.TryGetNavigableScript</c>)
+	/// into something <c>AppShell</c> can actually open/switch to as a
+	/// tab, and bubbles that further up (only <c>AppShell</c> can do
+	/// that) alongside the line/column to jump to - an empty
+	/// <see cref="ScriptCatalogEntry.SourcePath"/> means the map's own
+	/// main <c>SCRIPTS</c> lump (<see cref="OpenMapMenu.FindScriptsLumpLocation"/>),
+	/// a non-empty one means a script reached via <c>#include</c>
+	/// (<see cref="OpenMapMenu.FindIncludeOpenRequest"/>).
+	/// </summary>
+	private void OnNavigateToScriptRequested(ScriptCatalogEntry entry)
+	{
+		if (_openMapMenu == null) return;
+
+		ResourceOpenRequest request;
+		if (string.IsNullOrEmpty(entry.SourcePath))
+		{
+			var location = _openMapMenu.FindScriptsLumpLocation();
+			if (location == null) return;
+
+			request = new ResourceOpenRequest
+			{
+				SourcePath = _openMapMenu.CurrentWadPath,
+				LumpIndex = location.Value.LumpIndex,
+				LumpName = location.Value.LumpName,
+				LumpData = location.Value.LumpData,
+			};
+		}
+		else
+		{
+			request = _openMapMenu.FindIncludeOpenRequest(entry.SourcePath);
+		}
+
+		if (request == null) return;
+		NavigateToScriptRequested?.Invoke(request, entry.Line, entry.Column);
 	}
 
 	private void ShowError(string message)

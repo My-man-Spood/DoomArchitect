@@ -54,6 +54,13 @@ visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 
+[node name="Arg0NavigateButton" type="Button" parent="ArgsGrid/Arg0Row"]
+visible = false
+layout_mode = 2
+mouse_default_cursor_shape = 2
+tooltip_text = "Open this script's own declaration in a Script tab"
+flat = true
+
 [node name="Arg1Row" type="HBoxContainer" parent="ArgsGrid"]
 layout_mode = 2
 size_flags_horizontal = 3

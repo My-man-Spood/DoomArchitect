@@ -431,6 +431,23 @@ public class GameConfigurationLoaderTests
     }
 
     [Fact]
+    public void GZDoomDoom2UDMF_LinedefTypes_ACSExecute_Arg0IsStrCapable()
+    {
+        var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);
+
+        var acsExecute = gzdoom.GetAction(80);
+
+        Assert.NotNull(acsExecute);
+        Assert.Equal("Script Execute", acsExecute!.Title);
+        Assert.True(acsExecute.Args[0].Str);
+        Assert.Equal("Script Name", acsExecute.Args[0].TitleStr);
+
+        // A plain numeric special never sets Str on any slot.
+        var doorRaise = gzdoom.GetAction(12);
+        Assert.All(doorRaise!.Args, a => Assert.False(a.Str));
+    }
+
+    [Fact]
     public void GZDoomDoom2UDMF_LinedefTypes_DoNotReuseVanillaClassicActionNumbers()
     {
         var gzdoom = GameConfigurations.Get(GameConfigurationKind.GZDoomDoom2UDMF);

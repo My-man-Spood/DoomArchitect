@@ -7,6 +7,7 @@ using DoomArchitect.Core.Editing;
 using DoomArchitect.Core.Map;
 using DoomArchitect.Core.Textures;
 using DoomArchitect.Core.Undo;
+using DoomArchitect.Core.ZDoom.Bcs;
 using DoomArchitect.Rendering;
 using Godot;
 
@@ -122,11 +123,15 @@ public partial class LinedefEditDialog : AcceptDialog
 	private Action _onLiveChange;
 	private bool _suppressLiveApply;
 
+	/// <summary>Bubbled straight from <see cref="_actionEditor"/>'s own event of the same name - see <see cref="MainMenuBar"/>'s subscription for how it's resolved into an actual tab navigation.</summary>
+	public event Action<ScriptCatalogEntry> NavigateToScriptRequested;
+
 	public override void _Ready()
 	{
 		_tabs = GetNode<TabContainer>("Container/Tabs");
 
 		_actionEditor = GetNode<ActionArgumentsEditor>("Container/Tabs/Properties/VboxContainer/ActionBox/Content/ActionArgumentsEditor");
+		_actionEditor.NavigateToScriptRequested += entry => NavigateToScriptRequested?.Invoke(entry);
 
 		_flagsContainer = GetNode<Container>("Container/Tabs/Properties/VboxContainer/FlagsBox/Content/FlagsContainer");
 		_activationsContainer = GetNode<Container>("Container/Tabs/Properties/VboxContainer/ActivationBox/Content/ActivationsContainer");
@@ -229,7 +234,8 @@ public partial class LinedefEditDialog : AcceptDialog
 
 	public void SetLinedefs(
 		IReadOnlyList<Linedef> linedefs, MapData map, IGameConfiguration gameConfiguration, UndoStack undoStack, Action onLiveChange,
-		TextureSet textureSet, IReadOnlyList<NamedResource> namedResources, TextureIconCache textureIconCache)
+		TextureSet textureSet, IReadOnlyList<NamedResource> namedResources, TextureIconCache textureIconCache,
+		IReadOnlyList<ScriptCatalogEntry> scriptCatalog)
 	{
 		_linedefs = linedefs;
 		_map = map;
@@ -249,7 +255,7 @@ public partial class LinedefEditDialog : AcceptDialog
 			BuildSideSnapshot(l.Front, map),
 			BuildSideSnapshot(l.Back, map)));
 
-		_actionEditor.Setup(linedefs.Select(l => l.Fields).ToList(), gameConfiguration);
+		_actionEditor.Setup(linedefs.Select(l => l.Fields).ToList(), gameConfiguration, scriptCatalog);
 		_tagsEditor.SetLinedefs(linedefs, map);
 
 		_touchedFlags.Clear();
