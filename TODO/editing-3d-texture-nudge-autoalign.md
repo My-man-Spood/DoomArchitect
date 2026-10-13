@@ -273,3 +273,145 @@
       (collected in a `HashSet<Sector>` first, so a multi-linedef nudge
       sharing a sector doesn't mark it dirty more than once) rather than
       just the single sector the original single-target version touched.
+
+## Update: arrow-key nudge now works on floors/ceilings too
+
+Reported live: `HandleTextureNudge` was hard-gated to
+`TargetSurfaceKind.Wall` - aiming at a floor or ceiling and pressing an
+arrow key silently did nothing. Not a regression; flats were never
+wired in at all.
+
+A wall only ever has two fixed sides, so a plain dot-product flip
+already made Left/Right feel camera-relative for it - a floor/ceiling
+can be viewed from any direction at all, so confirmed directly against
+UDB's own real source
+(`BaseVisualGeometrySector.OnChangeTextureOffset`'s own
+`doSurfaceAngleCorrection`, `VisualFloor`/`VisualCeiling.MoveTextureOffset`)
+that it needs a more thorough fix: snap the camera's own current
+viewing angle (plus the sector's own `rotationfloor`/`rotationceiling`
+field) into one of 4 quadrants and swap/negate the raw arrow-key input
+accordingly - ported verbatim as new, plain/testable
+`Core.Geometry.FlatNudgeCorrection.Resolve(cameraForward, sectorRotationDegrees, horizontal, vertical)`.
+
+New `MapView.HandleFlatTextureNudge` mirrors the wall branch's own
+shape exactly, just against the sector's own `xpanningfloor`/
+`ypanningfloor` (or `ceiling`) UDMF fields instead of a sidedef's
+per-part ones, sized against `TextureCache.GetFlatTextureSize`
+(already existed, mirrors `GetWallTextureSize`) - same
+`TextureOffsetMath.Nudge` wrap helper, unchanged. New
+`ResolveFlatNudgeTargets` mirrors `ResolveNudgeTargets`'s own
+selection-aware fallback rule, against `_selectedFloors3D`/
+`_selectedCeilings3D` (already existed, tracked independently) instead
+of `_selectedLinedefs3D`.
+
+**Deliberately out of scope**: texture auto-align for flats (a
+separate, real UDB feature of its own - not what was reported); UDB's
+own flat-nudge wrap-by-scale behavior (`ScaledWidth / xscalefloor`) -
+this project's existing wall nudge doesn't divide by scale either, so
+flats stay consistent with that already-shipped convention rather than
+getting a new scale-aware special case just for one surface kind.
+
+New `FlatNudgeCorrectionTests` covering all 4 quadrants (cardinal
+camera angles 0/90/180/270) plus a case confirming a sector's own
+rotation field shifts which quadrant a given camera angle lands in -
+6 new tests, 1203 total passing. No coverage for
+`MapView.HandleFlatTextureNudge`'s own wiring, same established
+convention as the existing wall-nudge code it extends.
+
+## Update: vertical nudge direction was backwards after the flat-rendering fix
+
+Reported live, right after shipping the flat-rendering fix below (same
+day): arrow-key nudge still felt consistently backwards on the vertical
+axis. Root cause: this feature's own `FlatNudgeCorrection.Resolve`
+reproduced UDB's real final negation on *both* axes
+(`MoveTextureOffset(-horizontal, -vertical)`) - correct for UDB, whose
+own rendering has an unconditional Y-flip this project's own renderer
+deliberately doesn't (see the rendering fix below). With that flip
+absent, UDB's matching Y-negation became a double-negative here,
+flipping the vertical direction. Verified the correct sign against this
+project's own already-proven wall-nudge convention instead (confirmed
+live when that feature first shipped: increasing a part's own Y offset
+moves its texture *up* on screen) rather than guessing again - Y is no
+longer negated in `FlatNudgeCorrection.Resolve`'s own final return; X
+still is, since nothing about the removed flip ever touched X.
+`FlatNudgeCorrectionTests` updated to the corrected expected signs - a
+timely reminder that porting two UDB features that interact (this one
+and the rendering fix below) needs their *combined* behavior checked,
+not just each one against UDB in isolation.
+
+## Update: the real bug was the camera-angle convention itself, not just a sign
+
+The Y-sign fix above wasn't the whole story - reported live immediately
+after: Left/Right and Up/Down were fully swapped (not just backwards),
+consistently. Root cause, this time checked directly against UDB's own
+source instead of assumed: `FlatNudgeCorrection`'s camera angle was
+computed as a standard `Atan2(forward.Y, forward.X)` (0 = east, winding
+toward north) - but UDB's own real `AngleXY` isn't that. Checked its
+actual `Vector3D.FromAngleXYZ` (the function that turns `AngleXY` back
+into a direction vector): `x = sin(angle); y = -cos(angle)` - zero
+faces *south*, winding the *opposite* direction from the standard math
+convention. Every quadrant boundary was landing 90 degrees away from
+where it should, which reads as "axes swapped" rather than "backwards"
+- exactly the second report. Fixed by computing the camera angle as
+`Atan2(forward.X, -forward.Y)` instead - the real inverse of UDB's own
+mapping, confirmed by hand against all 4 cardinal directions, not
+assumed. `FlatNudgeCorrectionTests` rewritten with each case named for
+the real compass direction it exercises (facing south is the true
+"zero angle" case now, not facing east) rather than patched in place,
+since the old test names were themselves artifacts of the wrong
+convention.
+
+Narrowed further on a third live report: Up/Down confirmed correct
+after the angle fix, Left/Right still backwards in isolation - meaning
+the quadrant/swap logic itself (now proven correct, since Y relies on
+exactly the same quadrant selection Y does) was fine, and the one
+remaining negation on X in `Resolve`'s own final return (carried over
+from the earlier Y investigation, reasoned at the time to still be
+correct for X since the removed rendering flip never touched X) was
+itself still wrong. Dropped it too - `Resolve` no longer negates either
+axis in its own final return at all, since none of UDB's own final-
+negation convention actually transfers to a renderer without its
+matching flip.
+
+## Update: rebuilt `FlatNudgeCorrection` from scratch, then fixed one more real bug (diagonal drift) before it actually worked
+
+Even after all three fixes above, live debug logging (temporary
+`GD.Print`s in `MapView.HandleFlatTextureNudge`, since guessing had
+already failed three times) showed the ported quadrant system was
+still internally wrong in a way no more sign flips could fix - abandoned
+porting UDB's own angle/quadrant convention entirely and rebuilt
+`Resolve` from first principles against this project's own real
+rendering formula (`FlatTextureTransform.ComputeUv`) instead: derive
+the world-space pattern-shift a key press should produce
+(`cameraRight * horizontal + cameraForward * vertical`, with
+`cameraRight = (forward.Y, -forward.X)` - the fixed relationship for a
+yaw-only camera, verified facing north -> right is east), then solve
+`ComputeUv`'s own formula for the offset delta that produces exactly
+that shift (`offsetDelta = -Rotate(desiredShift, sectorRotation)`,
+confirmed against a concrete worked example, not assumed).
+
+Reported live immediately after: "moving diagonal when i press any
+key" - a new, worse symptom (not an axis swap or sign flip, an actual
+blend of both output axes on every single press). Root cause: pan
+offset (`xpanning`/`ypanning`) is a discrete, single-axis field - a
+nudge has to commit to moving along exactly *one* of them per press,
+the same way the existing wall-texture nudge already does. The
+rewrite above used `cameraRight`/`cameraForward` directly, and a real
+camera is essentially never pointed exactly along a map axis during
+normal play - so `desiredShift` generically had a nonzero component
+on *both* axes for a single-axis key press, a permanent diagonal drift
+scaling with how far off-cardinal the camera happened to be aimed.
+This is exactly the problem UDB's own quadrant-snap design solved,
+just lost when its mismatched angle convention was dropped in favor of
+continuous vector math. Fixed by reintroducing a snap step - but
+derived fresh against this project's own vectors rather than ported:
+`SnapToNearestAxis` collapses `cameraRight`/`cameraForward` onto
+whichever single world axis (+X/-X/+Y/-Y) each is closest to before
+building `desiredShift`, so the result always has exactly one nonzero
+component pre-rotation. `FlatNudgeCorrectionTests` gained two cases
+specifically facing slightly off-cardinal (not exactly north/east) and
+asserting the result is bit-identical to the exactly-cardinal case,
+proving snap rather than blend - confirmed live by the user afterward
+("fixed!"), the only one of these four rounds confirmed working before
+ship. Debug `GD.Print`s removed from `MapView.HandleFlatTextureNudge`
+once confirmed.

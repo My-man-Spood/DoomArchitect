@@ -51,21 +51,21 @@ public static class SectorMeshBuilder
         var floorSize = textures.GetFlatTextureSize(sector.FloorTexture);
         var ceilingSize = textures.GetFlatTextureSize(sector.CeilingTexture);
 
-        var floor = BuildFace(triangleLists, (float)sector.FloorHeight, color, floorSize);
-        var ceiling = BuildFace(triangleLists, (float)sector.CeilingHeight, color, ceilingSize);
+        var floor = BuildFace(triangleLists, sector, isCeiling: false, (float)sector.FloorHeight, color, floorSize);
+        var ceiling = BuildFace(triangleLists, sector, isCeiling: true, (float)sector.CeilingHeight, color, ceilingSize);
         return new SectorMesh(floor, ceiling);
     }
 
     private static ArrayMesh BuildFace(
-        List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>> triangleLists, float height, Color color,
-        Vector2I textureSize)
+        List<IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)>> triangleLists, Sector sector, bool isCeiling,
+        float height, Color color, Vector2I textureSize)
     {
         var surfaceTool = new SurfaceTool();
         surfaceTool.Begin(Mesh.PrimitiveType.Triangles);
 
         foreach (var triangles in triangleLists)
         {
-            AddDoubleSidedFace(surfaceTool, triangles, height, color, textureSize);
+            AddDoubleSidedFace(surfaceTool, triangles, sector, isCeiling, height, color, textureSize);
         }
 
         surfaceTool.GenerateNormals();
@@ -73,17 +73,19 @@ public static class SectorMeshBuilder
     }
 
     private static void AddDoubleSidedFace(
-        SurfaceTool surfaceTool, IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)> triangles, float height,
-        Color color, Vector2I textureSize)
+        SurfaceTool surfaceTool, IReadOnlyList<(MapVector2 A, MapVector2 B, MapVector2 C)> triangles, Sector sector,
+        bool isCeiling, float height, Color color, Vector2I textureSize)
     {
         foreach (var (a, b, c) in triangles)
         {
             DoubleSidedMesh.AddTriangle(
                 surfaceTool, a.ToWorld(height), b.ToWorld(height), c.ToWorld(height),
-                ToFlatUv(a, textureSize), ToFlatUv(b, textureSize), ToFlatUv(c, textureSize), color);
+                ToFlatUv(a, sector, isCeiling, textureSize), ToFlatUv(b, sector, isCeiling, textureSize),
+                ToFlatUv(c, sector, isCeiling, textureSize), color);
         }
     }
 
-    private static Vector2 ToFlatUv(MapVector2 position, Vector2I textureSize) =>
-        new(position.X / textureSize.X, position.Y / textureSize.Y);
+    /// <summary>The sector's own real xpanning/ypanning/xscale/yscale/rotation UDMF fields, applied - see <see cref="FlatTextureTransform"/>'s own remarks (a real, reported gap this fixes: none of them were ever read anywhere in rendering before this).</summary>
+    private static Vector2 ToFlatUv(MapVector2 position, Sector sector, bool isCeiling, Vector2I textureSize) =>
+        FlatTextureTransform.ComputeUv(position, sector, isCeiling, new MapVector2(textureSize.X, textureSize.Y)).ToGodot();
 }

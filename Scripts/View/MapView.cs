@@ -627,6 +627,12 @@ public partial class MapView : Node3D
 
 	private void HandleTextureNudge(NudgeDirection direction, bool alt, bool ctrl)
 	{
+		if (_currentTarget is { Kind: TargetSurfaceKind.Floor or TargetSurfaceKind.Ceiling })
+		{
+			HandleFlatTextureNudge(direction, alt, ctrl);
+			return;
+		}
+
 		if (_currentTarget is not { Kind: TargetSurfaceKind.Wall } target) return;
 
 		var hoveredSegment = target.WallSegment!.Value;
@@ -723,6 +729,86 @@ public partial class MapView : Node3D
 			if (linedef.Front != null && LinedefWallBuilder.GetPartTexture(linedef.Front, partKind) != "-") yield return linedef.Front;
 			if (linedef.Back != null && LinedefWallBuilder.GetPartTexture(linedef.Back, partKind) != "-") yield return linedef.Back;
 		}
+	}
+
+	/// <summary>
+	/// The floor/ceiling counterpart of <see cref="HandleTextureNudge"/>'s
+	/// own wall branch - writes the sector's own <c>xpanningfloor</c>/
+	/// <c>ypanningfloor</c> (or <c>ceiling</c>) UDMF fields instead of a
+	/// sidedef's per-part ones. A wall only ever has two fixed sides, so a
+	/// plain dot-product flip is enough to make Left/Right feel camera-
+	/// relative there; a floor/ceiling can be viewed from any direction at
+	/// all, so this needs UDB's own real, more thorough fix instead -
+	/// <see cref="FlatNudgeCorrection.Resolve"/>, which also accounts for
+	/// the sector's own <c>rotationfloor</c>/<c>rotationceiling</c> field,
+	/// not just the camera angle.
+	/// </summary>
+	private void HandleFlatTextureNudge(NudgeDirection direction, bool alt, bool ctrl)
+	{
+		if (_currentTarget is not { } target) return;
+
+		double delta = alt ? 8 : ctrl ? _overlay.GridSize : 1;
+		double horizontal = direction switch { NudgeDirection.Left => -delta, NudgeDirection.Right => delta, _ => 0 };
+		double vertical = direction switch { NudgeDirection.Up => delta, NudgeDirection.Down => -delta, _ => 0 };
+		if (horizontal == 0 && vertical == 0) return;
+
+		var isCeiling = target.Kind == TargetSurfaceKind.Ceiling;
+		var suffix = isCeiling ? "ceiling" : "floor";
+		var cameraForward = (-_perspectiveCamera.GlobalTransform.Basis.Z).ToDoom();
+
+		var commands = new List<ICommand>();
+		var dirtySectors = new HashSet<Sector>();
+
+		foreach (var sector in ResolveFlatNudgeTargets(target.Sector!, isCeiling))
+		{
+			var rotation = sector.Fields.GetFloat($"rotation{suffix}", 0.0);
+			var (dx, dy) = FlatNudgeCorrection.Resolve(cameraForward, rotation, horizontal, vertical);
+
+			var texture = isCeiling ? sector.CeilingTexture : sector.FloorTexture;
+			var textureSize = _textureCache.GetFlatTextureSize(texture);
+
+			if (dx != 0)
+			{
+				var oldX = sector.Fields.GetFloat($"xpanning{suffix}", 0.0);
+				var newX = TextureOffsetMath.Nudge(oldX, dx, textureSize.X);
+				commands.Add(new SetFieldCommand(sector.Fields, $"xpanning{suffix}", newX == 0 ? null : new UniValue(UniversalType.Float, newX)));
+			}
+
+			if (dy != 0)
+			{
+				var oldY = sector.Fields.GetFloat($"ypanning{suffix}", 0.0);
+				var newY = TextureOffsetMath.Nudge(oldY, dy, textureSize.Y);
+				commands.Add(new SetFieldCommand(sector.Fields, $"ypanning{suffix}", newY == 0 ? null : new UniValue(UniversalType.Float, newY)));
+			}
+
+			dirtySectors.Add(sector);
+		}
+
+		if (commands.Count == 0) return;
+
+		_undoStack.Execute(commands.Count == 1 ? commands[0] : new CommandGroup(commands));
+		foreach (var sector in dirtySectors) _map.MarkDirty(sector);
+	}
+
+	/// <summary>
+	/// Every sector <see cref="HandleFlatTextureNudge"/> should actually
+	/// touch - mirrors <see cref="ResolveNudgeTargets"/>'s own "selection
+	/// wins outright when non-empty, otherwise just the live hovered
+	/// target" rule, against <see cref="_selectedFloors3D"/>/
+	/// <see cref="_selectedCeilings3D"/> (tracked independently, so a
+	/// floor-only or ceiling-only selection is a real, correctly handled
+	/// case) instead of <see cref="_selectedLinedefs3D"/>.
+	/// </summary>
+	private IEnumerable<Sector> ResolveFlatNudgeTargets(Sector hoveredSector, bool isCeiling)
+	{
+		var selection = isCeiling ? _selectedCeilings3D : _selectedFloors3D;
+		if (selection.Count == 0)
+		{
+			yield return hoveredSector;
+			yield break;
+		}
+
+		foreach (var sector in selection) yield return sector;
 	}
 
 	/// <summary>
